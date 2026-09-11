@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.next/
+next-e2e*/
+apps/web/next-*-e2e/
+apps/web/next-r1-*/
+next-build-audit/
+coverage/
+playwright-report/
+test-results/
+.env*
+!.env.example
+!.env.test.example
+.env.local
+*.tsbuildinfo
+!.env.example

@@ -1,0 +1,17 @@
+node_modules
+dist
+coverage
+.git
+.github
+.env
+.env.*
+!.env.example
+*.md
+!README.md
+docs
+.vscode
+.idea
+*.tsbuildinfo
+**/.next
+**/playwright-report
+**/test-results

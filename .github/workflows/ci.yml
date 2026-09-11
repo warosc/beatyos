@@ -1,0 +1,226 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# Una ejecución por rama: al empujar dos veces seguidas, la primera se cancela en lugar
+# de gastar minutos en validar un commit que ya nadie va a mirar.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22.12.0'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Comprobaciones estáticas. Van aparte y sin base de datos: son segundos, y no
+  # tiene sentido levantar PostgreSQL para descubrir que falta un punto y coma.
+  # ---------------------------------------------------------------------------
+  static:
+    name: Tipos y estilo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --ignore-workspaces
+
+      # El cliente de Prisma se genera antes de comprobar tipos: el código importa sus
+      # tipos y sin él `tsc` falla con cientos de errores que no dicen nada.
+      - run: npx prisma generate
+
+      - name: Comprobación de tipos
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Formato
+        run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
+
+  # ---------------------------------------------------------------------------
+  # Suite unitaria: sin infraestructura, milisegundos por test.
+  # ---------------------------------------------------------------------------
+  unit:
+    name: Tests unitarios
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --ignore-workspaces
+      - run: npx prisma generate
+
+      - name: Tests unitarios
+        run: npm run test:unit
+
+  # ---------------------------------------------------------------------------
+  # Suite de integración: PostgreSQL real, migraciones reales, HTTP real.
+  # Es la única que puede demostrar el aislamiento entre inquilinos (ADR-0009).
+  # ---------------------------------------------------------------------------
+  integration:
+    name: Tests de integración
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: salon_test
+          POSTGRES_PASSWORD: salon_test
+          POSTGRES_DB: salon_test
+        ports:
+          - 5443:5432
+        # Sin healthcheck, los tests arrancarían contra una base que aún no acepta
+        # conexiones y fallarían de forma intermitente —el peor tipo de fallo en CI.
+        options: >-
+          --health-cmd "pg_isready -U salon_test -d salon_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Debe coincidir con `.env.test`; el guard de `setup-integration.ts` aborta si la
+      # URL no apunta a `salon_test`.
+      DATABASE_URL: postgresql://salon_test:salon_test@localhost:5443/salon_test?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --ignore-workspaces
+      - run: npx prisma generate
+
+      - name: Aplicar migraciones
+        run: npx prisma migrate deploy
+
+      - name: Tests de integración
+        run: npm run test:integration
+
+  # ---------------------------------------------------------------------------
+  # Cobertura: se calcula sobre AMBAS suites juntas. Separadas darían una cifra
+  # engañosa —el dominio saldría muy alto y los adaptadores casi a cero— y la media
+  # de las dos no significa nada.
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: Cobertura
+    runs-on: ubuntu-latest
+    needs: [unit, integration]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: salon_test
+          POSTGRES_PASSWORD: salon_test
+          POSTGRES_DB: salon_test
+        ports:
+          - 5443:5432
+        options: >-
+          --health-cmd "pg_isready -U salon_test -d salon_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://salon_test:salon_test@localhost:5443/salon_test?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --ignore-workspaces
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+
+      # El umbral está en `jest.config.ts` (90% sentencias/líneas/funciones, 80% ramas):
+      # si no se alcanza, Jest sale con error y este paso tumba la build. La cifra vive
+      # en la configuración y no aquí para que sea la misma en local y en CI.
+      - name: Tests con cobertura
+        run: npm run test:cov -- --runInBand
+
+      - name: Publicar informe de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Imagen de producción. Se construye en cada PR aunque no se publique: un
+  # Dockerfile que solo se prueba al desplegar se rompe justo el día del despliegue.
+  # ---------------------------------------------------------------------------
+  docker:
+    name: Imagen Docker
+    runs-on: ubuntu-latest
+    needs: [static]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construir imagen
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: appsalonbelleza-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Comprobar que la imagen arranca y responde
+        run: |
+          # Secretos aleatorios: el esquema de entorno rechaza los de ejemplo en
+          # producción, y este paso comprueba justamente el arranque en producción.
+          docker network create ci-net
+          docker run -d --name pg --network ci-net \
+            -e POSTGRES_USER=salon -e POSTGRES_PASSWORD=salon -e POSTGRES_DB=salon \
+            postgres:16-alpine
+          for i in $(seq 1 30); do
+            docker exec pg pg_isready -U salon -d salon && break
+            sleep 2
+          done
+
+          docker run -d --name api --network ci-net -p 3000:3000 \
+            -e NODE_ENV=production \
+            -e DATABASE_URL="postgresql://salon:salon@pg:5432/salon?schema=public" \
+            -e JWT_ACCESS_SECRET="$(openssl rand -base64 48 | tr -d '\n')" \
+            -e JWT_REFRESH_SECRET="$(openssl rand -base64 48 | tr -d '\n')" \
+            -e CORS_ORIGINS="https://example.com" \
+            -e SWAGGER_ENABLED=false \
+            appsalonbelleza-api:${{ github.sha }}
+
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/v1/health/live; then
+              echo "La imagen arranca y responde."
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "La imagen no respondió a la sonda de vida:"
+          docker logs api
+          exit 1

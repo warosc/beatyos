@@ -1,0 +1,1448 @@
+// ---------------------------------------------------------------------------
+// AppSalonBelleza - Esquema de persistencia
+//
+// Convenciones transversales (ver docs/adr):
+//   - ADR-0003: toda entidad de negocio lleva `tenantId`. Globales: Tenant, Permission.
+//   - ADR-0004: toda entidad de negocio lleva soft delete + columnas de autoria.
+//   - ADR-0010: el dinero es Decimal(12,2); jamas Float.
+//   - Los ids son UUIDv7: ordenados en el tiempo, lo que evita la fragmentacion de
+//     indice que produce UUIDv4 al insertar en posiciones aleatorias del B-tree.
+//   - Las unicidades de negocio son PARCIALES (`WHERE "deletedAt" IS NULL`). Prisma no
+//     sabe expresarlas, asi que aqui se declaran como @@index y la restriccion real se
+//     crea en migrations/.../partial_unique_indexes. Por eso las busquedas por clave de
+//     negocio usan findFirst y no findUnique.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// PLATAFORMA
+// ===========================================================================
+
+/// Un salon. Es la raiz de aislamiento de todo el sistema (ADR-0003).
+model Tenant {
+  id          String       @id @default(uuid(7))
+  name        String
+  slug        String       @unique
+  legalName   String?
+  taxId       String?
+  email       String
+  phone       String?
+  addressLine String?
+  city        String?
+  country     String       @default("GT")
+  timezone    String       @default("America/Guatemala")
+  currency    String       @default("GTQ") @db.Char(3)
+  locale      String       @default("es-GT")
+  status      TenantStatus @default(ACTIVE)
+  planCode    String       @default("standard")
+  trialEndsAt DateTime?    @db.Timestamptz(3)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+  deletedAt   DateTime?    @db.Timestamptz(3)
+  createdBy   String?
+  updatedBy   String?
+  deletedBy   String?
+
+  users             User[]
+  roles             Role[]
+  clients           Client[]
+  stylists          Stylist[]
+  categories        Category[]
+  services          Service[]
+  appointments      Appointment[]
+  products          Product[]
+  suppliers         Supplier[]
+  purchaseOrders    PurchaseOrder[]
+  inventoryMoves    InventoryMovement[]
+  productBatches    ProductBatch[]
+  invoices          Invoice[]
+  payments          Payment[]
+  cashSessions      CashSession[]
+  cashMovements     CashMovement[]
+  auditLogs         AuditLog[]
+  settings          Setting[]
+  documentSequences DocumentSequence[]
+  clientPhotos      ClientPhoto[]
+  goals             Goal[]
+
+  @@index([status, deletedAt])
+  @@map("tenants")
+}
+
+/// Ajustes por salon. Clave/valor tipado en lugar de una tabla ancha: los ajustes
+/// aparecen y desaparecen con cada iteracion del producto y no merecen una migracion
+/// cada vez. Los ajustes con reglas de negocio si tienen columna propia en su modelo.
+model Setting {
+  id       String      @id @default(uuid(7))
+  tenantId String
+  key      String
+  value    Json
+  type     SettingType @default(STRING)
+  scope    String      @default("general")
+  isSecret Boolean     @default(false)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, scope, deletedAt])
+  @@index([tenantId, key])
+  @@map("settings")
+}
+
+/// Contador de numeracion de documentos por salon, tipo y ejercicio.
+/// Existe para que la numeracion de facturas sea densa y sin huecos, cosa que una
+/// secuencia de PostgreSQL no garantiza (una transaccion abortada consume el numero).
+/// Se incrementa con bloqueo de fila dentro de la transaccion del documento.
+model DocumentSequence {
+  id           String       @id @default(uuid(7))
+  tenantId     String
+  documentType DocumentType
+  year         Int
+  prefix       String       @default("")
+  lastNumber   Int          @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, documentType, year])
+  @@map("document_sequences")
+}
+
+// ===========================================================================
+// IDENTIDAD, ROLES Y PERMISOS  (ADR-0006)
+// ===========================================================================
+
+model User {
+  id           String     @id @default(uuid(7))
+  tenantId     String?
+  email        String
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  avatarUrl    String?
+  status       UserStatus @default(ACTIVE)
+  locale       String     @default("es-GT")
+
+  emailVerifiedAt DateTime? @db.Timestamptz(3)
+  lastLoginAt     DateTime? @db.Timestamptz(3)
+  /// Invalida en bloque todos los access token emitidos (ADR-0005). Se incrementa al
+  /// cambiar la contrasena, al desactivar al usuario y al modificar sus roles.
+  tokenVersion    Int       @default(0)
+
+  /// Defensa contra fuerza bruta dirigida a una cuenta concreta, complementaria al
+  /// rate limiting por IP, que un atacante distribuido puede eludir.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime? @db.Timestamptz(3)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt           DateTime? @db.Timestamptz(3)
+  createdBy           String?
+  updatedBy           String?
+  deletedBy           String?
+
+  tenant              Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roles               UserRole[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  stylist             Stylist?
+  auditLogs           AuditLog[]
+  cashSessions        CashSession[]
+
+  @@index([tenantId, email])
+  @@index([tenantId, status, deletedAt])
+  @@map("users")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid(7))
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("password_reset_tokens")
+}
+
+/// Permiso atomico `recurso.accion`. Global a la plataforma: el catalogo de acciones
+/// posibles lo define el software, no el inquilino. Lo que cada salon compone son roles.
+model Permission {
+  id          String @id @default(uuid(7))
+  code        String @unique
+  resource    String
+  action      String
+  description String
+
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @db.Timestamptz(3)
+  roles     RolePermission[]
+
+  @@index([resource])
+  @@map("permissions")
+}
+
+model Role {
+  id          String  @id @default(uuid(7))
+  /// NULL = rol de sistema, compartido por todos los salones y no editable.
+  tenantId    String?
+  code        String
+  name        String
+  description String?
+  isSystem    Boolean @default(false)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant      Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@index([tenantId, code])
+  @@index([tenantId, deletedAt])
+  @@map("roles")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  grantedAt    DateTime @default(now()) @db.Timestamptz(3)
+  grantedBy    String?
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now()) @db.Timestamptz(3)
+  assignedBy String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+/// Refresh token rotativo (ADR-0005). `tokenHash` guarda Argon2id del token, nunca el
+/// token: un volcado de esta tabla no permite suplantar a nadie.
+/// `familyId` agrupa la cadena de rotaciones; detectar la reutilizacion de un eslabon
+/// ya rotado revoca la familia entera.
+model RefreshToken {
+  id            String    @id @default(uuid(7))
+  /// Identificador del JWT (claim `jti`). Es la clave de busqueda al refrescar: el token
+  /// se guarda hasheado y no se puede consultar por su valor, asi que el `jti` —que viaja
+  /// en claro dentro del JWT firmado— hace de nombre de usuario y el hash, de contrasena.
+  /// Se mantiene separado de `id` para no exponer la clave primaria de la tabla dentro
+  /// de un token que viaja al cliente.
+  jti           String    @unique
+  userId        String
+  tenantId      String?
+  tokenHash     String
+  familyId      String
+  expiresAt     DateTime  @db.Timestamptz(3)
+  revokedAt     DateTime? @db.Timestamptz(3)
+  revokedReason String?
+  replacedById  String?
+  userAgent     String?
+  ipAddress     String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+/// Registro inmutable append-only (ADR-0004). Sin soft delete y sin UPDATE.
+model AuditLog {
+  id            String      @id @default(uuid(7))
+  tenantId      String?
+  actorId       String?
+  actorEmail    String?
+  action        AuditAction
+  entityType    String
+  entityId      String?
+  /// Estado anterior y posterior, con los campos sensibles ya redactados.
+  before        Json?
+  after         Json?
+  ipAddress     String?
+  userAgent     String?
+  correlationId String?
+  metadata      Json?
+
+  occurredAt DateTime @default(now()) @db.Timestamptz(3)
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, occurredAt])
+  @@index([actorId, occurredAt])
+  @@index([correlationId])
+  @@map("audit_logs")
+}
+
+// ===========================================================================
+// SALON: CLIENTES Y ESTILISTAS
+// ===========================================================================
+
+model Client {
+  id          String       @id @default(uuid(7))
+  tenantId    String
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String?
+  birthDate   DateTime?    @db.Date
+  gender      Gender?
+  notes       String?
+  /// Alergias y notas clinicas: critico antes de aplicar quimicos.
+  allergies   String?
+  addressLine String?
+  city        String?
+  postalCode  String?
+  status      ClientStatus @default(ACTIVE)
+
+  /// Consentimiento explicito para comunicaciones comerciales (RGPD).
+  marketingConsent   Boolean   @default(false)
+  marketingConsentAt DateTime? @db.Timestamptz(3)
+  loyaltyPoints      Int       @default(0)
+
+  /// Metricas desnormalizadas para listados y segmentacion. Recalculables desde
+  /// invoices/appointments; se mantienen para no agregar en cada pintado de lista.
+  totalVisits Int       @default(0)
+  totalSpent  Decimal   @default(0) @db.Decimal(12, 2)
+  lastVisitAt DateTime? @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt   DateTime? @db.Timestamptz(3)
+  createdBy   String?
+  updatedBy   String?
+  deletedBy   String?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  invoices     Invoice[]
+  photos       ClientPhoto[]
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, lastName, firstName])
+  @@index([tenantId, email])
+  @@index([tenantId, phone])
+  @@map("clients")
+}
+
+model Stylist {
+  id             String        @id @default(uuid(7))
+  tenantId       String
+  /// Un estilista puede no tener acceso al sistema; por eso es opcional.
+  userId         String?       @unique
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String?
+  displayName    String?
+  bio            String?
+  color          String        @default("#8B5CF6")
+  status         StylistStatus @default(ACTIVE)
+  hiredAt        DateTime?     @db.Date
+  /// Porcentaje de comision por defecto, 0-100. El servicio puede sobreescribirlo.
+  commissionRate Decimal       @default(0) @db.Decimal(5, 2)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  schedules    StylistSchedule[]
+  timeOff      StylistTimeOff[]
+  skills       StylistService[]
+  appointments Appointment[]
+  invoiceLines InvoiceLine[]
+  goals        Goal[]
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, status])
+  @@map("stylists")
+}
+
+/// Horario semanal recurrente. `dayOfWeek` 0=domingo .. 6=sabado.
+/// Los minutos desde medianoche evitan arrastrar zona horaria en un horario recurrente.
+model StylistSchedule {
+  id           String @id @default(uuid(7))
+  tenantId     String
+  stylistId    String
+  dayOfWeek    Int    @db.SmallInt
+  startMinutes Int    @db.SmallInt
+  endMinutes   Int    @db.SmallInt
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  stylist Stylist @relation(fields: [stylistId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, stylistId, dayOfWeek])
+  @@map("stylist_schedules")
+}
+
+/// Ausencias puntuales: vacaciones, baja, formacion. Bloquean la agenda.
+model StylistTimeOff {
+  id        String   @id @default(uuid(7))
+  tenantId  String
+  stylistId String
+  startsAt  DateTime @db.Timestamptz(3)
+  endsAt    DateTime @db.Timestamptz(3)
+  reason    String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  stylist Stylist @relation(fields: [stylistId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, stylistId, startsAt, endsAt])
+  @@map("stylist_time_off")
+}
+
+/// Que servicios sabe hacer cada estilista, y con que ajuste de duracion o comision.
+model StylistService {
+  stylistId       String
+  serviceId       String
+  tenantId        String
+  /// Sobreescribe la duracion estandar del servicio para este profesional.
+  durationMinutes Int?
+  commissionRate  Decimal? @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  stylist   Stylist  @relation(fields: [stylistId], references: [id], onDelete: Cascade)
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([stylistId, serviceId])
+  @@index([serviceId])
+  @@index([tenantId])
+  @@map("stylist_services")
+}
+
+// ===========================================================================
+// METAS E INCENTIVOS
+// ===========================================================================
+
+/// Objetivo de facturacion de un profesional en un periodo concreto, con su recompensa.
+/// No es una plantilla recurrente: cada mes que la owner quiera repetirlo crea una meta
+/// nueva. El progreso no se guarda aqui -se calcula al leer, sumando las lineas de venta
+/// del periodo- pero `achievedAt` si se persiste y es de una sola direccion: una vez
+/// cumplida, se queda cumplida aunque una anulacion posterior baje la cifra "real".
+model Goal {
+  id                String     @id @default(uuid(7))
+  tenantId          String
+  stylistId         String
+  metric            GoalMetric
+  targetAmount      Decimal    @db.Decimal(12, 2)
+  currency          String     @default("GTQ") @db.Char(3)
+  periodStart       DateTime   @db.Timestamptz(3)
+  periodEnd         DateTime   @db.Timestamptz(3)
+  rewardDescription String
+  achievedAt        DateTime?  @db.Timestamptz(3)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stylist Stylist @relation(fields: [stylistId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, stylistId, deletedAt])
+  @@map("goals")
+}
+
+// ===========================================================================
+// CATALOGO: CATEGORIAS, SERVICIOS Y PRODUCTOS
+// ===========================================================================
+
+/// Categoria unica para servicios y productos, discriminada por `kind`. Dos tablas
+/// identicas serian duplicacion; el arbol y su gestion son exactamente los mismos.
+model Category {
+  id          String       @id @default(uuid(7))
+  tenantId    String
+  kind        CategoryKind
+  name        String
+  slug        String
+  description String?
+  color       String?
+  parentId    String?
+  sortOrder   Int          @default(0)
+  isActive    Boolean      @default(true)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryTree")
+  services Service[]
+  products Product[]
+
+  @@index([tenantId, kind, deletedAt])
+  @@index([tenantId, parentId])
+  @@index([tenantId, kind, slug])
+  @@map("categories")
+}
+
+model Service {
+  id               String   @id @default(uuid(7))
+  tenantId         String
+  categoryId       String?
+  code             String
+  name             String
+  description      String?
+  durationMinutes  Int
+  /// Margen posterior para limpieza y preparacion; bloquea agenda pero no se factura.
+  bufferMinutes    Int      @default(0)
+  price            Decimal  @db.Decimal(12, 2)
+  currency         String   @default("GTQ") @db.Char(3)
+  taxRate          Decimal  @default(12) @db.Decimal(5, 2)
+  commissionRate   Decimal? @db.Decimal(5, 2)
+  isActive         Boolean  @default(true)
+  /// Reservable online por el cliente final, frente a solo agendable por el salon.
+  isBookableOnline Boolean  @default(true)
+  color            String?
+  sortOrder        Int      @default(0)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category         Category?            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  stylists         StylistService[]
+  appointmentItems AppointmentService[]
+  invoiceLines     InvoiceLine[]
+  consumables      ServiceConsumable[]
+  clientPhotos     ClientPhoto[]
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, categoryId])
+  @@index([tenantId, code])
+  @@map("services")
+}
+
+/// Escandallo: producto que consume un servicio al ejecutarse. Alimenta los movimientos
+/// de tipo SERVICE_CONSUMPTION y permite calcular el margen real del servicio.
+model ServiceConsumable {
+  id        String  @id @default(uuid(7))
+  tenantId  String
+  serviceId String
+  productId String
+  quantity  Decimal @db.Decimal(12, 3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([serviceId, productId])
+  @@index([tenantId])
+  @@index([productId])
+  @@map("service_consumables")
+}
+
+model Product {
+  id          String  @id @default(uuid(7))
+  tenantId    String
+  categoryId  String?
+  sku         String
+  barcode     String?
+  name        String
+  description String?
+  brand       String?
+
+  /// Precio de venta al publico. Puede ser 0 en productos de uso interno.
+  price     Decimal @db.Decimal(12, 2)
+  /// Coste medio ponderado, recalculado en cada entrada (ADR-0011).
+  costPrice Decimal @default(0) @db.Decimal(12, 2)
+  currency  String  @default("GTQ") @db.Char(3)
+  taxRate   Decimal @default(12) @db.Decimal(5, 2)
+
+  unit            ProductUnit @default(UNIT)
+  /// Cache materializada del ledger de movimientos. NO es la fuente de verdad.
+  stockOnHand     Decimal     @default(0) @db.Decimal(12, 3)
+  reorderPoint    Decimal     @default(0) @db.Decimal(12, 3)
+  reorderQuantity Decimal     @default(0) @db.Decimal(12, 3)
+
+  /// Se vende al cliente, se consume en cabina, o ambas.
+  isRetail   Boolean @default(true)
+  isInternal Boolean @default(false)
+  isActive   Boolean @default(true)
+  trackStock Boolean @default(true)
+
+  /// Seguimiento por lote y caducidad (ADR-0012).
+  ///
+  /// Opcional a proposito: un secador no tiene lote y obligar a inventarlo uno por cada
+  /// entrada solo consigue que la encargada teclee «1» y el dato deje de significar nada.
+  /// Un tinte si lo tiene, y ahi la trazabilidad es una obligacion legal.
+  tracksBatches Boolean @default(false)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category       Category?           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  movements      InventoryMovement[]
+  poLines        PurchaseOrderLine[]
+  invoiceLines   InvoiceLine[]
+  consumedBy     ServiceConsumable[]
+  suppliers      SupplierProduct[]
+  productBatches ProductBatch[]
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, categoryId])
+  @@index([tenantId, sku])
+  @@index([tenantId, barcode])
+  @@index([tenantId, isActive, stockOnHand])
+  @@map("products")
+}
+
+// ===========================================================================
+// AGENDA
+// ===========================================================================
+
+/// Una cita ocupa un intervalo [startsAt, endsAt) de un estilista.
+/// El solapamiento lo impide una restriccion EXCLUDE de PostgreSQL (ver migracion
+/// appointment_overlap_constraint): la comprobacion en el dominio da un buen mensaje de
+/// error, pero solo la base de datos puede garantizarlo bajo peticiones concurrentes.
+model Appointment {
+  id            String            @id @default(uuid(7))
+  tenantId      String
+  clientId      String
+  stylistId     String
+  startsAt      DateTime          @db.Timestamptz(3)
+  endsAt        DateTime          @db.Timestamptz(3)
+  status        AppointmentStatus @default(SCHEDULED)
+  source        AppointmentSource @default(WALK_IN)
+  notes         String?
+  internalNotes String?
+
+  confirmedAt        DateTime? @db.Timestamptz(3)
+  startedAt          DateTime? @db.Timestamptz(3)
+  completedAt        DateTime? @db.Timestamptz(3)
+  cancelledAt        DateTime? @db.Timestamptz(3)
+  cancelledBy        String?
+  cancellationReason String?
+  noShowAt           DateTime? @db.Timestamptz(3)
+  reminderSentAt     DateTime? @db.Timestamptz(3)
+  /// Total previsto al agendar. El importe real de la visita vive en la factura.
+  estimatedTotal     Decimal   @default(0) @db.Decimal(12, 2)
+  currency           String    @default("GTQ") @db.Char(3)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client       Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  stylist      Stylist              @relation(fields: [stylistId], references: [id], onDelete: Restrict)
+  services     AppointmentService[]
+  invoice      Invoice?
+  clientPhotos ClientPhoto[]
+
+  @@index([tenantId, startsAt])
+  @@index([tenantId, stylistId, startsAt])
+  @@index([tenantId, clientId, startsAt])
+  @@index([tenantId, status, startsAt])
+  @@map("appointments")
+}
+
+/// Linea de servicio de una cita. Congela precio y duracion en el momento de agendar:
+/// cambiar la tarifa del catalogo no debe alterar citas ya cerradas.
+model AppointmentService {
+  id              String  @id @default(uuid(7))
+  tenantId        String
+  appointmentId   String
+  serviceId       String
+  durationMinutes Int
+  price           Decimal @db.Decimal(12, 2)
+  currency        String  @default("GTQ") @db.Char(3)
+  sortOrder       Int     @default(0)
+
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @db.Timestamptz(3)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  service     Service     @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([appointmentId])
+  @@index([serviceId])
+  @@map("appointment_services")
+}
+
+// ===========================================================================
+// PROVEEDORES Y COMPRAS
+// ===========================================================================
+
+model Supplier {
+  id              String         @id @default(uuid(7))
+  tenantId        String
+  code            String
+  name            String
+  legalName       String?
+  taxId           String?
+  email           String?
+  phone           String?
+  contactName     String?
+  addressLine     String?
+  city            String?
+  postalCode      String?
+  country         String         @default("GT")
+  /// Dias de pago acordados; alimenta la prevision de tesoreria.
+  paymentTermDays Int            @default(30)
+  notes           String?
+  status          SupplierStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+  products       SupplierProduct[]
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, code])
+  @@index([tenantId, name])
+  @@map("suppliers")
+}
+
+/// Catalogo del proveedor: su referencia y su precio para un producto nuestro.
+/// Un mismo producto puede comprarse a varios proveedores a distinto precio.
+model SupplierProduct {
+  supplierId       String
+  productId        String
+  tenantId         String
+  supplierSku      String?
+  costPrice        Decimal @db.Decimal(12, 2)
+  currency         String  @default("GTQ") @db.Char(3)
+  leadTimeDays     Int     @default(0)
+  minOrderQuantity Decimal @default(1) @db.Decimal(12, 3)
+  isPreferred      Boolean @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  supplier  Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([supplierId, productId])
+  @@index([productId])
+  @@index([tenantId])
+  @@map("supplier_products")
+}
+
+model PurchaseOrder {
+  id         String              @id @default(uuid(7))
+  tenantId   String
+  supplierId String
+  number     String
+  status     PurchaseOrderStatus @default(DRAFT)
+
+  orderedAt          DateTime? @db.Timestamptz(3)
+  expectedAt         DateTime? @db.Timestamptz(3)
+  receivedAt         DateTime? @db.Timestamptz(3)
+  cancelledAt        DateTime? @db.Timestamptz(3)
+  cancellationReason String?
+
+  subtotal Decimal @default(0) @db.Decimal(12, 2)
+  taxTotal Decimal @default(0) @db.Decimal(12, 2)
+  total    Decimal @default(0) @db.Decimal(12, 2)
+  currency String  @default("GTQ") @db.Char(3)
+
+  supplierReference String?
+  notes             String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier  Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  lines     PurchaseOrderLine[]
+  movements InventoryMovement[]
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, status, orderedAt])
+  @@index([tenantId, supplierId])
+  @@index([tenantId, number])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id               String  @id @default(uuid(7))
+  tenantId         String
+  purchaseOrderId  String
+  productId        String
+  quantity         Decimal @db.Decimal(12, 3)
+  /// Recepcion parcial: una linea puede recibirse en varias entregas.
+  receivedQuantity Decimal @default(0) @db.Decimal(12, 3)
+  unitCost         Decimal @db.Decimal(12, 2)
+  taxRate          Decimal @default(12) @db.Decimal(5, 2)
+  lineTotal        Decimal @db.Decimal(12, 2)
+  currency         String  @default("GTQ") @db.Char(3)
+  notes            String?
+
+  createdAt     DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime      @updatedAt @db.Timestamptz(3)
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([purchaseOrderId])
+  @@index([productId])
+  @@map("purchase_order_lines")
+}
+
+// ===========================================================================
+// INVENTARIO  (ADR-0011)
+// ===========================================================================
+
+/// Ledger append-only. Nunca se actualiza ni se borra: una entrada erronea se corrige
+/// con un movimiento compensatorio. Por eso, y a diferencia del resto, no lleva
+/// soft delete ni `updatedAt`.
+model InventoryMovement {
+  id            String       @id @default(uuid(7))
+  tenantId      String
+  productId     String
+  type          MovementType
+  /// Con signo: positivo entra, negativo sale. Nunca cero.
+  quantityDelta Decimal      @db.Decimal(12, 3)
+  /// Stock resultante tras aplicar el movimiento. Redundante pero permite auditar el
+  /// ledger sin recalcular la serie completa, y detectar divergencias de la cache.
+  balanceAfter  Decimal      @db.Decimal(12, 3)
+  unitCost      Decimal?     @db.Decimal(12, 2)
+  currency      String       @default("GTQ") @db.Char(3)
+
+  /// Documento que origino el movimiento, para trazar en ambos sentidos.
+  sourceType MovementSourceType @default(MANUAL)
+  sourceId   String?
+  reason     String?
+  notes      String?
+
+  purchaseOrderId String?
+
+  /// Lote del que sale o al que entra la mercancia (ADR-0012).
+  ///
+  /// Nulo en productos sin seguimiento por lote. Es lo que permite responder «que lote se
+  /// le aplico a esta clienta», que es una obligacion del Reglamento 1223/2009 y no una
+  /// comodidad de gestion.
+  batchId String?
+
+  occurredAt DateTime @default(now()) @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  createdBy  String?
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product       Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  batch         ProductBatch?  @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, batchId])
+  @@index([tenantId, productId, occurredAt])
+  @@index([tenantId, type, occurredAt])
+  @@index([tenantId, sourceType, sourceId])
+  @@map("inventory_movements")
+}
+
+/// Lote de producto con su caducidad (ADR-0012).
+///
+/// Existe uno por cada recepcion de mercancia. Guarda el coste **real** de esa entrada, de
+/// modo que el margen de un servicio deje de ser una estimacion, y la caducidad, que es lo
+/// que ordena el consumo: primero sale lo que antes vence (FEFO), no lo que antes llego.
+///
+/// Un lote agotado **no se borra**: la trazabilidad lo necesita años despues, cuando haya
+/// que responder de que lote salio el producto que provoco una reaccion.
+model ProductBatch {
+  id        String @id @default(uuid(7))
+  tenantId  String
+  productId String
+
+  /// Numero impreso en el envase. Es el que figura en una reclamacion.
+  batchNumber String
+  /// Nulo en productos que no caducan pero si se quieren trazar por lote.
+  expiresAt   DateTime? @db.Date
+
+  receivedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  /// Cantidad que entro. No cambia nunca: es el historico de la recepcion.
+  initialQuantity   Decimal @db.Decimal(12, 3)
+  /// Lo que queda. Baja con cada consumo y nunca puede ser negativo.
+  remainingQuantity Decimal @db.Decimal(12, 3)
+
+  /// Coste real de este lote. Con lotes no se promedia: se sabe.
+  unitCost Decimal @db.Decimal(12, 2)
+  currency String  @default("GTQ") @db.Char(3)
+
+  supplierId      String?
+  purchaseOrderId String?
+  notes           String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product   Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  movements InventoryMovement[]
+
+  /// Indice de consumo FEFO: por producto, ordenado por caducidad. El filtro parcial deja
+  /// fuera los lotes agotados, que son la mayoria en cuanto el salon lleva un tiempo.
+  @@index([tenantId, productId, expiresAt])
+  @@index([tenantId, expiresAt])
+  @@index([tenantId, productId, deletedAt])
+  @@map("product_batches")
+}
+
+// ===========================================================================
+// FACTURACION Y COBROS
+// ===========================================================================
+
+model Invoice {
+  id            String        @id @default(uuid(7))
+  tenantId      String
+  clientId      String?
+  appointmentId String?       @unique
+  number        String
+  status        InvoiceStatus @default(DRAFT)
+
+  issuedAt   DateTime? @db.Timestamptz(3)
+  dueAt      DateTime? @db.Timestamptz(3)
+  paidAt     DateTime? @db.Timestamptz(3)
+  voidedAt   DateTime? @db.Timestamptz(3)
+  voidReason String?
+
+  subtotal      Decimal @default(0) @db.Decimal(12, 2)
+  discountTotal Decimal @default(0) @db.Decimal(12, 2)
+  taxTotal      Decimal @default(0) @db.Decimal(12, 2)
+  total         Decimal @default(0) @db.Decimal(12, 2)
+  paidTotal     Decimal @default(0) @db.Decimal(12, 2)
+  /// Derivado de total - paidTotal, materializado para filtrar deudores sin agregar.
+  balanceDue    Decimal @default(0) @db.Decimal(12, 2)
+  currency      String  @default("GTQ") @db.Char(3)
+
+  discountType  DiscountType?
+  discountValue Decimal?      @db.Decimal(12, 2)
+
+  notes           String?
+  /// Datos fiscales del cliente congelados en el momento de emitir: una factura es un
+  /// documento historico y no puede cambiar porque el cliente actualice su direccion.
+  billingSnapshot Json?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client      Client?       @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  appointment Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  lines       InvoiceLine[]
+  payments    Payment[]
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, status, issuedAt])
+  @@index([tenantId, clientId])
+  @@index([tenantId, number])
+  @@index([tenantId, balanceDue])
+  @@map("invoices")
+}
+
+/// Linea de factura. Referencia a servicio o a producto (exactamente uno de los dos,
+/// garantizado por CHECK en la migracion), pero congela nombre y precio: la factura
+/// debe poder reimprimirse identica dentro de cinco anos aunque el catalogo cambie.
+model InvoiceLine {
+  id        String          @id @default(uuid(7))
+  tenantId  String
+  invoiceId String
+  kind      InvoiceLineKind
+  serviceId String?
+  productId String?
+  stylistId String?
+
+  description    String
+  quantity       Decimal @db.Decimal(12, 3)
+  unitPrice      Decimal @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
+  taxRate        Decimal @default(12) @db.Decimal(5, 2)
+  taxAmount      Decimal @default(0) @db.Decimal(12, 2)
+  lineSubtotal   Decimal @db.Decimal(12, 2)
+  lineTotal      Decimal @db.Decimal(12, 2)
+  currency       String  @default("GTQ") @db.Char(3)
+
+  /// Comision devengada por el profesional en esta linea, congelada al facturar.
+  commissionRate   Decimal? @db.Decimal(5, 2)
+  commissionAmount Decimal  @default(0) @db.Decimal(12, 2)
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  service   Service? @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
+  stylist   Stylist? @relation(fields: [stylistId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([invoiceId])
+  @@index([tenantId, stylistId])
+  @@index([productId])
+  @@map("invoice_lines")
+}
+
+model Payment {
+  id        String        @id @default(uuid(7))
+  tenantId  String
+  invoiceId String
+  sessionId String?
+  method    PaymentMethod
+  status    PaymentStatus @default(COMPLETED)
+  amount    Decimal       @db.Decimal(12, 2)
+  currency  String        @default("GTQ") @db.Char(3)
+
+  receivedAt DateTime @default(now()) @db.Timestamptz(3)
+  reference  String?
+  /// Identificador de la pasarela, para conciliar con el extracto.
+  externalId String?
+  notes      String?
+
+  refundedAt     DateTime? @db.Timestamptz(3)
+  refundedAmount Decimal   @default(0) @db.Decimal(12, 2)
+  refundReason   String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  session CashSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, receivedAt])
+  @@index([invoiceId])
+  @@index([sessionId])
+  @@index([tenantId, method, receivedAt])
+  @@map("payments")
+}
+
+// ===========================================================================
+// CAJA
+// ===========================================================================
+
+/// Sesion de caja (turno). Se abre con un fondo, se cierra con un recuento y la
+/// diferencia queda registrada: es el control antifraude basico de un salon.
+model CashSession {
+  id         String            @id @default(uuid(7))
+  tenantId   String
+  openedById String
+  status     CashSessionStatus @default(OPEN)
+
+  openedAt       DateTime  @default(now()) @db.Timestamptz(3)
+  openingFloat   Decimal   @db.Decimal(12, 2)
+  closedAt       DateTime? @db.Timestamptz(3)
+  closedById     String?
+  /// Efectivo contado fisicamente al cierre.
+  countedAmount  Decimal?  @db.Decimal(12, 2)
+  /// Efectivo que el sistema espera: fondo + entradas - salidas.
+  expectedAmount Decimal?  @db.Decimal(12, 2)
+  /// countedAmount - expectedAmount. Negativo = falta dinero.
+  difference     Decimal?  @db.Decimal(12, 2)
+  currency       String    @default("GTQ") @db.Char(3)
+  notes          String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  openedBy  User           @relation(fields: [openedById], references: [id], onDelete: Restrict)
+  movements CashMovement[]
+  payments  Payment[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, openedAt])
+  @@map("cash_sessions")
+}
+
+/// Entradas y salidas de efectivo que no son cobro de factura: retiradas a banco,
+/// pago de un proveedor en efectivo, gastos menores, correcciones de arqueo.
+model CashMovement {
+  id        String           @id @default(uuid(7))
+  tenantId  String
+  sessionId String
+  type      CashMovementType
+  amount    Decimal          @db.Decimal(12, 2)
+  currency  String           @default("GTQ") @db.Char(3)
+  concept   String
+  reference String?
+  notes     String?
+
+  occurredAt DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt  DateTime? @db.Timestamptz(3)
+  createdBy  String?
+  updatedBy  String?
+  deletedBy  String?
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, sessionId])
+  @@index([tenantId, occurredAt])
+  @@map("cash_movements")
+}
+
+// ===========================================================================
+// ENUMERACIONES
+// ===========================================================================
+
+enum TenantStatus {
+  ACTIVE
+  TRIAL
+  SUSPENDED
+  CANCELLED
+}
+
+enum SettingType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+}
+
+enum DocumentType {
+  INVOICE
+  PURCHASE_ORDER
+  CREDIT_NOTE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  RESTORE
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+  TOKEN_REFRESH
+  TOKEN_REUSE_DETECTED
+  PERMISSION_DENIED
+  EXPORT
+  ANONYMIZE
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  OTHER
+  UNDISCLOSED
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum StylistStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+}
+
+enum GoalMetric {
+  SERVICE_REVENUE
+  PRODUCT_REVENUE
+}
+
+enum CategoryKind {
+  SERVICE
+  PRODUCT
+}
+
+enum ProductUnit {
+  UNIT
+  MILLILITER
+  LITER
+  GRAM
+  KILOGRAM
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum AppointmentSource {
+  WALK_IN
+  PHONE
+  ONLINE
+  STAFF
+}
+
+enum SupplierStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SUBMITTED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum MovementType {
+  PURCHASE_IN
+  SALE_OUT
+  SERVICE_CONSUMPTION
+  ADJUSTMENT
+  RETURN_IN
+  WASTE_OUT
+  INITIAL_STOCK
+}
+
+enum MovementSourceType {
+  PURCHASE_ORDER
+  INVOICE
+  APPOINTMENT
+  STOCK_COUNT
+  MANUAL
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum InvoiceLineKind {
+  SERVICE
+  PRODUCT
+  DISCOUNT
+  OTHER
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  BIZUM
+  GIFT_CARD
+  VOUCHER
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  CASH_IN
+  CASH_OUT
+  WITHDRAWAL
+  EXPENSE
+  CORRECTION
+}
+
+/// Tipo de foto dentro del historial de una clienta.
+enum ClientPhotoKind {
+  /// Antes del servicio. Es la referencia contra la que se compara el resultado.
+  BEFORE
+  /// Despues del servicio.
+  AFTER
+  /// La que trae la clienta como ejemplo de lo que quiere.
+  REFERENCE
+  /// Formula de color anotada, tarjeta de mezcla, prueba de mecha.
+  FORMULA
+  OTHER
+}
+
+/// Origen del consentimiento para guardar la imagen.
+enum PhotoConsentSource {
+  /// Firmado en papel o en tableta, en el propio salon.
+  IN_PERSON
+  /// Aceptado en el portal de la clienta o por enlace.
+  ONLINE
+  /// Consentimiento verbal, anotado por quien atendio.
+  VERBAL
+}
+
+/// Foto del historial de una clienta (ADR-0016).
+///
+/// El fichero **no** vive aqui: vive en el almacen de objetos y esta fila guarda la
+/// referencia. Un `bytea` de tres megas por foto infla las copias de seguridad, se pasea
+/// entero en cualquier consulta que olvide excluir la columna y convierte un `pg_dump` de
+/// minutos en uno de horas.
+///
+/// La imagen de una persona es un dato personal, asi que el consentimiento es una columna
+/// obligatoria y no una casilla en la interfaz: sin sitio donde guardarlo, la unica prueba
+/// de que se pidio seria la palabra de quien lo pidio.
+model ClientPhoto {
+  id            String  @id @default(uuid(7))
+  tenantId      String
+  clientId      String
+  /// Cita en la que se tomo. Nulo en una foto suelta o en una de referencia.
+  appointmentId String?
+  /// Servicio al que corresponde. Permite ver el historial de un tratamiento concreto.
+  serviceId     String?
+
+  kind ClientPhotoKind @default(OTHER)
+
+  /// Ruta del objeto en el almacen. Unica: dos filas apuntando al mismo fichero harian que
+  /// borrar una dejara a la otra sirviendo un objeto inexistente.
+  storageKey   String
+  mimeType     String
+  sizeBytes    Int
+  /// SHA-256 del contenido. Detecta duplicados y prueba que el fichero no ha cambiado.
+  checksum     String  @db.Char(64)
+  width        Int?
+  height       Int?
+  /// Nombre con el que se subio. Solo para mostrar; nunca para construir rutas.
+  originalName String?
+
+  caption String?
+  notes   String?
+  takenAt DateTime @default(now()) @db.Timestamptz(3)
+
+  /// Momento en que la clienta autorizo guardar su imagen. Sin esto no se sube nada.
+  consentGivenAt  DateTime           @db.Timestamptz(3)
+  consentSource   PhotoConsentSource @default(IN_PERSON)
+  /// Autoriza ademas usarla en redes o en el portfolio del salon. Es otra decision.
+  allowsMarketing Boolean            @default(false)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  /// Momento en que el objeto se borro del almacen.
+  ///
+  /// El borrado logico oculta la foto y deja el fichero donde estaba, lo que no vale cuando
+  /// una clienta ejerce su derecho de supresion. Esta columna separa «ya no se ve» de «ya no
+  /// existe», que son dos hechos distintos y hay que poder demostrar el segundo.
+  purgedAt DateTime? @db.Timestamptz(3)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  service     Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, clientId, takenAt])
+  @@index([tenantId, appointmentId])
+  @@index([tenantId, deletedAt])
+  @@map("client_photos")
+}
