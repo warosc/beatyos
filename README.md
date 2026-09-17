@@ -5,7 +5,7 @@ Monorepo con dos aplicaciones: la **API** (raíz del repositorio) en NestJS + Po
 Prisma, con arquitectura hexagonal y DDD por módulos, y la **interfaz web** (`apps/web`) en
 Next.js, que consume la API a través de sus propias rutas de servidor.
 
-> **Estado.** Ya no falta ningún módulo de negocio: los nueve de `src/salon/` están
+> **Estado.** Ya no falta ningún módulo de negocio: los diez de `src/salon/` están
 > implementados y la interfaz web los consume con datos reales, sin pantallas de relleno
 > —el componente `ModulePending`, que hacía de marcador de posición, se ha retirado—.
 > La fase R1 normalizó compras y cerró sus riesgos de precisión, atomicidad, concurrencia y
@@ -98,14 +98,15 @@ src/
 │
 └── salon/                     Negocio
     ├── clients/               Clientas (slice vertical de referencia)
-    ├── stylists/              Profesionales: horario, ausencias, habilidades
+    ├── stylists/              Profesionales: horario, ausencias, habilidades, comisión
     ├── catalog/               Servicios y categorías
     ├── appointments/          Agenda: reserva, estados y disponibilidad
     ├── inventory/             Existencias, lotes, Kardex y reparto FEFO
     ├── sales/                 Facturación, cobros, anulación y devoluciones
     ├── cash/                  Apertura, movimientos, arqueo y cierre de caja
     ├── reports/               Indicadores agregados en la hora del salón
-    └── purchases/             Proveedores y órdenes de compra (sin capa de dominio)
+    ├── purchases/             Proveedores y órdenes de compra
+    └── goals/                 Metas de facturación por profesional, con recompensa
 ```
 
 Cada módulo de negocio repite la misma estructura:
@@ -129,14 +130,14 @@ Se descartan dos clases de coincidencia que no violan la regla: los `.spec.ts`, 
 dobles reales de los puertos (`FixedClock`, `SequentialIdGenerator`), y los `import type`
 del esquema de configuración, que TypeScript borra al compilar.
 
-Hoy el comando **no sale vacío**: devuelve las dos líneas de
-`purchases/application/purchases.service.ts`, que usa `PrismaService` y `QueryScopeStore`
-directamente. Es la única violación real del repositorio y está descrita en
-[Pendiente](#pendiente).
+Hoy el comando **sale vacío**. Compras era la única excepción —un `purchases.service.ts`
+sin dominio, atado a `PrismaService` y `QueryScopeStore`— y se normalizó al cerrar R1
+([ADR-0017](docs/adr/0017-normalizacion-arquitectonica-de-compras.md)): cero coincidencias
+por primera vez en el repositorio.
 
 ### Decisiones de arquitectura
 
-Las dieciséis decisiones estructurales están documentadas en [`docs/adr/`](docs/adr/), con su
+Las diecisiete decisiones estructurales están documentadas en [`docs/adr/`](docs/adr/), con su
 contexto, sus consecuencias **y las alternativas descartadas con el motivo del descarte**
 —que es la parte que más valor tiene dentro de seis meses.
 
@@ -286,19 +287,19 @@ dice al cliente si reintentar con otros datos tiene sentido.
 Dos suites con contratos distintos (ADR-0009):
 
 ```bash
-npm run test:unit          # dominio y casos de uso — sin infraestructura, 832 tests en ~3 s
-npm run test:integration   # PostgreSQL real, HTTP real, guards reales — 282 tests
+npm run test:unit          # dominio y casos de uso — sin infraestructura, 916 tests en ~12 s
+npm run test:integration   # PostgreSQL real, HTTP real, guards reales — 303 tests
 npm run test:cov           # ambas + informe de cobertura
 ```
 
-Estado actual: **1.114 tests en verde, y los cuatro umbrales de cobertura cumplidos.**
+Estado actual: **1.219 tests en verde, y los cuatro umbrales de cobertura cumplidos.**
 
 | Métrica | Cobertura | Umbral |
 | ------- | --------- | ------ |
 | Líneas | 94,86 % | 90 % |
-| Sentencias | 94,37 % | 90 % |
-| Funciones | 93,50 % | 90 % |
-| Ramas | 80,17 % | 80 % |
+| Sentencias | 94,58 % | 90 % |
+| Funciones | 93,71 % | 90 % |
+| Ramas | 80,30 % | 80 % |
 
 El margen en ramas es de dos décimas: unas pocas ramas nuevas sin cubrir vuelven a tumbar el
 umbral. Si eso ocurre, el sitio donde hay más recorrido barato son los controladores HTTP,
@@ -318,8 +319,10 @@ que rondan el 75 %.
 > [Puesta en marcha](#puesta-en-marcha); no hay nada roto.
 
 La interfaz web se prueba aparte, con `npm run web:test` (Vitest) y `npm run web:test:e2e`
-(Playwright). Es la parte floja del proyecto: 2 tests unitarios y 11 casos de extremo a
-extremo que además **interceptan la API**. Está anotado en [Pendiente](#pendiente).
+(Playwright). El volumen ya no es poco —175 tests unitarios en 30 archivos y 32 casos de
+extremo a extremo (16 escenarios en dos dispositivos)—, pero los e2e además **interceptan la
+API con `page.route`**, así que no prueban que el backend produzca esas respuestas. Está
+anotado en [Pendiente](#pendiente).
 
 Los dobles de la suite unitaria son **implementaciones reales de los puertos**, no mocks:
 `InMemoryUserRepository` respeta las mismas invariantes que el adaptador de Prisma
@@ -402,6 +405,7 @@ infraestructura.
 | **Caja** | Apertura, movimientos, arqueo y cierre. El efectivo esperado se calcula en **un solo sitio**, y una sola caja abierta por salón lo garantiza un índice único parcial (ADR-0014) |
 | **Informes y KPIs** | Ventas, ticket medio, retención, ocupación y ranking de profesionales, agrupados por días **en la hora del salón** y no en UTC (ADR-0015) |
 | **Fotos e historial de clienta** | Almacén de objetos compatible con S3, tipo deducido de los bytes del fichero, consentimiento obligatorio y borrado en dos tiempos que llega al fichero (ADR-0016) |
+| **Comisiones y metas** | Comisión en cascada (habilidad → servicio → general), congelada al facturar; metas de facturación con recompensa y ámbito `.own` (ADR-0018) |
 
 ### Pendiente
 
@@ -453,13 +457,14 @@ salón vecino no aparece, y la regla de **la última propietaria** —que se vig
 sitios distintos y no tenía ni una prueba pese a ser lo que impide que un salón se quede sin
 nadie capaz de administrarlo—.
 
-**4. El frontend sigue mucho menos probado que la API.**
+**4. El frontend ya tiene volumen de tests; le falta que sean de contrato.**
 
-Frente a los 1.114 tests del backend, `apps/web` tiene 2 unitarios (sobre `lib/utils`) y 11
-casos de Playwright. Los e2e recorren los flujos importantes de principio a fin, pero
-**interceptan la API con `page.route`**: verifican que la interfaz se comporta ante respuestas
-dadas, no que el backend las produzca. Nada prueba hoy que el contrato entre ambos coincida.
-Es el hueco más grande que queda.
+Frente a los 1.219 tests del backend, `apps/web` tiene **175 unitarios** (30 archivos, Vitest)
+y **32 casos de Playwright** (16 escenarios × 2 dispositivos). El volumen dejó de ser el
+problema. Los e2e recorren los flujos importantes de principio a fin, pero **interceptan la
+API con `page.route`**: verifican que la interfaz se comporta ante respuestas dadas, no que el
+backend las produzca. Nada prueba hoy que el contrato entre ambos coincida — es el hueco que
+queda, y es de naturaleza distinta a la de cantidad.
 
 **5. `PERMISSION_DENIED` se declara y no se registra nunca.**
 

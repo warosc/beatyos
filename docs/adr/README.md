@@ -22,6 +22,7 @@ Un ADR nunca se edita una vez aceptado: se **supersede** con uno nuevo.
 | [0015](0015-informes-e-indicadores.md) | Informes e indicadores | Aceptado |
 | [0016](0016-fotos-de-clienta-y-almacen-de-objetos.md) | Fotos de clienta y almacén de objetos | Aceptado |
 | [0017](0017-normalizacion-arquitectonica-de-compras.md) | Normalización arquitectónica de compras | Aceptado |
+| [0018](0018-comisiones-y-metas-de-profesional.md) | Comisiones por profesional y metas con recompensa | Aceptado |
 
 ## Formato
 
