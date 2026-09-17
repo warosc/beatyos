@@ -11,9 +11,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["Users_all"];
+        /** Buscar usuarios del salón */
+        get: operations["users_list"];
         put?: never;
-        post: operations["Users_create"];
+        /** Crear un usuario */
+        post: operations["users_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -27,13 +29,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["Users_detail"];
+        /** Consultar un usuario */
+        get: operations["users_get"];
         put?: never;
         post?: never;
-        delete: operations["Users_remove"];
+        /** Dar de baja a un usuario */
+        delete: operations["users_delete"];
         options?: never;
         head?: never;
-        patch: operations["Users_update"];
+        /** Actualizar el perfil de un usuario */
+        patch: operations["users_update"];
         trace?: never;
     };
     "/api/v1/users/{id}/roles": {
@@ -44,7 +49,8 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put: operations["Users_roles"];
+        /** Reasignar los roles de un usuario */
+        put: operations["users_assignRoles"];
         post?: never;
         delete?: never;
         options?: never;
@@ -61,7 +67,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["Users_restore"];
+        /** Restaurar un usuario dado de baja */
+        post: operations["users_restore"];
         delete?: never;
         options?: never;
         head?: never;
@@ -75,9 +82,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["Roles_all"];
+        /** Listar los roles disponibles en el salón */
+        get: operations["roles_list"];
         put?: never;
-        post: operations["Roles_create"];
+        /** Crear un rol propio del salón */
+        post: operations["roles_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -91,7 +100,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["Roles_permissions"];
+        /** Catálogo fijo de permisos */
+        get: operations["roles_permissions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -110,10 +120,12 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete: operations["Roles_remove"];
+        /** Eliminar un rol propio del salón */
+        delete: operations["roles_delete"];
         options?: never;
         head?: never;
-        patch: operations["Roles_update"];
+        /** Actualizar un rol propio del salón */
+        patch: operations["roles_update"];
         trace?: never;
     };
     "/api/v1/auth/forgot-password": {
@@ -960,9 +972,10 @@ export interface paths {
             cookie?: never;
         };
         /** Lista el catálogo con su semáforo de existencias */
-        get: operations["Products_list"];
+        get: operations["products_list"];
         put?: never;
-        post: operations["Products_create"];
+        /** Crear un producto */
+        post: operations["products_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -976,14 +989,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["Products_detail"];
+        /** Consultar un producto */
+        get: operations["products_get"];
         put?: never;
         post?: never;
         /** Da de baja un producto. Exige que no queden existencias */
-        delete: operations["Products_remove"];
+        delete: operations["products_delete"];
         options?: never;
         head?: never;
-        patch: operations["Products_update"];
+        /** Actualizar un producto */
+        patch: operations["products_update"];
         trace?: never;
     };
     "/api/v1/products/{id}/restore": {
@@ -995,7 +1010,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["Products_restore"];
+        /** Restaurar un producto dado de baja */
+        post: operations["products_restore"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1010,7 +1026,7 @@ export interface paths {
             cookie?: never;
         };
         /** Libro de movimientos. Es la fuente de verdad del inventario */
-        get: operations["Inventory_kardex"];
+        get: operations["inventory_kardex"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1026,7 +1042,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["Inventory_batches"];
+        /** Lista los lotes por producto */
+        get: operations["inventory_batches"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1043,7 +1060,7 @@ export interface paths {
             cookie?: never;
         };
         /** Qué hay que pedir y qué está a punto de caducar */
-        get: operations["Inventory_alerts"];
+        get: operations["inventory_alerts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1062,7 +1079,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Registra una entrada de mercancía, con lote si el producto lo lleva */
-        post: operations["Inventory_receive"];
+        post: operations["inventory_receive"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1079,7 +1096,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Descuenta existencias repartiendo por FEFO entre los lotes disponibles */
-        post: operations["Inventory_consume"];
+        post: operations["inventory_consume"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1096,7 +1113,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ajusta existencias por recuento o merma */
-        post: operations["Inventory_adjust"];
+        post: operations["inventory_adjust"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1110,10 +1127,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["Sales_list"];
+        /** Buscar facturas */
+        get: operations["sales_list"];
         put?: never;
         /** Registra una venta: emite la factura, cobra y descuenta existencias por FEFO */
-        post: operations["Sales_create"];
+        post: operations["sales_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1127,7 +1145,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["Sales_detail"];
+        /** Consultar una factura, con sus cobros */
+        get: operations["sales_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1146,7 +1165,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Anula una factura. Exige que no tenga cobros */
-        post: operations["Sales_void"];
+        post: operations["sales_void"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1161,7 +1180,7 @@ export interface paths {
             cookie?: never;
         };
         /** Caja abierta con lo esperado en el cajón. `null` si está cerrada */
-        get: operations["Cash_current"];
+        get: operations["cash_current"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1177,7 +1196,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["Cash_history"];
+        /** Historial de cajas cerradas */
+        get: operations["cash_history"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1195,7 +1215,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["Cash_open"];
+        /** Abre la caja del día */
+        post: operations["cash_open"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1212,7 +1233,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Anota una entrada o salida manual de efectivo */
-        post: operations["Cash_movement"];
+        post: operations["cash_movement"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1229,7 +1250,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Arquea y cierra. No rechaza el descuadre: lo registra */
-        post: operations["Cash_close"];
+        post: operations["cash_close"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1451,10 +1472,86 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        UserRoleResponse: {
+            id: string;
+            code: string;
+        };
+        UserResponse: {
+            roles: components["schemas"]["UserRoleResponse"][];
+            permissions: string[];
+            id: string;
+            email: string;
+            firstName: string;
+            lastName: string;
+            fullName: string;
+            phone: string | null;
+            /** @enum {string} */
+            status: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "PENDING_VERIFICATION";
+            locale: string;
+            /** Format: date-time */
+            lastLoginAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            deletedAt: string | null;
+        };
+        PageMetaResponse: {
+            /** @example 1 */
+            page: number;
+            /** @example 20 */
+            limit: number;
+            /**
+             * @description Total de elementos que cumplen el filtro
+             * @example 137
+             */
+            total: number;
+            /** @example 7 */
+            totalPages: number;
+            /** @example true */
+            hasNext: boolean;
+            /** @example false */
+            hasPrevious: boolean;
+        };
+        UserPageResponse: {
+            data: components["schemas"]["UserResponse"][];
+            meta: components["schemas"]["PageMetaResponse"];
+        };
+        UserEnvelopeResponse: {
+            data: components["schemas"]["UserResponse"];
+        };
         CreateUserDto: Record<string, never>;
         UpdateUserDto: Record<string, never>;
         AssignRolesDto: Record<string, never>;
+        EmptyEnvelopeResponse: {
+            /** @example null */
+            data: Record<string, never> | null;
+        };
+        RoleResponse: {
+            permissions: string[];
+            id: string;
+            tenantId: string | null;
+            code: string;
+            name: string;
+            description: string | null;
+            isSystem: boolean;
+            userCount: number;
+        };
+        RoleListEnvelopeResponse: {
+            data: components["schemas"]["RoleResponse"][];
+        };
+        PermissionResponse: {
+            code: string;
+            resource: string;
+            action: string;
+            description: string;
+        };
+        PermissionListEnvelopeResponse: {
+            data: components["schemas"]["PermissionResponse"][];
+        };
         CreateRoleDto: Record<string, never>;
+        RoleEnvelopeResponse: {
+            data: components["schemas"]["RoleResponse"];
+        };
         UpdateRoleDto: Record<string, never>;
         ForgotPasswordDto: {
             /**
@@ -2185,6 +2282,45 @@ export interface components {
              */
             reason?: string;
         };
+        ProductResponse: {
+            id: string;
+            sku: string;
+            barcode: string | null;
+            name: string;
+            description: string | null;
+            brand: string | null;
+            categoryId: string | null;
+            price: string;
+            /** @description Se omite, no se pone a `null`, cuando quien consulta no tiene el permiso de costes. */
+            costPrice?: string;
+            stockValue?: string;
+            marginPercentage?: number | null;
+            currency: string;
+            taxRate: string;
+            unit: string;
+            stockOnHand: string;
+            reorderPoint: string;
+            reorderQuantity: string;
+            stockStatus: string;
+            isRetail: boolean;
+            isInternal: boolean;
+            isActive: boolean;
+            trackStock: boolean;
+            tracksBatches: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            deletedAt: string | null;
+        };
+        ProductPageResponse: {
+            data: components["schemas"]["ProductResponse"][];
+            meta: components["schemas"]["PageMetaResponse"];
+        };
+        ProductEnvelopeResponse: {
+            data: components["schemas"]["ProductResponse"];
+        };
         CreateProductDto: {
             /** @example SH-ARG-500 */
             sku: string;
@@ -2256,6 +2392,103 @@ export interface components {
             tracksBatches: boolean;
             isActive?: boolean;
         };
+        ProductRefResponse: {
+            sku: string;
+            name: string;
+        };
+        KardexEntryResponse: {
+            product: components["schemas"]["ProductRefResponse"] | null;
+            batch: {
+                batchNumber: string;
+            };
+            id: string;
+            productId: string;
+            type: string;
+            quantityDelta: string;
+            balanceAfter: string;
+            unitCost: string | null;
+            currency: string | null;
+            sourceType: string | null;
+            sourceId: string | null;
+            reason: string | null;
+            notes: string | null;
+            batchId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        KardexPageResponse: {
+            data: components["schemas"]["KardexEntryResponse"][];
+            meta: components["schemas"]["PageMetaResponse"];
+        };
+        BatchListingResponse: {
+            product: components["schemas"]["ProductRefResponse"] | null;
+            id: string;
+            productId: string;
+            batchNumber: string;
+            /** Format: date-time */
+            expiresAt: string | null;
+            /** Format: date-time */
+            receivedAt: string;
+            initialQuantity: string;
+            remainingQuantity: string;
+            unitCost: string;
+            currency: string;
+            supplierId: string | null;
+            notes: string | null;
+        };
+        BatchPageResponse: {
+            data: components["schemas"]["BatchListingResponse"][];
+            meta: components["schemas"]["PageMetaResponse"];
+        };
+        ReorderAlertResponse: {
+            id: string;
+            sku: string;
+            name: string;
+            stockOnHand: string;
+            reorderPoint: string;
+            missing: string;
+            suggestedOrder: string;
+            stockStatus: string;
+        };
+        ExpiringBatchResponse: {
+            daysLeft: number | null;
+            id: string;
+            productId: string;
+            batchNumber: string;
+            /** Format: date-time */
+            expiresAt: string | null;
+            /** Format: date-time */
+            receivedAt: string;
+            initialQuantity: string;
+            remainingQuantity: string;
+            unitCost: string;
+            currency: string;
+            supplierId: string | null;
+            notes: string | null;
+        };
+        BatchResponse: {
+            id: string;
+            productId: string;
+            batchNumber: string;
+            /** Format: date-time */
+            expiresAt: string | null;
+            /** Format: date-time */
+            receivedAt: string;
+            initialQuantity: string;
+            remainingQuantity: string;
+            unitCost: string;
+            currency: string;
+            supplierId: string | null;
+            notes: string | null;
+        };
+        StockAlertsResponse: {
+            reorder: components["schemas"]["ReorderAlertResponse"][];
+            expiring: components["schemas"]["ExpiringBatchResponse"][];
+            expired: components["schemas"]["BatchResponse"][];
+        };
+        StockAlertsEnvelopeResponse: {
+            data: components["schemas"]["StockAlertsResponse"];
+        };
         ReceiveStockDto: {
             /** Format: uuid */
             productId: string;
@@ -2270,6 +2503,26 @@ export interface components {
             /** Format: uuid */
             supplierId?: string;
             notes?: string;
+        };
+        ReceiveStockResponse: {
+            batch: components["schemas"]["BatchResponse"] | null;
+            id: string;
+            productId: string;
+            type: string;
+            quantityDelta: string;
+            balanceAfter: string;
+            unitCost: string | null;
+            currency: string | null;
+            sourceType: string | null;
+            sourceId: string | null;
+            reason: string | null;
+            notes: string | null;
+            batchId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        ReceiveStockEnvelopeResponse: {
+            data: components["schemas"]["ReceiveStockResponse"];
         };
         ConsumeStockDto: {
             /** Format: uuid */
@@ -2291,6 +2544,31 @@ export interface components {
              */
             allowExpired: boolean;
         };
+        InventoryMovementResponse: {
+            id: string;
+            productId: string;
+            type: string;
+            quantityDelta: string;
+            balanceAfter: string;
+            unitCost: string | null;
+            currency: string | null;
+            sourceType: string | null;
+            sourceId: string | null;
+            reason: string | null;
+            notes: string | null;
+            batchId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        ConsumeStockResponse: {
+            movements: components["schemas"]["InventoryMovementResponse"][];
+            balanceAfter: string;
+            totalCost: string;
+            currency: string;
+        };
+        ConsumeStockEnvelopeResponse: {
+            data: components["schemas"]["ConsumeStockResponse"];
+        };
         AdjustStockDto: {
             /** Format: uuid */
             productId: string;
@@ -2309,6 +2587,87 @@ export interface components {
              */
             batchId?: string;
             notes?: string;
+        };
+        AdjustStockResponse: {
+            movements: components["schemas"]["InventoryMovementResponse"][];
+            id: string;
+            productId: string;
+            type: string;
+            quantityDelta: string;
+            balanceAfter: string;
+            unitCost: string | null;
+            currency: string | null;
+            sourceType: string | null;
+            sourceId: string | null;
+            reason: string | null;
+            notes: string | null;
+            batchId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        AdjustStockEnvelopeResponse: {
+            data: components["schemas"]["AdjustStockResponse"];
+        };
+        InvoiceLineResponse: {
+            id: string;
+            kind: string;
+            productId: string | null;
+            serviceId: string | null;
+            stylistId: string | null;
+            description: string;
+            quantity: string;
+            unitPrice: string;
+            discountAmount: string;
+            taxRate: string;
+            taxAmount: string;
+            lineSubtotal: string;
+            lineTotal: string;
+            commissionAmount: string;
+        };
+        PaymentResponse: {
+            id: string;
+            method: string;
+            status: string;
+            amount: string;
+            refundedAmount: string;
+            currency: string;
+            reference: string | null;
+            /** Format: date-time */
+            receivedAt: string;
+        };
+        InvoiceResponse: {
+            lines: components["schemas"]["InvoiceLineResponse"][];
+            payments?: components["schemas"]["PaymentResponse"][];
+            id: string;
+            number: string;
+            status: string;
+            clientId: string | null;
+            appointmentId: string | null;
+            /** Format: date-time */
+            issuedAt: string | null;
+            /** Format: date-time */
+            dueAt: string | null;
+            /** Format: date-time */
+            paidAt: string | null;
+            /** Format: date-time */
+            voidedAt: string | null;
+            voidReason: string | null;
+            subtotal: string;
+            discountTotal: string;
+            taxTotal: string;
+            total: string;
+            paidTotal: string;
+            balanceDue: string;
+            commissionTotal: string;
+            currency: string;
+            notes: string | null;
+        };
+        InvoicePageResponse: {
+            data: components["schemas"]["InvoiceResponse"][];
+            meta: components["schemas"]["PageMetaResponse"];
+        };
+        InvoiceEnvelopeResponse: {
+            data: components["schemas"]["InvoiceResponse"];
         };
         SaleLineDto: {
             /** @enum {string} */
@@ -2341,6 +2700,43 @@ export interface components {
             /** @example Cobrada por error a la clienta equivocada */
             reason: string;
         };
+        CashMovementResponse: {
+            id: string;
+            type: string;
+            amount: string;
+            currency: string;
+            concept: string;
+            reference: string | null;
+            notes: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        CashSessionResponse: {
+            movements: components["schemas"]["CashMovementResponse"][];
+            id: string;
+            status: string;
+            /** Format: date-time */
+            openedAt: string;
+            openedById: string;
+            /** Format: date-time */
+            closedAt: string | null;
+            closedById: string | null;
+            openingFloat: string;
+            cashSales: string;
+            netMovements: string;
+            expectedAmount: string;
+            countedAmount: string | null;
+            difference: string | null;
+            currency: string;
+            notes: string | null;
+        };
+        CashSessionEnvelopeResponse: {
+            data: components["schemas"]["CashSessionResponse"] | null;
+        };
+        CashSessionPageResponse: {
+            data: components["schemas"]["CashSessionResponse"][];
+            meta: components["schemas"]["PageMetaResponse"];
+        };
         OpenCashDto: {
             /**
              * @description Fondo con el que se abre el cajón
@@ -2361,6 +2757,21 @@ export interface components {
             concept: string;
             reference?: string;
             notes?: string;
+        };
+        RecordCashMovementResponse: {
+            session: components["schemas"]["CashSessionResponse"];
+            id: string;
+            type: string;
+            amount: string;
+            currency: string;
+            concept: string;
+            reference: string | null;
+            notes: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        RecordCashMovementEnvelopeResponse: {
+            data: components["schemas"]["RecordCashMovementResponse"];
         };
         CloseCashDto: {
             /**
@@ -2393,23 +2804,6 @@ export interface components {
             /** Format: date-time */
             deletedAt: string | null;
         };
-        PageMetaResponse: {
-            /** @example 1 */
-            page: number;
-            /** @example 20 */
-            limit: number;
-            /**
-             * @description Total de elementos que cumplen el filtro
-             * @example 137
-             */
-            total: number;
-            /** @example 7 */
-            totalPages: number;
-            /** @example true */
-            hasNext: boolean;
-            /** @example false */
-            hasPrevious: boolean;
-        };
         SupplierPageResponse: {
             data: components["schemas"]["SupplierResponse"][];
             meta: components["schemas"]["PageMetaResponse"];
@@ -2441,10 +2835,6 @@ export interface components {
             notes?: string;
             /** @enum {string} */
             status?: "ACTIVE" | "INACTIVE";
-        };
-        EmptyEnvelopeResponse: {
-            /** @example null */
-            data: Record<string, never> | null;
         };
         PurchaseProductResponse: {
             id: string;
@@ -2608,7 +2998,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    Users_all: {
+    users_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -2621,7 +3011,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UserPageResponse"];
+                };
             };
             /** @description Token ausente, inválido o caducado */
             401: {
@@ -2639,7 +3031,7 @@ export interface operations {
             };
         };
     };
-    Users_create: {
+    users_create: {
         parameters: {
             query?: never;
             header?: never;
@@ -2656,7 +3048,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UserEnvelopeResponse"];
+                };
             };
             /** @description Token ausente, inválido o caducado */
             401: {
@@ -2674,7 +3068,7 @@ export interface operations {
             };
         };
     };
-    Users_detail: {
+    users_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2689,7 +3083,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UserEnvelopeResponse"];
+                };
             };
             /** @description Token ausente, inválido o caducado */
             401: {
@@ -2707,7 +3103,7 @@ export interface operations {
             };
         };
     };
-    Users_remove: {
+    users_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -2722,7 +3118,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["EmptyEnvelopeResponse"];
+                };
             };
             /** @description Token ausente, inválido o caducado */
             401: {
@@ -2740,7 +3138,7 @@ export interface operations {
             };
         };
     };
-    Users_update: {
+    users_update: {
         parameters: {
             query?: never;
             header?: never;
@@ -2759,7 +3157,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UserEnvelopeResponse"];
+                };
             };
             /** @description Token ausente, inválido o caducado */
             401: {
@@ -2777,7 +3177,7 @@ export interface operations {
             };
         };
     };
-    Users_roles: {
+    users_assignRoles: {
         parameters: {
             query?: never;
             header?: never;
@@ -2796,7 +3196,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UserEnvelopeResponse"];
+                };
             };
             /** @description Token ausente, inválido o caducado */
             401: {
@@ -2814,7 +3216,7 @@ export interface operations {
             };
         };
     };
-    Users_restore: {
+    users_restore: {
         parameters: {
             query?: never;
             header?: never;
@@ -2829,7 +3231,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UserEnvelopeResponse"];
+                };
             };
             /** @description Token ausente, inválido o caducado */
             401: {
@@ -2847,7 +3251,7 @@ export interface operations {
             };
         };
     };
-    Roles_all: {
+    roles_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -2861,7 +3265,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["RoleListEnvelopeResponse"];
                 };
             };
             /** @description Token ausente, inválido o caducado */
@@ -2880,7 +3284,7 @@ export interface operations {
             };
         };
     };
-    Roles_create: {
+    roles_create: {
         parameters: {
             query?: never;
             header?: never;
@@ -2898,7 +3302,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["RoleEnvelopeResponse"];
                 };
             };
             /** @description Token ausente, inválido o caducado */
@@ -2917,7 +3321,7 @@ export interface operations {
             };
         };
     };
-    Roles_permissions: {
+    roles_permissions: {
         parameters: {
             query?: never;
             header?: never;
@@ -2930,7 +3334,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PermissionListEnvelopeResponse"];
+                };
             };
             /** @description Token ausente, inválido o caducado */
             401: {
@@ -2948,7 +3354,7 @@ export interface operations {
             };
         };
     };
-    Roles_remove: {
+    roles_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -2963,7 +3369,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["EmptyEnvelopeResponse"];
+                };
             };
             /** @description Token ausente, inválido o caducado */
             401: {
@@ -2981,7 +3389,7 @@ export interface operations {
             };
         };
     };
-    Roles_update: {
+    roles_update: {
         parameters: {
             query?: never;
             header?: never;
@@ -3001,7 +3409,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["RoleEnvelopeResponse"];
                 };
             };
             /** @description Token ausente, inválido o caducado */
@@ -5200,7 +5608,7 @@ export interface operations {
             };
         };
     };
-    Products_list: {
+    products_list: {
         parameters: {
             query?: {
                 /** @description Busca en nombre, SKU, código de barras y marca */
@@ -5217,6 +5625,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductPageResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5233,7 +5649,7 @@ export interface operations {
             };
         };
     };
-    Products_create: {
+    products_create: {
         parameters: {
             query?: never;
             header?: never;
@@ -5246,6 +5662,14 @@ export interface operations {
             };
         };
         responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5262,7 +5686,7 @@ export interface operations {
             };
         };
     };
-    Products_detail: {
+    products_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5273,6 +5697,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5289,7 +5721,7 @@ export interface operations {
             };
         };
     };
-    Products_remove: {
+    products_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -5300,6 +5732,12 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5316,7 +5754,7 @@ export interface operations {
             };
         };
     };
-    Products_update: {
+    products_update: {
         parameters: {
             query?: never;
             header?: never;
@@ -5331,6 +5769,14 @@ export interface operations {
             };
         };
         responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5347,7 +5793,7 @@ export interface operations {
             };
         };
     };
-    Products_restore: {
+    products_restore: {
         parameters: {
             query?: never;
             header?: never;
@@ -5358,6 +5804,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5374,7 +5828,7 @@ export interface operations {
             };
         };
     };
-    Inventory_kardex: {
+    inventory_kardex: {
         parameters: {
             query?: {
                 productId?: string;
@@ -5391,6 +5845,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KardexPageResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5407,7 +5869,7 @@ export interface operations {
             };
         };
     };
-    Inventory_batches: {
+    inventory_batches: {
         parameters: {
             query?: {
                 productId?: string;
@@ -5423,6 +5885,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchPageResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5439,7 +5909,7 @@ export interface operations {
             };
         };
     };
-    Inventory_alerts: {
+    inventory_alerts: {
         parameters: {
             query?: {
                 /** @description Ventana de caducidad, en días */
@@ -5451,12 +5921,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Reposición pendiente y lotes próximos a caducar */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["StockAlertsEnvelopeResponse"];
+                };
             };
             /** @description Token ausente, inválido o caducado */
             401: {
@@ -5474,7 +5945,7 @@ export interface operations {
             };
         };
     };
-    Inventory_receive: {
+    inventory_receive: {
         parameters: {
             query?: never;
             header?: never;
@@ -5487,6 +5958,14 @@ export interface operations {
             };
         };
         responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiveStockEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5503,7 +5982,7 @@ export interface operations {
             };
         };
     };
-    Inventory_consume: {
+    inventory_consume: {
         parameters: {
             query?: never;
             header?: never;
@@ -5516,6 +5995,14 @@ export interface operations {
             };
         };
         responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumeStockEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5532,7 +6019,7 @@ export interface operations {
             };
         };
     };
-    Inventory_adjust: {
+    inventory_adjust: {
         parameters: {
             query?: never;
             header?: never;
@@ -5545,6 +6032,14 @@ export interface operations {
             };
         };
         responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdjustStockEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5561,7 +6056,7 @@ export interface operations {
             };
         };
     };
-    Sales_list: {
+    sales_list: {
         parameters: {
             query?: {
                 search?: string;
@@ -5579,6 +6074,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoicePageResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5595,7 +6098,7 @@ export interface operations {
             };
         };
     };
-    Sales_create: {
+    sales_create: {
         parameters: {
             query?: never;
             header?: never;
@@ -5608,6 +6111,14 @@ export interface operations {
             };
         };
         responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5624,7 +6135,7 @@ export interface operations {
             };
         };
     };
-    Sales_detail: {
+    sales_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5635,6 +6146,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5651,7 +6170,7 @@ export interface operations {
             };
         };
     };
-    Sales_void: {
+    sales_void: {
         parameters: {
             query?: never;
             header?: never;
@@ -5666,6 +6185,14 @@ export interface operations {
             };
         };
         responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5682,7 +6209,7 @@ export interface operations {
             };
         };
     };
-    Cash_current: {
+    cash_current: {
         parameters: {
             query?: never;
             header?: never;
@@ -5691,6 +6218,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CashSessionEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5707,7 +6242,7 @@ export interface operations {
             };
         };
     };
-    Cash_history: {
+    cash_history: {
         parameters: {
             query?: {
                 page?: number;
@@ -5719,6 +6254,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CashSessionPageResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5735,7 +6278,7 @@ export interface operations {
             };
         };
     };
-    Cash_open: {
+    cash_open: {
         parameters: {
             query?: never;
             header?: never;
@@ -5748,6 +6291,14 @@ export interface operations {
             };
         };
         responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CashSessionEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5764,7 +6315,7 @@ export interface operations {
             };
         };
     };
-    Cash_movement: {
+    cash_movement: {
         parameters: {
             query?: never;
             header?: never;
@@ -5777,6 +6328,14 @@ export interface operations {
             };
         };
         responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordCashMovementEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {
@@ -5793,7 +6352,7 @@ export interface operations {
             };
         };
     };
-    Cash_close: {
+    cash_close: {
         parameters: {
             query?: never;
             header?: never;
@@ -5806,6 +6365,14 @@ export interface operations {
             };
         };
         responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CashSessionEnvelopeResponse"];
+                };
+            };
             /** @description Token ausente, inválido o caducado */
             401: {
                 headers: {

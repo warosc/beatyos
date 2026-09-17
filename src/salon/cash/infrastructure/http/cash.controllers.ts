@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsEnum,
@@ -26,8 +26,14 @@ import {
   OpenCashSessionUseCase,
   RecordCashMovementUseCase,
   SearchCashSessionsUseCase,
-  type CashSessionView,
 } from '../../application/cash.use-cases';
+import {
+  CashSessionEnvelopeResponse,
+  CashSessionPageResponse,
+  RecordCashMovementEnvelopeResponse,
+  toCashMovementResponse,
+  toCashSessionResponse,
+} from './cash.response';
 
 /**
  * Adaptador HTTP de caja.
@@ -112,25 +118,33 @@ export class CashController {
 
   @Get('current')
   @RequirePermissions(PERMISSIONS.cash.read)
-  @ApiOperation({ summary: 'Caja abierta con lo esperado en el cajón. `null` si está cerrada' })
+  @ApiOperation({
+    operationId: 'cash_current',
+    summary: 'Caja abierta con lo esperado en el cajón. `null` si está cerrada',
+  })
+  @ApiOkResponse({ type: CashSessionEnvelopeResponse })
   async current() {
     const view = await this.currentSession.execute();
-    return view ? presentSession(view) : null;
+    return view ? toCashSessionResponse(view) : null;
   }
 
   @Get('history')
   @RequirePermissions(PERMISSIONS.cash.read)
+  @ApiOperation({ operationId: 'cash_history', summary: 'Historial de cajas cerradas' })
+  @ApiOkResponse({ type: CashSessionPageResponse })
   async history(@Query() query: CashHistoryQueryDto) {
     const page = await this.searchSessions.execute({
       filter: {},
       page: { page: query.page ?? 1, limit: query.limit ?? 50 },
     });
 
-    return { data: page.data.map(presentSession), meta: page.meta };
+    return { data: page.data.map(toCashSessionResponse), meta: page.meta };
   }
 
   @Post('open')
   @RequirePermissions(PERMISSIONS.cash.open)
+  @ApiOperation({ operationId: 'cash_open', summary: 'Abre la caja del día' })
+  @ApiCreatedResponse({ type: CashSessionEnvelopeResponse })
   async open(@Body() dto: OpenCashDto, @CurrentUser() user: AccessTokenClaims) {
     const view = await this.openSession.execute({
       tenantId: requireTenant(user),
@@ -140,12 +154,16 @@ export class CashController {
       actorId: user.sub,
     });
 
-    return presentSession(view);
+    return toCashSessionResponse(view);
   }
 
   @Post('movements')
   @RequirePermissions(PERMISSIONS.cash.movement)
-  @ApiOperation({ summary: 'Anota una entrada o salida manual de efectivo' })
+  @ApiOperation({
+    operationId: 'cash_movement',
+    summary: 'Anota una entrada o salida manual de efectivo',
+  })
+  @ApiCreatedResponse({ type: RecordCashMovementEnvelopeResponse })
   async movement(@Body() dto: CashMovementDto, @CurrentUser() user: AccessTokenClaims) {
     const { movement, view } = await this.recordMovement.execute({
       type: dto.type,
@@ -159,12 +177,16 @@ export class CashController {
     // Se devuelve el movimiento **y** la caja: quien anota una salida quiere ver de
     // inmediato cuánto queda, y pedirlo en una segunda petición deja una ventana en la que
     // la pantalla muestra una cifra que ya no es cierta.
-    return { ...presentMovement(movement), session: presentSession(view) };
+    return { ...toCashMovementResponse(movement), session: toCashSessionResponse(view) };
   }
 
   @Post('close')
   @RequirePermissions(PERMISSIONS.cash.close)
-  @ApiOperation({ summary: 'Arquea y cierra. No rechaza el descuadre: lo registra' })
+  @ApiOperation({
+    operationId: 'cash_close',
+    summary: 'Arquea y cierra. No rechaza el descuadre: lo registra',
+  })
+  @ApiCreatedResponse({ type: CashSessionEnvelopeResponse })
   async close(@Body() dto: CloseCashDto, @CurrentUser() user: AccessTokenClaims) {
     const view = await this.closeSession.execute({
       countedAmount: dto.countedAmount.toFixed(2),
@@ -172,59 +194,11 @@ export class CashController {
       actorId: user.sub,
     });
 
-    return presentSession(view);
+    return toCashSessionResponse(view);
   }
 }
 
 // ---------------------------------------------------------------------------
-
-/**
- * Sesión de caja aplanada.
- *
- * `cashSales` y `expectedAmount` cuelgan de la sesión aunque por dentro no formen parte del
- * agregado: los cobros pertenecen a las facturas y lo esperado es un cálculo. Es la forma
- * que `apps/web` ya consumía, y aquí es donde toca acomodarla.
- */
-const presentSession = (view: CashSessionView) => {
-  const { session } = view;
-
-  return {
-    id: session.id,
-    status: session.status,
-    openedAt: session.openedAt,
-    openedById: session.openedById,
-    closedAt: session.closedAt,
-    closedById: session.closedById,
-    openingFloat: session.openingFloat.toDecimalString(),
-    cashSales: view.cashSales.toDecimalString(),
-    netMovements: session.netMovements.toDecimalString(),
-    expectedAmount: view.expectedAmount.toDecimalString(),
-    countedAmount: session.countedAmount?.toDecimalString() ?? null,
-    difference: session.difference?.toDecimalString() ?? null,
-    currency: session.currency,
-    notes: session.notes,
-    movements: session.movements.map(presentMovement),
-  };
-};
-
-const presentMovement = (movement: {
-  id: string;
-  type: string;
-  amount: { toDecimalString(): string; currency: string };
-  concept: string;
-  reference: string | null;
-  notes: string | null;
-  occurredAt: Date;
-}) => ({
-  id: movement.id,
-  type: movement.type,
-  amount: movement.amount.toDecimalString(),
-  currency: movement.amount.currency,
-  concept: movement.concept,
-  reference: movement.reference,
-  notes: movement.notes,
-  occurredAt: movement.occurredAt,
-});
 
 const requireTenant = (user: AccessTokenClaims): string => {
   if (!user.tenantId) {

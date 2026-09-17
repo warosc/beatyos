@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+import { EmptyEnvelopeResponse } from '../../../../shared/infrastructure/http/dto/response-envelope.dto';
 import { PageMetaResponse } from '../../../../shared/infrastructure/http/dto/pagination.dto';
 import type { InventoryMovement } from '../../../inventory/domain/inventory-movement.entity';
 import type { Product } from '../../../inventory/domain/product.entity';
@@ -184,9 +185,7 @@ export class PurchaseOrderPageResponse {
   @ApiProperty({ type: PageMetaResponse }) meta!: PageMetaResponse;
 }
 
-export class EmptyEnvelopeResponse {
-  @ApiProperty({ type: () => Object, nullable: true, example: null }) data!: unknown;
-}
+export { EmptyEnvelopeResponse };
 
 const toLineResponse = (
   order: PurchaseOrder,

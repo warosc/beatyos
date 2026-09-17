@@ -11,7 +11,13 @@ import {
   Query,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 
 import { PERMISSIONS } from '../../../../core/permissions/domain/permission-catalog';
 import type { AccessTokenClaims } from '../../../../shared/application/ports';
@@ -33,13 +39,8 @@ import {
   SearchBatchesUseCase,
   SearchProductsUseCase,
   UpdateProductUseCase,
-  type BatchListing,
-  type KardexEntry,
-  type StockAlerts,
 } from '../../application/inventory.use-cases';
-import type { Batch } from '../../domain/batch.entity';
-import type { InventoryMovement } from '../../domain/inventory-movement.entity';
-import type { Product, StockStatus } from '../../domain/product.entity';
+import type { StockStatus } from '../../domain/product.entity';
 import {
   AdjustStockDto,
   BatchQueryDto,
@@ -52,6 +53,22 @@ import {
   UpdateProductDto,
   type StockQueryValue,
 } from './inventory.dto';
+import {
+  AdjustStockEnvelopeResponse,
+  BatchPageResponse,
+  ConsumeStockEnvelopeResponse,
+  KardexPageResponse,
+  ProductEnvelopeResponse,
+  ProductPageResponse,
+  ReceiveStockEnvelopeResponse,
+  StockAlertsEnvelopeResponse,
+  toBatchListingResponse,
+  toBatchResponse,
+  toKardexEntryResponse,
+  toMovementResponse,
+  toProductResponse,
+  toStockAlertsResponse,
+} from './inventory.response';
 
 /**
  * Adaptador HTTP del inventario.
@@ -96,7 +113,11 @@ export class ProductsController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.products.read)
-  @ApiOperation({ summary: 'Lista el catálogo con su semáforo de existencias' })
+  @ApiOperation({
+    operationId: 'products_list',
+    summary: 'Lista el catálogo con su semáforo de existencias',
+  })
+  @ApiOkResponse({ type: ProductPageResponse })
   async list(@Query() query: ProductQueryDto, @CurrentUser() user: AccessTokenClaims) {
     const page = await this.searchProducts.execute({
       filter: {
@@ -107,18 +128,22 @@ export class ProductsController {
       page: { page: query.page ?? 1, limit: query.limit ?? DEFAULT_LIMIT },
     });
 
-    return presentPage(page, (product) => presentProduct(product, canSeeCosts(user)));
+    return presentPage(page, (product) => toProductResponse(product, canSeeCosts(user)));
   }
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.products.read)
+  @ApiOperation({ operationId: 'products_get', summary: 'Consultar un producto' })
+  @ApiOkResponse({ type: ProductEnvelopeResponse })
   async detail(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AccessTokenClaims) {
     const product = await this.getProduct.execute({ productId: id });
-    return presentProduct(product, canSeeCosts(user));
+    return toProductResponse(product, canSeeCosts(user));
   }
 
   @Post()
   @RequirePermissions(PERMISSIONS.products.create)
+  @ApiOperation({ operationId: 'products_create', summary: 'Crear un producto' })
+  @ApiCreatedResponse({ type: ProductEnvelopeResponse })
   async create(@Body() dto: CreateProductDto, @CurrentUser() user: AccessTokenClaims) {
     const product = await this.createProduct.execute({
       tenantId: requireTenant(user),
@@ -144,11 +169,13 @@ export class ProductsController {
       actorId: user.sub,
     });
 
-    return presentProduct(product, canSeeCosts(user));
+    return toProductResponse(product, canSeeCosts(user));
   }
 
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.products.update)
+  @ApiOperation({ operationId: 'products_update', summary: 'Actualizar un producto' })
+  @ApiOkResponse({ type: ProductEnvelopeResponse })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProductDto,
@@ -184,22 +211,28 @@ export class ProductsController {
       actorId: user.sub,
     });
 
-    return presentProduct(product, canSeeCosts(user));
+    return toProductResponse(product, canSeeCosts(user));
   }
 
   @Delete(':id')
   @HttpCode(204)
   @RequirePermissions(PERMISSIONS.products.delete)
-  @ApiOperation({ summary: 'Da de baja un producto. Exige que no queden existencias' })
+  @ApiOperation({
+    operationId: 'products_delete',
+    summary: 'Da de baja un producto. Exige que no queden existencias',
+  })
+  @ApiNoContentResponse()
   async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AccessTokenClaims) {
     await this.deleteProduct.execute({ productId: id, actorId: user.sub });
   }
 
   @Post(':id/restore')
   @RequirePermissions(PERMISSIONS.products.restore)
+  @ApiOperation({ operationId: 'products_restore', summary: 'Restaurar un producto dado de baja' })
+  @ApiCreatedResponse({ type: ProductEnvelopeResponse })
   async restore(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AccessTokenClaims) {
     const product = await this.restoreProduct.execute({ productId: id, actorId: user.sub });
-    return presentProduct(product, canSeeCosts(user));
+    return toProductResponse(product, canSeeCosts(user));
   }
 }
 
@@ -219,7 +252,11 @@ export class InventoryController {
 
   @Get('kardex')
   @RequirePermissions(PERMISSIONS.inventory.read)
-  @ApiOperation({ summary: 'Libro de movimientos. Es la fuente de verdad del inventario' })
+  @ApiOperation({
+    operationId: 'inventory_kardex',
+    summary: 'Libro de movimientos. Es la fuente de verdad del inventario',
+  })
+  @ApiOkResponse({ type: KardexPageResponse })
   async kardex(@Query() query: KardexQueryDto) {
     const page = await this.getKardex.execute({
       filter: {
@@ -232,11 +269,13 @@ export class InventoryController {
       page: { page: query.page ?? 1, limit: query.limit ?? DEFAULT_LIMIT },
     });
 
-    return presentPage(page, presentKardexEntry);
+    return presentPage(page, toKardexEntryResponse);
   }
 
   @Get('batches')
   @RequirePermissions(PERMISSIONS.inventory.read)
+  @ApiOperation({ operationId: 'inventory_batches', summary: 'Lista los lotes por producto' })
+  @ApiOkResponse({ type: BatchPageResponse })
   async batches(@Query() query: BatchQueryDto) {
     const page = await this.searchBatches.execute({
       filter: {
@@ -247,20 +286,27 @@ export class InventoryController {
       page: { page: query.page ?? 1, limit: query.limit ?? DEFAULT_LIMIT },
     });
 
-    return presentPage(page, presentBatchListing);
+    return presentPage(page, toBatchListingResponse);
   }
 
   @Get('alerts')
   @RequirePermissions(PERMISSIONS.inventory.read)
-  @ApiOperation({ summary: 'Qué hay que pedir y qué está a punto de caducar' })
-  @ApiOkResponse({ description: 'Reposición pendiente y lotes próximos a caducar' })
+  @ApiOperation({
+    operationId: 'inventory_alerts',
+    summary: 'Qué hay que pedir y qué está a punto de caducar',
+  })
+  @ApiOkResponse({ type: StockAlertsEnvelopeResponse })
   async alerts(@Query() query: StockAlertsQueryDto) {
-    return presentAlerts(await this.stockAlerts.execute({ withinDays: query.withinDays }));
+    return toStockAlertsResponse(await this.stockAlerts.execute({ withinDays: query.withinDays }));
   }
 
   @Post('receive')
   @RequirePermissions(PERMISSIONS.inventory.receive)
-  @ApiOperation({ summary: 'Registra una entrada de mercancía, con lote si el producto lo lleva' })
+  @ApiOperation({
+    operationId: 'inventory_receive',
+    summary: 'Registra una entrada de mercancía, con lote si el producto lo lleva',
+  })
+  @ApiCreatedResponse({ type: ReceiveStockEnvelopeResponse })
   async receive(@Body() dto: ReceiveStockDto, @CurrentUser() user: AccessTokenClaims) {
     const result = await this.receiveStock.execute({
       tenantId: requireTenant(user),
@@ -275,8 +321,8 @@ export class InventoryController {
     });
 
     return {
-      ...presentMovement(result.movement),
-      batch: result.batch ? presentBatch(result.batch) : null,
+      ...toMovementResponse(result.movement),
+      batch: result.batch ? toBatchResponse(result.batch) : null,
       balanceAfter: result.balanceAfter.toFixed(3),
     };
   }
@@ -284,8 +330,10 @@ export class InventoryController {
   @Post('consume')
   @RequirePermissions(PERMISSIONS.inventory.adjust)
   @ApiOperation({
+    operationId: 'inventory_consume',
     summary: 'Descuenta existencias repartiendo por FEFO entre los lotes disponibles',
   })
+  @ApiCreatedResponse({ type: ConsumeStockEnvelopeResponse })
   async consume(@Body() dto: ConsumeStockDto, @CurrentUser() user: AccessTokenClaims) {
     const result = await this.consumeStock.execute({
       tenantId: requireTenant(user),
@@ -300,7 +348,7 @@ export class InventoryController {
     });
 
     return {
-      movements: result.movements.map(presentMovement),
+      movements: result.movements.map(toMovementResponse),
       balanceAfter: result.balanceAfter.toFixed(3),
       totalCost: result.totalCost.toDecimalString(),
       currency: result.totalCost.currency,
@@ -309,7 +357,11 @@ export class InventoryController {
 
   @Post('adjust')
   @RequirePermissions(PERMISSIONS.inventory.adjust)
-  @ApiOperation({ summary: 'Ajusta existencias por recuento o merma' })
+  @ApiOperation({
+    operationId: 'inventory_adjust',
+    summary: 'Ajusta existencias por recuento o merma',
+  })
+  @ApiCreatedResponse({ type: AdjustStockEnvelopeResponse })
   async adjust(@Body() dto: AdjustStockDto, @CurrentUser() user: AccessTokenClaims) {
     const result = await this.adjustStock.execute({
       tenantId: requireTenant(user),
@@ -326,121 +378,12 @@ export class InventoryController {
     // ajuste se repartió por FEFO entre varios lotes. Devolver de golpe una lista donde
     // antes había un objeto habría roto el frontend sin necesidad.
     return {
-      ...presentMovement(result.movements[0]),
-      movements: result.movements.map(presentMovement),
+      ...toMovementResponse(result.movements[0]),
+      movements: result.movements.map(toMovementResponse),
       balanceAfter: result.balanceAfter.toFixed(3),
     };
   }
 }
-
-// ===========================================================================
-// Presentadores
-// ===========================================================================
-
-/**
- * Producto tal y como lo espera `apps/web`.
- *
- * Las cantidades salen con tres decimales y los importes con dos, siempre como **cadena**:
- * un `numeric` de PostgreSQL no cabe exacto en un `number` de JavaScript, y serializarlo
- * como número sería tirar por la ventana la exactitud que se mantiene en toda la pila
- * (ADR-0010).
- *
- * `costPrice` se omite —no se pone a `null`— cuando quien consulta no tiene el permiso de
- * costes: un `null` afirma que no hay coste, y aquí lo cierto es que no se puede ver.
- */
-const presentProduct = (product: Product, includeCosts: boolean) => ({
-  id: product.id,
-  sku: product.sku,
-  barcode: product.barcode,
-  name: product.name,
-  description: product.description,
-  brand: product.brand,
-  categoryId: product.categoryId,
-  price: product.price.toDecimalString(),
-  ...(includeCosts
-    ? {
-        costPrice: product.costPrice.toDecimalString(),
-        stockValue: product.stockValue.toDecimalString(),
-        marginPercentage: product.marginPercentage(),
-      }
-    : {}),
-  currency: product.price.currency,
-  taxRate: product.taxRate.value.toFixed(2),
-  unit: product.unit,
-  stockOnHand: product.stockOnHand.toFixed(3),
-  reorderPoint: product.reorderPoint.toFixed(3),
-  reorderQuantity: product.reorderQuantity.toFixed(3),
-  stockStatus: product.stockStatus,
-  isRetail: product.isRetail,
-  isInternal: product.isInternal,
-  isActive: product.isActive,
-  trackStock: product.trackStock,
-  tracksBatches: product.tracksBatches,
-  createdAt: product.audit.createdAt,
-  updatedAt: product.audit.updatedAt,
-  deletedAt: product.audit.deletedAt,
-});
-
-const presentMovement = (movement: InventoryMovement) => ({
-  id: movement.id,
-  productId: movement.productId,
-  type: movement.type,
-  quantityDelta: movement.quantityDelta.toFixed(3),
-  balanceAfter: movement.balanceAfter.toFixed(3),
-  unitCost: movement.unitCost?.toDecimalString() ?? null,
-  currency: movement.unitCost?.currency ?? null,
-  sourceType: movement.sourceType,
-  sourceId: movement.sourceId,
-  reason: movement.reason,
-  notes: movement.notes,
-  batchId: movement.batchId,
-  occurredAt: movement.occurredAt,
-});
-
-const presentKardexEntry = (entry: KardexEntry) => ({
-  ...presentMovement(entry.movement),
-  // La tabla del kardex muestra el nombre del producto y el número de lote. Van anidados
-  // con la misma forma que tenían cuando esto era un `include` de Prisma.
-  product: entry.product ? { sku: entry.product.sku, name: entry.product.name } : null,
-  batch: entry.batch ? { batchNumber: entry.batch.batchNumber } : null,
-});
-
-const presentBatch = (batch: Batch) => ({
-  id: batch.id,
-  productId: batch.productId,
-  batchNumber: batch.batchNumber,
-  expiresAt: batch.expiresAt,
-  receivedAt: batch.receivedAt,
-  initialQuantity: batch.initialQuantity.toFixed(3),
-  remainingQuantity: batch.remainingQuantity.toFixed(3),
-  unitCost: batch.unitCost.toDecimalString(),
-  currency: batch.unitCost.currency,
-  supplierId: batch.supplierId,
-  notes: batch.notes,
-});
-
-const presentBatchListing = (listing: BatchListing) => ({
-  ...presentBatch(listing.batch),
-  product: listing.product ? { sku: listing.product.sku, name: listing.product.name } : null,
-});
-
-const presentAlerts = (alerts: StockAlerts) => ({
-  reorder: alerts.reorder.map((item) => ({
-    id: item.product.id,
-    sku: item.product.sku,
-    name: item.product.name,
-    stockOnHand: item.product.stockOnHand.toFixed(3),
-    reorderPoint: item.product.reorderPoint.toFixed(3),
-    missing: item.missing.toFixed(3),
-    suggestedOrder: item.suggestedOrder.toFixed(3),
-    stockStatus: item.product.stockStatus,
-  })),
-  expiring: alerts.expiring.map((item) => ({
-    ...presentBatch(item.batch),
-    daysLeft: item.daysLeft,
-  })),
-  expired: alerts.expired.map(presentBatch),
-});
 
 // ===========================================================================
 // Auxiliares

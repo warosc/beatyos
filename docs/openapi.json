@@ -3,11 +3,18 @@
   "paths": {
     "/api/v1/users": {
       "get": {
-        "operationId": "Users_all",
+        "operationId": "users_list",
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPageResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Token ausente, inválido o caducado"
@@ -21,12 +28,13 @@
             "bearer": []
           }
         ],
+        "summary": "Buscar usuarios del salón",
         "tags": [
-          "Users"
+          "Usuarios"
         ]
       },
       "post": {
-        "operationId": "Users_create",
+        "operationId": "users_create",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -40,7 +48,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelopeResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Token ausente, inválido o caducado"
@@ -54,14 +69,15 @@
             "bearer": []
           }
         ],
+        "summary": "Crear un usuario",
         "tags": [
-          "Users"
+          "Usuarios"
         ]
       }
     },
     "/api/v1/users/{id}": {
       "get": {
-        "operationId": "Users_detail",
+        "operationId": "users_get",
         "parameters": [
           {
             "name": "id",
@@ -74,7 +90,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelopeResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Token ausente, inválido o caducado"
@@ -88,12 +111,13 @@
             "bearer": []
           }
         ],
+        "summary": "Consultar un usuario",
         "tags": [
-          "Users"
+          "Usuarios"
         ]
       },
       "patch": {
-        "operationId": "Users_update",
+        "operationId": "users_update",
         "parameters": [
           {
             "name": "id",
@@ -116,7 +140,14 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelopeResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Token ausente, inválido o caducado"
@@ -130,12 +161,13 @@
             "bearer": []
           }
         ],
+        "summary": "Actualizar el perfil de un usuario",
         "tags": [
-          "Users"
+          "Usuarios"
         ]
       },
       "delete": {
-        "operationId": "Users_remove",
+        "operationId": "users_delete",
         "parameters": [
           {
             "name": "id",
@@ -148,7 +180,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmptyEnvelopeResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Token ausente, inválido o caducado"
@@ -162,14 +201,15 @@
             "bearer": []
           }
         ],
+        "summary": "Dar de baja a un usuario",
         "tags": [
-          "Users"
+          "Usuarios"
         ]
       }
     },
     "/api/v1/users/{id}/roles": {
       "put": {
-        "operationId": "Users_roles",
+        "operationId": "users_assignRoles",
         "parameters": [
           {
             "name": "id",
@@ -192,7 +232,14 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelopeResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Token ausente, inválido o caducado"
@@ -206,14 +253,15 @@
             "bearer": []
           }
         ],
+        "summary": "Reasignar los roles de un usuario",
         "tags": [
-          "Users"
+          "Usuarios"
         ]
       }
     },
     "/api/v1/users/{id}/restore": {
       "post": {
-        "operationId": "Users_restore",
+        "operationId": "users_restore",
         "parameters": [
           {
             "name": "id",
@@ -226,7 +274,14 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelopeResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Token ausente, inválido o caducado"
@@ -240,14 +295,15 @@
             "bearer": []
           }
         ],
+        "summary": "Restaurar un usuario dado de baja",
         "tags": [
-          "Users"
+          "Usuarios"
         ]
       }
     },
     "/api/v1/roles": {
       "get": {
-        "operationId": "Roles_all",
+        "operationId": "roles_list",
         "parameters": [],
         "responses": {
           "200": {
@@ -255,10 +311,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object"
-                  }
+                  "$ref": "#/components/schemas/RoleListEnvelopeResponse"
                 }
               }
             }
@@ -275,12 +328,13 @@
             "bearer": []
           }
         ],
+        "summary": "Listar los roles disponibles en el salón",
         "tags": [
           "Roles"
         ]
       },
       "post": {
-        "operationId": "Roles_create",
+        "operationId": "roles_create",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -298,7 +352,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/RoleEnvelopeResponse"
                 }
               }
             }
@@ -315,6 +369,7 @@
             "bearer": []
           }
         ],
+        "summary": "Crear un rol propio del salón",
         "tags": [
           "Roles"
         ]
@@ -322,11 +377,18 @@
     },
     "/api/v1/roles/permissions": {
       "get": {
-        "operationId": "Roles_permissions",
+        "operationId": "roles_permissions",
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionListEnvelopeResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Token ausente, inválido o caducado"
@@ -340,6 +402,7 @@
             "bearer": []
           }
         ],
+        "summary": "Catálogo fijo de permisos",
         "tags": [
           "Roles"
         ]
@@ -347,7 +410,7 @@
     },
     "/api/v1/roles/{id}": {
       "patch": {
-        "operationId": "Roles_update",
+        "operationId": "roles_update",
         "parameters": [
           {
             "name": "id",
@@ -374,7 +437,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/RoleEnvelopeResponse"
                 }
               }
             }
@@ -391,12 +454,13 @@
             "bearer": []
           }
         ],
+        "summary": "Actualizar un rol propio del salón",
         "tags": [
           "Roles"
         ]
       },
       "delete": {
-        "operationId": "Roles_remove",
+        "operationId": "roles_delete",
         "parameters": [
           {
             "name": "id",
@@ -409,7 +473,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmptyEnvelopeResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Token ausente, inválido o caducado"
@@ -423,6 +494,7 @@
             "bearer": []
           }
         ],
+        "summary": "Eliminar un rol propio del salón",
         "tags": [
           "Roles"
         ]
@@ -3537,7 +3609,7 @@
     },
     "/api/v1/products": {
       "get": {
-        "operationId": "Products_list",
+        "operationId": "products_list",
         "parameters": [
           {
             "name": "search",
@@ -3595,6 +3667,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductPageResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -3613,7 +3695,7 @@
         ]
       },
       "post": {
-        "operationId": "Products_create",
+        "operationId": "products_create",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -3626,6 +3708,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -3638,6 +3730,7 @@
             "bearer": []
           }
         ],
+        "summary": "Crear un producto",
         "tags": [
           "Productos"
         ]
@@ -3645,7 +3738,7 @@
     },
     "/api/v1/products/{id}": {
       "get": {
-        "operationId": "Products_detail",
+        "operationId": "products_get",
         "parameters": [
           {
             "name": "id",
@@ -3657,6 +3750,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -3669,12 +3772,13 @@
             "bearer": []
           }
         ],
+        "summary": "Consultar un producto",
         "tags": [
           "Productos"
         ]
       },
       "patch": {
-        "operationId": "Products_update",
+        "operationId": "products_update",
         "parameters": [
           {
             "name": "id",
@@ -3696,6 +3800,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -3708,12 +3822,13 @@
             "bearer": []
           }
         ],
+        "summary": "Actualizar un producto",
         "tags": [
           "Productos"
         ]
       },
       "delete": {
-        "operationId": "Products_remove",
+        "operationId": "products_delete",
         "parameters": [
           {
             "name": "id",
@@ -3725,6 +3840,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": ""
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -3745,7 +3863,7 @@
     },
     "/api/v1/products/{id}/restore": {
       "post": {
-        "operationId": "Products_restore",
+        "operationId": "products_restore",
         "parameters": [
           {
             "name": "id",
@@ -3757,6 +3875,16 @@
           }
         ],
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -3769,6 +3897,7 @@
             "bearer": []
           }
         ],
+        "summary": "Restaurar un producto dado de baja",
         "tags": [
           "Productos"
         ]
@@ -3776,7 +3905,7 @@
     },
     "/api/v1/inventory/kardex": {
       "get": {
-        "operationId": "Inventory_kardex",
+        "operationId": "inventory_kardex",
         "parameters": [
           {
             "name": "productId",
@@ -3852,6 +3981,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KardexPageResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -3872,7 +4011,7 @@
     },
     "/api/v1/inventory/batches": {
       "get": {
-        "operationId": "Inventory_batches",
+        "operationId": "inventory_batches",
         "parameters": [
           {
             "name": "productId",
@@ -3924,6 +4063,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchPageResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -3936,6 +4085,7 @@
             "bearer": []
           }
         ],
+        "summary": "Lista los lotes por producto",
         "tags": [
           "Inventario"
         ]
@@ -3943,7 +4093,7 @@
     },
     "/api/v1/inventory/alerts": {
       "get": {
-        "operationId": "Inventory_alerts",
+        "operationId": "inventory_alerts",
         "parameters": [
           {
             "name": "withinDays",
@@ -3960,7 +4110,14 @@
         ],
         "responses": {
           "200": {
-            "description": "Reposición pendiente y lotes próximos a caducar"
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockAlertsEnvelopeResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Token ausente, inválido o caducado"
@@ -3982,7 +4139,7 @@
     },
     "/api/v1/inventory/receive": {
       "post": {
-        "operationId": "Inventory_receive",
+        "operationId": "inventory_receive",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -3995,6 +4152,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiveStockEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -4015,7 +4182,7 @@
     },
     "/api/v1/inventory/consume": {
       "post": {
-        "operationId": "Inventory_consume",
+        "operationId": "inventory_consume",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -4028,6 +4195,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumeStockEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -4048,7 +4225,7 @@
     },
     "/api/v1/inventory/adjust": {
       "post": {
-        "operationId": "Inventory_adjust",
+        "operationId": "inventory_adjust",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -4061,6 +4238,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjustStockEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -4081,7 +4268,7 @@
     },
     "/api/v1/sales": {
       "get": {
-        "operationId": "Sales_list",
+        "operationId": "sales_list",
         "parameters": [
           {
             "name": "search",
@@ -4160,6 +4347,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicePageResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -4172,12 +4369,13 @@
             "bearer": []
           }
         ],
+        "summary": "Buscar facturas",
         "tags": [
           "Ventas y facturación"
         ]
       },
       "post": {
-        "operationId": "Sales_create",
+        "operationId": "sales_create",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -4190,6 +4388,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -4210,7 +4418,7 @@
     },
     "/api/v1/sales/{id}": {
       "get": {
-        "operationId": "Sales_detail",
+        "operationId": "sales_get",
         "parameters": [
           {
             "name": "id",
@@ -4222,6 +4430,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -4234,6 +4452,7 @@
             "bearer": []
           }
         ],
+        "summary": "Consultar una factura, con sus cobros",
         "tags": [
           "Ventas y facturación"
         ]
@@ -4241,7 +4460,7 @@
     },
     "/api/v1/sales/{id}/void": {
       "post": {
-        "operationId": "Sales_void",
+        "operationId": "sales_void",
         "parameters": [
           {
             "name": "id",
@@ -4263,6 +4482,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -4283,9 +4512,19 @@
     },
     "/api/v1/cash/current": {
       "get": {
-        "operationId": "Cash_current",
+        "operationId": "cash_current",
         "parameters": [],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashSessionEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -4306,7 +4545,7 @@
     },
     "/api/v1/cash/history": {
       "get": {
-        "operationId": "Cash_history",
+        "operationId": "cash_history",
         "parameters": [
           {
             "name": "page",
@@ -4329,6 +4568,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashSessionPageResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -4341,6 +4590,7 @@
             "bearer": []
           }
         ],
+        "summary": "Historial de cajas cerradas",
         "tags": [
           "Caja"
         ]
@@ -4348,7 +4598,7 @@
     },
     "/api/v1/cash/open": {
       "post": {
-        "operationId": "Cash_open",
+        "operationId": "cash_open",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -4361,6 +4611,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashSessionEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -4373,6 +4633,7 @@
             "bearer": []
           }
         ],
+        "summary": "Abre la caja del día",
         "tags": [
           "Caja"
         ]
@@ -4380,7 +4641,7 @@
     },
     "/api/v1/cash/movements": {
       "post": {
-        "operationId": "Cash_movement",
+        "operationId": "cash_movement",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -4393,6 +4654,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordCashMovementEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -4413,7 +4684,7 @@
     },
     "/api/v1/cash/close": {
       "post": {
-        "operationId": "Cash_close",
+        "operationId": "cash_close",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -4426,6 +4697,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashSessionEnvelopeResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Token ausente, inválido o caducado"
           },
@@ -5344,6 +5625,165 @@
       }
     },
     "schemas": {
+      "UserRoleResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code"
+        ]
+      },
+      "UserResponse": {
+        "type": "object",
+        "properties": {
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserRoleResponse"
+            }
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "SUSPENDED",
+              "PENDING_VERIFICATION"
+            ]
+          },
+          "locale": {
+            "type": "string"
+          },
+          "lastLoginAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "deletedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "roles",
+          "permissions",
+          "id",
+          "email",
+          "firstName",
+          "lastName",
+          "fullName",
+          "phone",
+          "status",
+          "locale",
+          "lastLoginAt",
+          "createdAt",
+          "deletedAt"
+        ]
+      },
+      "PageMetaResponse": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "number",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "example": 20
+          },
+          "total": {
+            "type": "number",
+            "example": 137,
+            "description": "Total de elementos que cumplen el filtro"
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 7
+          },
+          "hasNext": {
+            "type": "boolean",
+            "example": true
+          },
+          "hasPrevious": {
+            "type": "boolean",
+            "example": false
+          }
+        },
+        "required": [
+          "page",
+          "limit",
+          "total",
+          "totalPages",
+          "hasNext",
+          "hasPrevious"
+        ]
+      },
+      "UserPageResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserResponse"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMetaResponse"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ]
+      },
+      "UserEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UserResponse"
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
       "CreateUserDto": {
         "type": "object",
         "properties": {}
@@ -5356,9 +5796,128 @@
         "type": "object",
         "properties": {}
       },
+      "EmptyEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "nullable": true,
+            "example": null
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "RoleResponse": {
+        "type": "object",
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string",
+            "nullable": true
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "isSystem": {
+            "type": "boolean"
+          },
+          "userCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "permissions",
+          "id",
+          "tenantId",
+          "code",
+          "name",
+          "description",
+          "isSystem",
+          "userCount"
+        ]
+      },
+      "RoleListEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoleResponse"
+            }
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "PermissionResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "resource",
+          "action",
+          "description"
+        ]
+      },
+      "PermissionListEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionResponse"
+            }
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
       "CreateRoleDto": {
         "type": "object",
         "properties": {}
+      },
+      "RoleEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RoleResponse"
+          }
+        },
+        "required": [
+          "data"
+        ]
       },
       "UpdateRoleDto": {
         "type": "object",
@@ -7203,6 +7762,153 @@
           }
         }
       },
+      "ProductResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "barcode": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "brand": {
+            "type": "string",
+            "nullable": true
+          },
+          "categoryId": {
+            "type": "string",
+            "nullable": true
+          },
+          "price": {
+            "type": "string"
+          },
+          "costPrice": {
+            "type": "string",
+            "description": "Se omite, no se pone a `null`, cuando quien consulta no tiene el permiso de costes."
+          },
+          "stockValue": {
+            "type": "string"
+          },
+          "marginPercentage": {
+            "type": "number",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string"
+          },
+          "taxRate": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "stockOnHand": {
+            "type": "string"
+          },
+          "reorderPoint": {
+            "type": "string"
+          },
+          "reorderQuantity": {
+            "type": "string"
+          },
+          "stockStatus": {
+            "type": "string"
+          },
+          "isRetail": {
+            "type": "boolean"
+          },
+          "isInternal": {
+            "type": "boolean"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "trackStock": {
+            "type": "boolean"
+          },
+          "tracksBatches": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "deletedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "sku",
+          "barcode",
+          "name",
+          "description",
+          "brand",
+          "categoryId",
+          "price",
+          "currency",
+          "taxRate",
+          "unit",
+          "stockOnHand",
+          "reorderPoint",
+          "reorderQuantity",
+          "stockStatus",
+          "isRetail",
+          "isInternal",
+          "isActive",
+          "trackStock",
+          "tracksBatches",
+          "createdAt",
+          "updatedAt",
+          "deletedAt"
+        ]
+      },
+      "ProductPageResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductResponse"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMetaResponse"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ]
+      },
+      "ProductEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ProductResponse"
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
       "CreateProductDto": {
         "type": "object",
         "properties": {
@@ -7377,6 +8083,407 @@
           }
         }
       },
+      "ProductRefResponse": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku",
+          "name"
+        ]
+      },
+      "KardexEntryResponse": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProductRefResponse"
+              }
+            ]
+          },
+          "batch": {
+            "type": "object",
+            "properties": {
+              "batchNumber": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "batchNumber"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "quantityDelta": {
+            "type": "string"
+          },
+          "balanceAfter": {
+            "type": "string"
+          },
+          "unitCost": {
+            "type": "string",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceType": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "batchId": {
+            "type": "string",
+            "nullable": true
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "product",
+          "batch",
+          "id",
+          "productId",
+          "type",
+          "quantityDelta",
+          "balanceAfter",
+          "unitCost",
+          "currency",
+          "sourceType",
+          "sourceId",
+          "reason",
+          "notes",
+          "batchId",
+          "occurredAt"
+        ]
+      },
+      "KardexPageResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KardexEntryResponse"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMetaResponse"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ]
+      },
+      "BatchListingResponse": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProductRefResponse"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "batchNumber": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "initialQuantity": {
+            "type": "string"
+          },
+          "remainingQuantity": {
+            "type": "string"
+          },
+          "unitCost": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "supplierId": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "product",
+          "id",
+          "productId",
+          "batchNumber",
+          "expiresAt",
+          "receivedAt",
+          "initialQuantity",
+          "remainingQuantity",
+          "unitCost",
+          "currency",
+          "supplierId",
+          "notes"
+        ]
+      },
+      "BatchPageResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BatchListingResponse"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMetaResponse"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ]
+      },
+      "ReorderAlertResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "stockOnHand": {
+            "type": "string"
+          },
+          "reorderPoint": {
+            "type": "string"
+          },
+          "missing": {
+            "type": "string"
+          },
+          "suggestedOrder": {
+            "type": "string"
+          },
+          "stockStatus": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sku",
+          "name",
+          "stockOnHand",
+          "reorderPoint",
+          "missing",
+          "suggestedOrder",
+          "stockStatus"
+        ]
+      },
+      "ExpiringBatchResponse": {
+        "type": "object",
+        "properties": {
+          "daysLeft": {
+            "type": "number",
+            "nullable": true
+          },
+          "id": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "batchNumber": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "initialQuantity": {
+            "type": "string"
+          },
+          "remainingQuantity": {
+            "type": "string"
+          },
+          "unitCost": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "supplierId": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "daysLeft",
+          "id",
+          "productId",
+          "batchNumber",
+          "expiresAt",
+          "receivedAt",
+          "initialQuantity",
+          "remainingQuantity",
+          "unitCost",
+          "currency",
+          "supplierId",
+          "notes"
+        ]
+      },
+      "BatchResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "batchNumber": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "initialQuantity": {
+            "type": "string"
+          },
+          "remainingQuantity": {
+            "type": "string"
+          },
+          "unitCost": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "supplierId": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "batchNumber",
+          "expiresAt",
+          "receivedAt",
+          "initialQuantity",
+          "remainingQuantity",
+          "unitCost",
+          "currency",
+          "supplierId",
+          "notes"
+        ]
+      },
+      "StockAlertsResponse": {
+        "type": "object",
+        "properties": {
+          "reorder": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReorderAlertResponse"
+            }
+          },
+          "expiring": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExpiringBatchResponse"
+            }
+          },
+          "expired": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BatchResponse"
+            }
+          }
+        },
+        "required": [
+          "reorder",
+          "expiring",
+          "expired"
+        ]
+      },
+      "StockAlertsEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/StockAlertsResponse"
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
       "ReceiveStockDto": {
         "type": "object",
         "properties": {
@@ -7416,6 +8523,94 @@
           "productId",
           "quantity",
           "unitCost"
+        ]
+      },
+      "ReceiveStockResponse": {
+        "type": "object",
+        "properties": {
+          "batch": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BatchResponse"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "quantityDelta": {
+            "type": "string"
+          },
+          "balanceAfter": {
+            "type": "string"
+          },
+          "unitCost": {
+            "type": "string",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceType": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "batchId": {
+            "type": "string",
+            "nullable": true
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "batch",
+          "id",
+          "productId",
+          "type",
+          "quantityDelta",
+          "balanceAfter",
+          "unitCost",
+          "currency",
+          "sourceType",
+          "sourceId",
+          "reason",
+          "notes",
+          "batchId",
+          "occurredAt"
+        ]
+      },
+      "ReceiveStockEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReceiveStockResponse"
+          }
+        },
+        "required": [
+          "data"
         ]
       },
       "ConsumeStockDto": {
@@ -7462,6 +8657,110 @@
           "quantity"
         ]
       },
+      "InventoryMovementResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "quantityDelta": {
+            "type": "string"
+          },
+          "balanceAfter": {
+            "type": "string"
+          },
+          "unitCost": {
+            "type": "string",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceType": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "batchId": {
+            "type": "string",
+            "nullable": true
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "type",
+          "quantityDelta",
+          "balanceAfter",
+          "unitCost",
+          "currency",
+          "sourceType",
+          "sourceId",
+          "reason",
+          "notes",
+          "batchId",
+          "occurredAt"
+        ]
+      },
+      "ConsumeStockResponse": {
+        "type": "object",
+        "properties": {
+          "movements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryMovementResponse"
+            }
+          },
+          "balanceAfter": {
+            "type": "string"
+          },
+          "totalCost": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "movements",
+          "balanceAfter",
+          "totalCost",
+          "currency"
+        ]
+      },
+      "ConsumeStockEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ConsumeStockResponse"
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
       "AdjustStockDto": {
         "type": "object",
         "properties": {
@@ -7505,6 +8804,335 @@
           "productId",
           "quantityDelta",
           "reason"
+        ]
+      },
+      "AdjustStockResponse": {
+        "type": "object",
+        "properties": {
+          "movements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryMovementResponse"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "quantityDelta": {
+            "type": "string"
+          },
+          "balanceAfter": {
+            "type": "string"
+          },
+          "unitCost": {
+            "type": "string",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceType": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "batchId": {
+            "type": "string",
+            "nullable": true
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "movements",
+          "id",
+          "productId",
+          "type",
+          "quantityDelta",
+          "balanceAfter",
+          "unitCost",
+          "currency",
+          "sourceType",
+          "sourceId",
+          "reason",
+          "notes",
+          "batchId",
+          "occurredAt"
+        ]
+      },
+      "AdjustStockEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AdjustStockResponse"
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "InvoiceLineResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string",
+            "nullable": true
+          },
+          "serviceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "stylistId": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "string"
+          },
+          "unitPrice": {
+            "type": "string"
+          },
+          "discountAmount": {
+            "type": "string"
+          },
+          "taxRate": {
+            "type": "string"
+          },
+          "taxAmount": {
+            "type": "string"
+          },
+          "lineSubtotal": {
+            "type": "string"
+          },
+          "lineTotal": {
+            "type": "string"
+          },
+          "commissionAmount": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "productId",
+          "serviceId",
+          "stylistId",
+          "description",
+          "quantity",
+          "unitPrice",
+          "discountAmount",
+          "taxRate",
+          "taxAmount",
+          "lineSubtotal",
+          "lineTotal",
+          "commissionAmount"
+        ]
+      },
+      "PaymentResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "refundedAmount": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "method",
+          "status",
+          "amount",
+          "refundedAmount",
+          "currency",
+          "reference",
+          "receivedAt"
+        ]
+      },
+      "InvoiceResponse": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceLineResponse"
+            }
+          },
+          "payments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentResponse"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string",
+            "nullable": true
+          },
+          "appointmentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "issuedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "dueAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "paidAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "voidedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "voidReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "subtotal": {
+            "type": "string"
+          },
+          "discountTotal": {
+            "type": "string"
+          },
+          "taxTotal": {
+            "type": "string"
+          },
+          "total": {
+            "type": "string"
+          },
+          "paidTotal": {
+            "type": "string"
+          },
+          "balanceDue": {
+            "type": "string"
+          },
+          "commissionTotal": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "lines",
+          "id",
+          "number",
+          "status",
+          "clientId",
+          "appointmentId",
+          "issuedAt",
+          "dueAt",
+          "paidAt",
+          "voidedAt",
+          "voidReason",
+          "subtotal",
+          "discountTotal",
+          "taxTotal",
+          "total",
+          "paidTotal",
+          "balanceDue",
+          "commissionTotal",
+          "currency",
+          "notes"
+        ]
+      },
+      "InvoicePageResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvoiceResponse"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMetaResponse"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ]
+      },
+      "InvoiceEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InvoiceResponse"
+          }
+        },
+        "required": [
+          "data"
         ]
       },
       "SaleLineDto": {
@@ -7609,6 +9237,160 @@
           "reason"
         ]
       },
+      "CashMovementResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "concept": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "amount",
+          "currency",
+          "concept",
+          "reference",
+          "notes",
+          "occurredAt"
+        ]
+      },
+      "CashSessionResponse": {
+        "type": "object",
+        "properties": {
+          "movements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CashMovementResponse"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "openedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "openedById": {
+            "type": "string"
+          },
+          "closedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "closedById": {
+            "type": "string",
+            "nullable": true
+          },
+          "openingFloat": {
+            "type": "string"
+          },
+          "cashSales": {
+            "type": "string"
+          },
+          "netMovements": {
+            "type": "string"
+          },
+          "expectedAmount": {
+            "type": "string"
+          },
+          "countedAmount": {
+            "type": "string",
+            "nullable": true
+          },
+          "difference": {
+            "type": "string",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "movements",
+          "id",
+          "status",
+          "openedAt",
+          "openedById",
+          "closedAt",
+          "closedById",
+          "openingFloat",
+          "cashSales",
+          "netMovements",
+          "expectedAmount",
+          "countedAmount",
+          "difference",
+          "currency",
+          "notes"
+        ]
+      },
+      "CashSessionEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CashSessionResponse"
+              }
+            ]
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "CashSessionPageResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CashSessionResponse"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMetaResponse"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ]
+      },
       "OpenCashDto": {
         "type": "object",
         "properties": {
@@ -7658,6 +9440,63 @@
           "type",
           "amount",
           "concept"
+        ]
+      },
+      "RecordCashMovementResponse": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/CashSessionResponse"
+          },
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "concept": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "id",
+          "type",
+          "amount",
+          "currency",
+          "concept",
+          "reference",
+          "notes",
+          "occurredAt"
+        ]
+      },
+      "RecordCashMovementEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RecordCashMovementResponse"
+          }
+        },
+        "required": [
+          "data"
         ]
       },
       "CloseCashDto": {
@@ -7768,44 +9607,6 @@
           "createdAt",
           "updatedAt",
           "deletedAt"
-        ]
-      },
-      "PageMetaResponse": {
-        "type": "object",
-        "properties": {
-          "page": {
-            "type": "number",
-            "example": 1
-          },
-          "limit": {
-            "type": "number",
-            "example": 20
-          },
-          "total": {
-            "type": "number",
-            "example": 137,
-            "description": "Total de elementos que cumplen el filtro"
-          },
-          "totalPages": {
-            "type": "number",
-            "example": 7
-          },
-          "hasNext": {
-            "type": "boolean",
-            "example": true
-          },
-          "hasPrevious": {
-            "type": "boolean",
-            "example": false
-          }
-        },
-        "required": [
-          "page",
-          "limit",
-          "total",
-          "totalPages",
-          "hasNext",
-          "hasPrevious"
         ]
       },
       "SupplierPageResponse": {
@@ -7927,19 +9728,6 @@
             ]
           }
         }
-      },
-      "EmptyEnvelopeResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "object",
-            "nullable": true,
-            "example": null
-          }
-        },
-        "required": [
-          "data"
-        ]
       },
       "PurchaseProductResponse": {
         "type": "object",

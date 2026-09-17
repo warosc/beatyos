@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -21,7 +22,13 @@ import {
   SearchUsersUseCase,
   UpdateUserUseCase,
 } from '../../application/user-admin.use-cases';
-import type { User, UserStatusValue } from '../../domain/user.entity';
+import type { UserStatusValue } from '../../domain/user.entity';
+import {
+  EmptyEnvelopeResponse,
+  UserEnvelopeResponse,
+  UserPageResponse,
+  toUserResponse,
+} from './users.response';
 class UserQueryDto {
   @IsOptional() @IsString() search?: string;
   @IsOptional()
@@ -48,21 +55,7 @@ class UpdateUserDto {
 class AssignRolesDto {
   @IsArray() @ArrayMinSize(1) @IsString({ each: true }) roleIds!: string[];
 }
-const present = (u: User) => ({
-  id: u.id,
-  email: u.email.value,
-  firstName: u.name.firstName,
-  lastName: u.name.lastName,
-  fullName: u.name.full,
-  phone: u.phone?.value ?? null,
-  status: u.status,
-  locale: u.locale,
-  roles: u.roles.map((r) => ({ id: r.id, code: r.code })),
-  permissions: u.effectivePermissions,
-  lastLoginAt: u.lastLoginAt,
-  createdAt: u.audit.createdAt,
-  deletedAt: u.audit.deletedAt,
-});
+@ApiTags('Usuarios')
 @Controller({ path: 'users', version: '1' })
 export class UsersController {
   constructor(
@@ -70,45 +63,66 @@ export class UsersController {
     private createUser: CreateUserUseCase,
     private updateUser: UpdateUserUseCase,
   ) {}
-  @Get() @RequirePermissions(PERMISSIONS.users.read) async all(@Query() q: UserQueryDto) {
+  @Get()
+  @ApiOperation({ operationId: 'users_list', summary: 'Buscar usuarios del salón' })
+  @ApiOkResponse({ type: UserPageResponse })
+  @RequirePermissions(PERMISSIONS.users.read)
+  async all(@Query() q: UserQueryDto) {
     const p = await this.search.execute(q);
-    return { data: p.data.map(present), meta: p.meta };
+    return { data: p.data.map(toUserResponse), meta: p.meta };
   }
-  @Get(':id') @RequirePermissions(PERMISSIONS.users.read) async detail(@Param('id') id: string) {
-    return present(await this.search.detail(id));
+  @Get(':id')
+  @ApiOperation({ operationId: 'users_get', summary: 'Consultar un usuario' })
+  @ApiOkResponse({ type: UserEnvelopeResponse })
+  @RequirePermissions(PERMISSIONS.users.read)
+  async detail(@Param('id') id: string) {
+    return toUserResponse(await this.search.detail(id));
   }
-  @Post() @RequirePermissions(PERMISSIONS.users.create) async create(
-    @Body() d: CreateUserDto,
-    @CurrentUser() u: AccessTokenClaims,
-  ) {
-    return present(await this.createUser.execute({ ...d, tenantId: u.tenantId!, actorId: u.sub }));
+  @Post()
+  @ApiOperation({ operationId: 'users_create', summary: 'Crear un usuario' })
+  @ApiCreatedResponse({ type: UserEnvelopeResponse })
+  @RequirePermissions(PERMISSIONS.users.create)
+  async create(@Body() d: CreateUserDto, @CurrentUser() u: AccessTokenClaims) {
+    return toUserResponse(
+      await this.createUser.execute({ ...d, tenantId: u.tenantId!, actorId: u.sub }),
+    );
   }
-  @Patch(':id') @RequirePermissions(PERMISSIONS.users.update) async update(
+  @Patch(':id')
+  @ApiOperation({ operationId: 'users_update', summary: 'Actualizar el perfil de un usuario' })
+  @ApiOkResponse({ type: UserEnvelopeResponse })
+  @RequirePermissions(PERMISSIONS.users.update)
+  async update(
     @Param('id') id: string,
     @Body() d: UpdateUserDto,
     @CurrentUser() u: AccessTokenClaims,
   ) {
-    return present(await this.updateUser.profile({ ...d, id, actorId: u.sub }));
+    return toUserResponse(await this.updateUser.profile({ ...d, id, actorId: u.sub }));
   }
-  @Put(':id/roles') @RequirePermissions(PERMISSIONS.users.assignRoles) async roles(
+  @Put(':id/roles')
+  @ApiOperation({ operationId: 'users_assignRoles', summary: 'Reasignar los roles de un usuario' })
+  @ApiOkResponse({ type: UserEnvelopeResponse })
+  @RequirePermissions(PERMISSIONS.users.assignRoles)
+  async roles(
     @Param('id') id: string,
     @Body() d: AssignRolesDto,
     @CurrentUser() u: AccessTokenClaims,
   ) {
-    return present(
+    return toUserResponse(
       await this.updateUser.assign({ ...d, id, tenantId: u.tenantId!, actorId: u.sub }),
     );
   }
-  @Delete(':id') @RequirePermissions(PERMISSIONS.users.delete) async remove(
-    @Param('id') id: string,
-    @CurrentUser() u: AccessTokenClaims,
-  ) {
+  @Delete(':id')
+  @ApiOperation({ operationId: 'users_delete', summary: 'Dar de baja a un usuario' })
+  @ApiOkResponse({ type: EmptyEnvelopeResponse })
+  @RequirePermissions(PERMISSIONS.users.delete)
+  async remove(@Param('id') id: string, @CurrentUser() u: AccessTokenClaims) {
     await this.updateUser.remove(id, u.sub);
   }
-  @Post(':id/restore') @RequirePermissions(PERMISSIONS.users.restore) async restore(
-    @Param('id') id: string,
-    @CurrentUser() u: AccessTokenClaims,
-  ) {
-    return present(await this.updateUser.restore(id, u.sub));
+  @Post(':id/restore')
+  @ApiOperation({ operationId: 'users_restore', summary: 'Restaurar un usuario dado de baja' })
+  @ApiCreatedResponse({ type: UserEnvelopeResponse })
+  @RequirePermissions(PERMISSIONS.users.restore)
+  async restore(@Param('id') id: string, @CurrentUser() u: AccessTokenClaims) {
+    return toUserResponse(await this.updateUser.restore(id, u.sub));
   }
 }
