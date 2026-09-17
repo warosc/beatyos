@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { DocumentBuilder, SwaggerModule, type OpenAPIObject } from '@nestjs/swagger';
 
 import type { Env } from '../config/env.schema';
 
@@ -11,8 +11,11 @@ import type { Env } from '../config/env.schema';
  * correcto y termina, sin excepción, describiendo una API que ya no existe. Aquí, si un
  * endpoint cambia de forma, el contrato cambia con él.
  */
-export function setupOpenApi(app: INestApplication, config: ConfigService<Env, true>): void {
-  const document = SwaggerModule.createDocument(
+export function createOpenApiDocument(
+  app: INestApplication,
+  config: ConfigService<Env, true>,
+): OpenAPIObject {
+  return SwaggerModule.createDocument(
     app,
     new DocumentBuilder()
       .setTitle('AppSalonBelleza API')
@@ -83,6 +86,10 @@ export function setupOpenApi(app: INestApplication, config: ConfigService<Env, t
         `${controllerKey.replace(/Controller$/, '')}_${methodKey}`,
     },
   );
+}
+
+export function setupOpenApi(app: INestApplication, config: ConfigService<Env, true>): void {
+  const document = createOpenApiDocument(app, config);
 
   SwaggerModule.setup(config.get('SWAGGER_PATH', { infer: true }), app, document, {
     swaggerOptions: {

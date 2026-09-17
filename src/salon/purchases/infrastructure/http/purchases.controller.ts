@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { PERMISSIONS } from '../../../../core/permissions/domain/permission-catalog';
 import type { AccessTokenClaims } from '../../../../shared/application/ports';
@@ -33,6 +34,11 @@ import {
   UpdateSupplierDto,
 } from './purchases.dto';
 import {
+  EmptyEnvelopeResponse,
+  PurchaseOrderEnvelopeResponse,
+  PurchaseOrderPageResponse,
+  SupplierEnvelopeResponse,
+  SupplierPageResponse,
   toPurchaseOrderResponse,
   toSupplierResponse,
   type PurchaseOrderResponse,
@@ -50,6 +56,7 @@ import {
  */
 
 @Controller({ path: 'suppliers', version: '1' })
+@ApiTags('Proveedores')
 export class SuppliersController {
   constructor(
     private readonly list: ListSuppliersUseCase,
@@ -60,6 +67,8 @@ export class SuppliersController {
   ) {}
 
   @Get()
+  @ApiOperation({ operationId: 'suppliers_list', summary: 'Listar proveedores' })
+  @ApiOkResponse({ type: SupplierPageResponse })
   @RequirePermissions(PERMISSIONS.suppliers.read)
   async search(
     @Query() query: ListSuppliersQueryDto,
@@ -72,6 +81,8 @@ export class SuppliersController {
   }
 
   @Post()
+  @ApiOperation({ operationId: 'suppliers_create', summary: 'Crear proveedor' })
+  @ApiCreatedResponse({ type: SupplierEnvelopeResponse })
   @RequirePermissions(PERMISSIONS.suppliers.create)
   async add(
     @Body() dto: CreateSupplierDto,
@@ -86,6 +97,8 @@ export class SuppliersController {
   }
 
   @Patch(':id')
+  @ApiOperation({ operationId: 'suppliers_update', summary: 'Actualizar proveedor' })
+  @ApiOkResponse({ type: SupplierEnvelopeResponse })
   @RequirePermissions(PERMISSIONS.suppliers.update)
   async edit(
     @Param('id') id: string,
@@ -101,12 +114,16 @@ export class SuppliersController {
   }
 
   @Delete(':id')
+  @ApiOperation({ operationId: 'suppliers_delete', summary: 'Eliminar proveedor' })
+  @ApiOkResponse({ type: EmptyEnvelopeResponse })
   @RequirePermissions(PERMISSIONS.suppliers.delete)
   async drop(@Param('id') id: string, @CurrentUser() user: AccessTokenClaims): Promise<void> {
     await this.remove.execute({ supplierId: id, actorId: user.sub });
   }
 
   @Post(':id/restore')
+  @ApiOperation({ operationId: 'suppliers_restore', summary: 'Restaurar proveedor' })
+  @ApiCreatedResponse({ type: SupplierEnvelopeResponse })
   @RequirePermissions(PERMISSIONS.suppliers.restore)
   async restore(
     @Param('id') id: string,
@@ -120,6 +137,7 @@ export class SuppliersController {
 // ---------------------------------------------------------------------------
 
 @Controller({ path: 'purchases', version: '1' })
+@ApiTags('Compras')
 export class PurchasesController {
   constructor(
     private readonly list: ListPurchaseOrdersUseCase,
@@ -131,6 +149,8 @@ export class PurchasesController {
   ) {}
 
   @Get()
+  @ApiOperation({ operationId: 'purchases_list', summary: 'Listar órdenes de compra' })
+  @ApiOkResponse({ type: PurchaseOrderPageResponse })
   @RequirePermissions(PERMISSIONS.purchases.read)
   async search(
     @Query() query: ListPurchaseOrdersQueryDto,
@@ -146,6 +166,8 @@ export class PurchasesController {
   }
 
   @Get(':id')
+  @ApiOperation({ operationId: 'purchases_get', summary: 'Consultar una orden de compra' })
+  @ApiOkResponse({ type: PurchaseOrderEnvelopeResponse })
   @RequirePermissions(PERMISSIONS.purchases.read)
   async detail(@Param('id') id: string): Promise<PurchaseOrderResponse> {
     return toPurchaseOrderResponse(await this.get.execute({ orderId: id }), {
@@ -154,6 +176,8 @@ export class PurchasesController {
   }
 
   @Post()
+  @ApiOperation({ operationId: 'purchases_create', summary: 'Crear una orden de compra' })
+  @ApiCreatedResponse({ type: PurchaseOrderEnvelopeResponse })
   @RequirePermissions(PERMISSIONS.purchases.create)
   async add(
     @Body() dto: CreatePurchaseOrderDto,
@@ -168,6 +192,8 @@ export class PurchasesController {
   }
 
   @Post(':id/submit')
+  @ApiOperation({ operationId: 'purchases_submit', summary: 'Enviar una orden de compra' })
+  @ApiCreatedResponse({ type: PurchaseOrderEnvelopeResponse })
   @RequirePermissions(PERMISSIONS.purchases.submit)
   async send(
     @Param('id') id: string,
@@ -178,6 +204,8 @@ export class PurchasesController {
   }
 
   @Post(':id/receive')
+  @ApiOperation({ operationId: 'purchases_receive', summary: 'Registrar una recepción' })
+  @ApiCreatedResponse({ type: PurchaseOrderEnvelopeResponse })
   @RequirePermissions(PERMISSIONS.purchases.receive)
   async accept(
     @Param('id') id: string,
@@ -194,6 +222,8 @@ export class PurchasesController {
   }
 
   @Post(':id/cancel')
+  @ApiOperation({ operationId: 'purchases_cancel', summary: 'Cancelar una orden de compra' })
+  @ApiCreatedResponse({ type: PurchaseOrderEnvelopeResponse })
   @RequirePermissions(PERMISSIONS.purchases.cancel)
   async abort(
     @Param('id') id: string,

@@ -1,3 +1,6 @@
+import { ApiProperty } from '@nestjs/swagger';
+
+import { PageMetaResponse } from '../../../../shared/infrastructure/http/dto/pagination.dto';
 import type { InventoryMovement } from '../../../inventory/domain/inventory-movement.entity';
 import type { Product } from '../../../inventory/domain/product.entity';
 import type { PurchaseOrderView } from '../../application/purchase-order.use-cases';
@@ -23,7 +26,7 @@ import type { Supplier } from '../../domain/supplier.entity';
  * entero.
  */
 
-export interface SupplierResponse {
+export class SupplierResponse {
   id: string;
   code: string;
   name: string;
@@ -75,7 +78,7 @@ export const toSupplierResponse = (supplier: Supplier): SupplierResponse => ({
  * recepción y `tracksBatches` para saber si hay que pedir lote y caducidad— más el coste y
  * el tipo impositivo, que son los datos con los que se compone un pedido.
  */
-export interface PurchaseProductResponse {
+export class PurchaseProductResponse {
   id: string;
   sku: string;
   name: string;
@@ -107,7 +110,7 @@ const toProductResponse = (product: Product): PurchaseProductResponse => ({
 
 // ---------------------------------------------------------------------------
 
-export interface PurchaseOrderLineResponse {
+export class PurchaseOrderLineResponse {
   id: string;
   purchaseOrderId: string;
   productId: string;
@@ -124,7 +127,7 @@ export interface PurchaseOrderLineResponse {
   product: PurchaseProductResponse | null;
 }
 
-export interface PurchaseMovementResponse {
+export class PurchaseMovementResponse {
   id: string;
   productId: string;
   type: string;
@@ -139,7 +142,7 @@ export interface PurchaseMovementResponse {
   occurredAt: Date;
 }
 
-export interface PurchaseOrderResponse {
+export class PurchaseOrderResponse {
   id: string;
   number: string;
   status: string;
@@ -160,6 +163,29 @@ export interface PurchaseOrderResponse {
   supplier: SupplierResponse | null;
   lines: PurchaseOrderLineResponse[];
   movements?: PurchaseMovementResponse[];
+}
+
+/** Formas HTTP reales después de aplicar ResponseEnvelopeInterceptor. */
+export class SupplierEnvelopeResponse {
+  @ApiProperty({ type: SupplierResponse }) data!: SupplierResponse;
+}
+
+export class SupplierPageResponse {
+  @ApiProperty({ type: [SupplierResponse] }) data!: SupplierResponse[];
+  @ApiProperty({ type: PageMetaResponse }) meta!: PageMetaResponse;
+}
+
+export class PurchaseOrderEnvelopeResponse {
+  @ApiProperty({ type: PurchaseOrderResponse }) data!: PurchaseOrderResponse;
+}
+
+export class PurchaseOrderPageResponse {
+  @ApiProperty({ type: [PurchaseOrderResponse] }) data!: PurchaseOrderResponse[];
+  @ApiProperty({ type: PageMetaResponse }) meta!: PageMetaResponse;
+}
+
+export class EmptyEnvelopeResponse {
+  @ApiProperty({ type: () => Object, nullable: true, example: null }) data!: unknown;
 }
 
 const toLineResponse = (

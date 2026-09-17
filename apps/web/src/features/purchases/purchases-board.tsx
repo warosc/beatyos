@@ -8,33 +8,14 @@ import { loadOptions } from '@/lib/pagination';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-type Supplier = {
-  id: string;
-  code: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  paymentTermDays: number;
-};
-type Product = { id: string; sku: string; name: string; costPrice: string; tracksBatches: boolean };
-type Line = {
-  id: string;
-  productId: string;
-  quantity: string;
-  receivedQuantity: string;
-  unitCost: string;
-  product: Product;
-};
-type Order = {
-  id: string;
-  number: string;
-  status: string;
-  total: string;
-  currency: string;
-  createdAt: string;
-  supplier: Supplier;
-  lines: Line[];
-};
+import type { components } from '@/generated/api-schema';
+
+type Supplier = components['schemas']['SupplierResponse'];
+type Order = components['schemas']['PurchaseOrderResponse'];
+type Product = Pick<
+  components['schemas']['PurchaseProductResponse'],
+  'id' | 'sku' | 'name' | 'costPrice' | 'tracksBatches'
+>;
 async function load<T>(resource: string) {
   const response = await sessionFetch(`/api/purchases?resource=${resource}`);
   const body = (await response.json()) as { data?: T; detail?: string };
@@ -147,7 +128,7 @@ export function PurchasesBoard() {
               {orders.data?.map((o) => (
                 <tr key={o.id}>
                   <td className="p-4 font-bold">{o.number}</td>
-                  <td className="p-4">{o.supplier.name}</td>
+                  <td className="p-4">{o.supplier?.name ?? 'Proveedor no disponible'}</td>
                   <td className="p-4">{new Date(o.createdAt).toLocaleDateString('es-GT')}</td>
                   <td className="p-4">
                     <span className="rounded-full bg-secondary px-2 py-1 text-xs font-bold">
@@ -191,7 +172,7 @@ export function PurchasesBoard() {
                 <br />
                 {s.phone ?? 'Sin teléfono'}
               </p>
-              <p className="mt-3 text-xs">Crédito: {s.paymentTermDays} días</p>
+              <p className="mt-3 text-xs">Crédito: {s.paymentTermDays ?? 0} días</p>
             </Card>
           ))}
         </div>
@@ -259,23 +240,24 @@ function CreateForm({
     event.preventDefault();
     setBusy(true);
     const form = new FormData(event.currentTarget);
-    const body =
+    const body:
+      components['schemas']['CreateSupplierDto'] | components['schemas']['CreatePurchaseOrderDto'] =
       type === 'supplier'
         ? {
-            code: form.get('code'),
-            name: form.get('name'),
-            email: form.get('email') || undefined,
-            phone: form.get('phone') || undefined,
+            code: String(form.get('code')),
+            name: String(form.get('name')),
+            email: form.get('email') ? String(form.get('email')) : undefined,
+            phone: form.get('phone') ? String(form.get('phone')) : undefined,
             paymentTermDays: Number(form.get('paymentTermDays')),
           }
         : {
-            supplierId: form.get('supplierId'),
+            supplierId: String(form.get('supplierId')),
             expectedAt: form.get('expectedAt')
               ? new Date(String(form.get('expectedAt'))).toISOString()
               : undefined,
             lines: [
               {
-                productId: form.get('productId'),
+                productId: String(form.get('productId')),
                 quantity: Number(form.get('quantity')),
                 unitCost: Number(form.get('unitCost')),
               },
@@ -416,7 +398,7 @@ function ReceiptForm({
     e.preventDefault();
     setBusy(true);
     const f = new FormData(e.currentTarget);
-    const lines = order.lines
+    const lines: components['schemas']['ReceiptLineDto'][] = order.lines
       .filter((x) => Number(x.receivedQuantity) < Number(x.quantity))
       .map((x) => ({
         lineId: x.id,
@@ -453,11 +435,13 @@ function ReceiptForm({
               Math.round((Number(x.quantity) - Number(x.receivedQuantity)) * 1000) / 1000;
             return (
               <fieldset className="rounded-xl border p-4" key={x.id}>
-                <legend className="px-2 font-semibold">{x.product.name}</legend>
+                <legend className="px-2 font-semibold">
+                  {x.product?.name ?? 'Producto no disponible'}
+                </legend>
                 <p className="mb-2 text-xs text-muted-foreground">Pendiente: {pending}</p>
                 <input
                   required
-                  aria-label={'Cantidad de ' + x.product.name}
+                  aria-label={'Cantidad de ' + (x.product?.name ?? 'producto')}
                   name={`quantity-${x.id}`}
                   type="number"
                   min="0"
@@ -466,16 +450,16 @@ function ReceiptForm({
                   defaultValue={pending}
                   className="h-11 w-full rounded-xl border bg-background px-3"
                 />
-                {x.product.tracksBatches && (
+                {x.product?.tracksBatches && (
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <input
-                      aria-label={'Lote de ' + x.product.name}
+                      aria-label={'Lote de ' + (x.product?.name ?? 'producto')}
                       name={`batch-${x.id}`}
                       placeholder="Número de lote"
                       className="h-11 rounded-xl border bg-background px-3"
                     />
                     <input
-                      aria-label={'Vencimiento de ' + x.product.name}
+                      aria-label={'Vencimiento de ' + (x.product?.name ?? 'producto')}
                       name={`expiry-${x.id}`}
                       type="date"
                       className="h-11 rounded-xl border bg-background px-3"
