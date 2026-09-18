@@ -96,6 +96,16 @@ describe('Usuarios y roles (integración)', () => {
         lastName: response.body.data.lastName as string,
         email: 'nueva@bella-vista.test',
       });
+      const schedule = await QueryScopeStore.crossTenant(() =>
+        prisma.client.stylistSchedule.findMany({ where: { stylistId: profile!.id } }),
+      );
+      expect(schedule).toHaveLength(6);
+      expect(schedule).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ dayOfWeek: 1, startMinutes: 540, endMinutes: 1080 }),
+          expect.objectContaining({ dayOfWeek: 6, startMinutes: 540, endMinutes: 1080 }),
+        ]),
+      );
     });
 
     it('nunca devuelve el hash de la contraseña', async () => {

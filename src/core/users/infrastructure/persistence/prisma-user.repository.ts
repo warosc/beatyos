@@ -195,6 +195,9 @@ export class PrismaUserRepository implements UserRepository {
                     displayName: user.name.firstName,
                     createdBy: user.audit.createdBy,
                     updatedBy: user.audit.updatedBy,
+                    schedules: {
+                      create: this.defaultStylistSchedule(user.tenantId!, user.audit.createdBy),
+                    },
                   },
                 },
               }
@@ -260,6 +263,9 @@ export class PrismaUserRepository implements UserRepository {
               displayName: user.name.firstName,
               createdBy: user.audit.updatedBy,
               updatedBy: user.audit.updatedBy,
+              schedules: {
+                create: this.defaultStylistSchedule(user.tenantId!, user.audit.updatedBy),
+              },
             },
           });
         }
@@ -385,6 +391,18 @@ export class PrismaUserRepository implements UserRepository {
 
   private needsStylistProfile(user: User): boolean {
     return user.tenantId !== null && user.roles.some((role) => role.code === 'STYLIST');
+  }
+
+  /** Jornada inicial del salón de demostración: lunes a sábado, 09:00–18:00. */
+  private defaultStylistSchedule(tenantId: string, actorId: string | null) {
+    return [1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+      tenantId,
+      dayOfWeek,
+      startMinutes: 9 * 60,
+      endMinutes: 18 * 60,
+      createdBy: actorId,
+      updatedBy: actorId,
+    }));
   }
 
   /**
