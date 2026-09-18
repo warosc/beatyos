@@ -183,6 +183,22 @@ export class PrismaUserRepository implements UserRepository {
               assignedBy: user.audit.createdBy,
             })),
           },
+          ...(this.needsStylistProfile(user)
+            ? {
+                stylist: {
+                  create: {
+                    tenantId: user.tenantId!,
+                    firstName: user.name.firstName,
+                    lastName: user.name.lastName,
+                    email: user.email.value,
+                    phone: user.phone?.value ?? null,
+                    displayName: user.name.firstName,
+                    createdBy: user.audit.createdBy,
+                    updatedBy: user.audit.updatedBy,
+                  },
+                },
+              }
+            : {}),
         },
         include: USER_WITH_ROLES,
       }),
@@ -224,6 +240,27 @@ export class PrismaUserRepository implements UserRepository {
               roleId: role.id,
               assignedBy: user.audit.updatedBy,
             })),
+          });
+        }
+
+        // El rol STYLIST concede acceso; la ficha Stylist aporta agenda, horario y
+        // comisiones. Crear ambos de forma atómica evita que el primer login tenga
+        // permisos pero carezca de perfil profesional.
+        if (this.needsStylistProfile(user)) {
+          await this.prisma.client.stylist.upsert({
+            where: { userId: user.id },
+            update: {},
+            create: {
+              tenantId: user.tenantId!,
+              userId: user.id,
+              firstName: user.name.firstName,
+              lastName: user.name.lastName,
+              email: user.email.value,
+              phone: user.phone?.value ?? null,
+              displayName: user.name.firstName,
+              createdBy: user.audit.updatedBy,
+              updatedBy: user.audit.updatedBy,
+            },
           });
         }
 
@@ -344,6 +381,10 @@ export class PrismaUserRepository implements UserRepository {
       failedLoginAttempts: user.failedLoginAttempts,
       lockedUntil: user.lockedUntil,
     };
+  }
+
+  private needsStylistProfile(user: User): boolean {
+    return user.tenantId !== null && user.roles.some((role) => role.code === 'STYLIST');
   }
 
   /**

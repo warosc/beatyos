@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 
 import { PrismaService } from '@shared/infrastructure/persistence/prisma/prisma.service';
+import { QueryScopeStore } from '@shared/infrastructure/persistence/prisma/query-scope';
 
 import { api, createTestApp, resetDatabase } from './app-harness';
 import { seedTwoTenants, TEST_PASSWORD, type SeededTenant } from './fixtures';
@@ -84,6 +85,17 @@ describe('Usuarios y roles (integración)', () => {
         .send({ email: 'nueva@bella-vista.test', password: 'ContrasenaDePrueba1' })
         .expect(200);
       expect(login.body.data.user.permissions).toContain('appointments.read.own');
+
+      const profile = await QueryScopeStore.crossTenant(() =>
+        prisma.client.stylist.findUnique({
+          where: { userId: response.body.data.id as string },
+        }),
+      );
+      expect(profile).toMatchObject({
+        firstName: 'Marta',
+        lastName: response.body.data.lastName as string,
+        email: 'nueva@bella-vista.test',
+      });
     });
 
     it('nunca devuelve el hash de la contraseña', async () => {
