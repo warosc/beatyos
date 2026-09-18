@@ -7,8 +7,10 @@ services:
     repo: https://github.com/warosc/beatyos.git
     branch: main
     autoDeployTrigger: commit
-    buildCommand: npm ci --ignore-scripts --ignore-workspaces && npm run prisma:generate && npm run build
-    startCommand: npm run prisma:deploy && npm run db:seed && npm run start:prod
+    # El plan gratuito limita el proceso web a 256 MB. ts-node puede superar ese límite
+    # durante el seed, por eso migraciones y datos iniciales se ejecutan en el build.
+    buildCommand: npm ci --ignore-scripts --ignore-workspaces && npm run prisma:generate && npm run build && npm run prisma:deploy && npm run db:seed
+    startCommand: npm run start:prod
     healthCheckPath: /api/v1/health/ready
     envVars:
       - key: NODE_VERSION
