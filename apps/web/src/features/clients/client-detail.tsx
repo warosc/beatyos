@@ -120,20 +120,24 @@ export function ClientDetail({ client }: { client: Client }) {
           )}
         </Card>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Card className="p-5">
-            <p className="text-sm text-muted-foreground">Gasto acumulado</p>
-            <p className="mt-2 text-2xl font-bold">
-              {client.totalSpent} {client.currency}
-            </p>
-          </Card>
+          {client.totalSpent && (
+            <Card className="p-5">
+              <p className="text-sm text-muted-foreground">Gasto acumulado</p>
+              <p className="mt-2 text-2xl font-bold">
+                {client.totalSpent} {client.currency}
+              </p>
+            </Card>
+          )}
           <Card className="p-5">
             <p className="text-sm text-muted-foreground">Visitas</p>
             <p className="mt-2 text-2xl font-bold">{client.totalVisits}</p>
           </Card>
-          <Card className="p-5">
-            <p className="text-sm text-muted-foreground">Puntos</p>
-            <p className="mt-2 text-2xl font-bold">{client.loyaltyPoints}</p>
-          </Card>
+          {client.totalSpent && (
+            <Card className="p-5">
+              <p className="text-sm text-muted-foreground">Puntos</p>
+              <p className="mt-2 text-2xl font-bold">{client.loyaltyPoints}</p>
+            </Card>
+          )}
         </div>
       </div>
       <Card className="p-6">

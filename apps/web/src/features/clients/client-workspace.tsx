@@ -120,21 +120,27 @@ export function ClientWorkspace({
                   </div>
                 </div>
               </div>
-              <div className="mt-5 grid grid-cols-3 border-t pt-4 text-center text-xs text-muted-foreground">
+              <div
+                className={`mt-5 grid ${client.totalSpent ? 'grid-cols-3' : 'grid-cols-1'} border-t pt-4 text-center text-xs text-muted-foreground`}
+              >
                 <span>
                   <strong className="block text-base text-foreground">{client.totalVisits}</strong>
                   Visitas
                 </span>
-                <span className="border-x">
-                  <strong className="block text-base text-foreground">
-                    {client.loyaltyPoints}
-                  </strong>
-                  Puntos
-                </span>
-                <span>
-                  <strong className="block text-base text-foreground">{client.totalSpent}</strong>
-                  {client.currency}
-                </span>
+                {client.totalSpent && (
+                  <span className="border-x">
+                    <strong className="block text-base text-foreground">
+                      {client.loyaltyPoints}
+                    </strong>
+                    Puntos
+                  </span>
+                )}
+                {client.totalSpent && (
+                  <span>
+                    <strong className="block text-base text-foreground">{client.totalSpent}</strong>
+                    {client.currency}
+                  </span>
+                )}
               </div>
             </Card>
           </Link>

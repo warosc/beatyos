@@ -320,8 +320,8 @@ export class ClientResponse {
    * forma interna del dominio sin romper a ningún cliente de la API. También es lo que
    * garantiza que nunca se escape un campo que no debería salir.
    */
-  static from(client: Client, now: Date): ClientResponse {
-    return {
+  static from(client: Client, now: Date, includeSensitive = true): ClientResponse {
+    const response: ClientResponse = {
       id: client.id,
       firstName: client.name.firstName,
       lastName: client.name.lastName,
@@ -348,5 +348,20 @@ export class ClientResponse {
       updatedAt: client.audit.updatedAt.toISOString(),
       ...(client.audit.deletedAt ? { deletedAt: client.audit.deletedAt.toISOString() } : {}),
     };
+    if (!includeSensitive) {
+      response.email = null;
+      response.phone = null;
+      response.birthDate = null;
+      response.age = null;
+      response.notes = null;
+      response.addressLine = null;
+      response.city = null;
+      response.postalCode = null;
+      response.marketingConsent = false;
+      response.marketingConsentAt = null;
+      response.loyaltyPoints = 0;
+      response.totalSpent = '';
+    }
+    return response;
   }
 }

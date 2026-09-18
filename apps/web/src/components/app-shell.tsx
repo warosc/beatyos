@@ -6,6 +6,7 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   CircleDollarSign,
+  CircleHelp,
   LayoutDashboard,
   Package,
   Percent,
@@ -33,6 +34,7 @@ const nav = [
   ['Comisiones', '/comisiones', Percent, ['stylists.update', 'services.update']],
   ['Metas', '/metas', Trophy, ['goals.read', 'goals.read.own']],
   ['Equipo', '/configuracion', Settings, ['users.read', 'roles.read']],
+  ['Ayuda', '/ayuda', CircleHelp, []],
 ] as const;
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -66,7 +68,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   const user = profile.data;
   const allowed = (permissions: readonly string[]) =>
-    user.permissions.includes('*') || permissions.some((p) => user.permissions.includes(p));
+    permissions.length === 0 ||
+    user.permissions.includes('*') ||
+    permissions.some((p) => user.permissions.includes(p));
   const visible = nav.filter((x) => allowed(x[3]));
   const route = nav.find((x) =>
     x[1] === '/' ? pathname === '/' : pathname === x[1] || pathname.startsWith(x[1] + '/'),

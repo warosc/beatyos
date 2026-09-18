@@ -1,6 +1,6 @@
 'use client';
 import { useDialog } from '@/lib/use-dialog';
-import { Can } from '@/components/session-access';
+import { Can, useAccess } from '@/components/session-access';
 import { sessionFetch } from '@/lib/session-fetch';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -12,6 +12,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { usePagedList } from '@/lib/use-paged-list';
+import { loadOptions } from '@/lib/pagination';
 import { Pagination } from '@/components/ui/pagination';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,8 @@ type Session = {
   status: string;
   openedAt: string;
   closedAt: string | null;
+  openedById: string;
+  closedById: string | null;
   openingFloat: string;
   cashSales: string;
   expectedAmount: string;
@@ -46,6 +49,7 @@ async function call<T = Session>(resource: string, body?: Record<string, unknown
 }
 export function CashDesk() {
   const qc = useQueryClient();
+  const { can } = useAccess();
   const [page, setPage] = useState(1);
   const [action, setAction] = useState<'open' | 'movement' | 'close' | null>(null);
   const current = useQuery({ queryKey: ['cash'], queryFn: () => call('current') });
@@ -53,6 +57,20 @@ export function CashDesk() {
     'cash-history',
     '/api/cash?resource=history&limit=20&page=' + page,
   );
+  const users = useQuery({
+    queryKey: ['cash-audit-users'],
+    enabled: can('users.read'),
+    queryFn: ({ signal }) =>
+      loadOptions<{ id: string; firstName: string; lastName: string }>(
+        '/api/admin?resource=users',
+        signal,
+      ),
+  });
+  const userName = (id: string | null) => {
+    if (!id) return '—';
+    const user = users.data?.find((item) => item.id === id);
+    return user ? `${user.firstName} ${user.lastName}` : 'Usuario no disponible';
+  };
   const session = current.data;
   const refresh = async () => {
     setAction(null);
@@ -119,6 +137,11 @@ export function CashDesk() {
                   minute: '2-digit',
                 })}
               </p>
+              {can('users.read') && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Abierta por {userName(session.openedById)}
+                </p>
+              )}
             </Card>
           </div>
           <Card className="overflow-hidden">
@@ -190,6 +213,7 @@ export function CashDesk() {
                 <tr>
                   <th className="p-4 font-medium">Apertura</th>
                   <th className="p-4 font-medium">Estado</th>
+                  {can('users.read') && <th className="p-4 font-medium">Abierta por</th>}
                   <th className="p-4 text-right font-medium">Esperado</th>
                   <th className="p-4 text-right font-medium">Contado</th>
                   <th className="p-4 text-right font-medium">Diferencia</th>
@@ -200,6 +224,7 @@ export function CashDesk() {
                   <tr key={item.id}>
                     <td className="p-4">{new Date(item.openedAt).toLocaleString('es-GT')}</td>
                     <td className="p-4">{item.status === 'OPEN' ? 'Abierta' : 'Cerrada'}</td>
+                    {can('users.read') && <td className="p-4">{userName(item.openedById)}</td>}
                     <td className="p-4 text-right">Q {item.expectedAmount}</td>
                     <td className="p-4 text-right">
                       {item.countedAmount ? `Q ${item.countedAmount}` : '—'}

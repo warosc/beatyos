@@ -494,6 +494,7 @@ function BookingForm({
     >
       <form
         onSubmit={submit}
+        onChange={() => error && setError('')}
         className="w-full max-w-xl space-y-4 rounded-t-3xl bg-card p-6 sm:rounded-2xl"
       >
         <div className="flex justify-between">
@@ -535,8 +536,8 @@ function BookingForm({
               </>
             ) : (
               <p role="alert" className="mt-1.5 text-sm text-danger">
-                Tu cuenta no tiene una ficha de profesional vinculada. Pide a la propietaria que
-                la enlace antes de agendar.
+                Tu cuenta no tiene una ficha de profesional vinculada. Pide a la propietaria que la
+                enlace antes de agendar.
               </p>
             )}
           </label>

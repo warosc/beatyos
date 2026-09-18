@@ -124,6 +124,7 @@ export class ClientsController {
   })
   async list(
     @Query() query: ClientQueryDto,
+    @CurrentUser() user: AccessTokenClaims,
   ): Promise<{ data: ClientResponse[]; meta: PageMetaResponse }> {
     const now = this.clock.now();
 
@@ -150,7 +151,7 @@ export class ClientsController {
           query.birthdayWithinDays === undefined ||
           client.hasBirthdayWithin(query.birthdayWithinDays, now),
       )
-      .map((client) => ClientResponse.from(client, now));
+      .map((client) => ClientResponse.from(client, now, canSeeSensitiveClientData(user)));
 
     return { data, meta: page.meta };
   }
@@ -165,8 +166,15 @@ export class ClientsController {
       'No existe, o pertenece a otro salón. Se devuelve 404 y no 403 en ambos casos: un ' +
       '403 confirmaría que el recurso existe (ADR-0003).',
   })
-  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ClientResponse> {
-    return ClientResponse.from(await this.getClient.execute(id), this.clock.now());
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AccessTokenClaims,
+  ): Promise<ClientResponse> {
+    return ClientResponse.from(
+      await this.getClient.execute(id),
+      this.clock.now(),
+      canSeeSensitiveClientData(user),
+    );
   }
 
   @Patch(':id')
@@ -240,4 +248,13 @@ export class ClientsController {
   ): Promise<void> {
     await this.anonymizeClient.execute({ id, reason: dto.reason, actorId: user.sub });
   }
+}
+
+function canSeeSensitiveClientData(user: AccessTokenClaims): boolean {
+  return (
+    user.permissions.includes('*') ||
+    user.permissions.includes(PERMISSIONS.clients.create) ||
+    user.permissions.includes(PERMISSIONS.clients.update) ||
+    user.permissions.includes(PERMISSIONS.clients.export)
+  );
 }
