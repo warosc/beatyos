@@ -45,6 +45,10 @@ services:
         value: api/docs
       - key: LOG_LEVEL
         value: info
+      - key: AUTH_THROTTLE_TTL
+        value: '60000'
+      - key: AUTH_THROTTLE_LIMIT
+        value: '10'
       - key: DEFAULT_CURRENCY
         value: GTQ
       - key: DEFAULT_TIMEZONE

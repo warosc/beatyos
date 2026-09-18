@@ -44,7 +44,10 @@ async function bootstrap(): Promise<void> {
 
   // Detrás de un proxy inverso, sin esto `request.ip` sería siempre la IP del proxy y el
   // rate limiting por IP dejaría de distinguir clientes: todos compartirían cupo.
-  app.set('trust proxy', isProduction ? 1 : false);
+  // Render siempre coloca el servicio detrás de su proxy, también cuando un entorno de
+  // demostración usa NODE_ENV=development para cargar el seed. Sin esta excepción todas
+  // las personas compartirían la IP del proxy y agotarían juntas el rate limit.
+  app.set('trust proxy', isProduction || process.env.RENDER === 'true' ? 1 : false);
 
   const corsOrigins = parseCorsOrigins(config.get('CORS_ORIGINS', { infer: true }));
   app.enableCors({

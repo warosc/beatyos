@@ -91,8 +91,8 @@ export const envSchema = z
     THROTTLE_MEDIUM_LIMIT: positiveInt.default(100),
     THROTTLE_LONG_TTL: positiveInt.default(3_600_000),
     THROTTLE_LONG_LIMIT: positiveInt.default(1000),
-    AUTH_THROTTLE_TTL: positiveInt.default(900_000),
-    AUTH_THROTTLE_LIMIT: positiveInt.default(5),
+    AUTH_THROTTLE_TTL: positiveInt.default(60_000),
+    AUTH_THROTTLE_LIMIT: positiveInt.default(10),
 
     MAX_FAILED_LOGIN_ATTEMPTS: positiveInt.default(5),
     ACCOUNT_LOCK_MINUTES: positiveInt.default(15),

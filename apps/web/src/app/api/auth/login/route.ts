@@ -13,9 +13,11 @@ export async function POST(request: Request) {
   if (!parsed.success)
     return NextResponse.json({ message: 'Revisa el correo y la contraseña.' }, { status: 400 });
   try {
+    const forwardedFor = request.headers.get('x-forwarded-for');
     const session = await apiRequest<Session>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(parsed.data),
+      headers: forwardedFor ? { 'x-forwarded-for': forwardedFor } : undefined,
     });
     const response = NextResponse.json({ user: session.user });
     const secure = process.env.COOKIE_SECURE !== 'false' && process.env.NODE_ENV === 'production';
