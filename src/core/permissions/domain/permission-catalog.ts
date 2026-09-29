@@ -137,6 +137,14 @@ export const PERMISSION_DEFINITIONS: readonly PermissionDefinition[] = [
   define('cash', 'close', 'Cerrar y cuadrar caja'),
   define('cash', 'movement', 'Registrar entradas y salidas de efectivo'),
 
+  // --- Comandas de servicio (ADR-0019) --------------------------------------
+  define('service-tickets', 'read', 'Ver los servicios realizados pendientes de cobro'),
+  define('service-tickets', 'read.own', 'Ver únicamente los servicios realizados propios'),
+  define('service-tickets', 'create', 'Registrar servicios realizados por cualquier profesional'),
+  define('service-tickets', 'create.own', 'Registrar los servicios realizados por sí misma'),
+  define('service-tickets', 'cancel', 'Anular cualquier servicio pendiente de cobro'),
+  define('service-tickets', 'cancel.own', 'Anular únicamente los servicios propios pendientes'),
+
   // --- Informes ------------------------------------------------------------
   define('reports', 'read', 'Ver informes operativos'),
   define('reports', 'financial', 'Ver informes financieros y márgenes'),
@@ -259,6 +267,14 @@ export const PERMISSIONS = {
     close: 'cash.close',
     movement: 'cash.movement',
   },
+  serviceTickets: {
+    read: 'service-tickets.read',
+    readOwn: 'service-tickets.read.own',
+    create: 'service-tickets.create',
+    createOwn: 'service-tickets.create.own',
+    cancel: 'service-tickets.cancel',
+    cancelOwn: 'service-tickets.cancel.own',
+  },
   reports: {
     read: 'reports.read',
     financial: 'reports.financial',
@@ -309,6 +325,9 @@ const withoutPlatformScope = (codes: readonly string[]) => codes;
  * - La estilista solo tiene los permisos `.own`: su agenda, no la de sus compañeras. En
  *   un sector con mucha rotación y clientela que se lleva quien se va, la lista completa
  *   de clientes es el activo del salón.
+ * - La estilista **declara** lo que ha hecho (`service-tickets.create.own`) pero no lo cobra
+ *   desde la comanda: cobrar exige `service-tickets.read`, que es de caja. Quien hace el
+ *   servicio y quien recibe el dinero son personas distintas, y ese reparto es el control.
  * - La encargada compra y gestiona inventario, pero no puede **anular facturas emitidas**
  *   (`invoices.void`) ni tocar usuarios: son las dos palancas con las que se tapa un
  *   descuadre, y quedan en manos de la propiedad.
@@ -388,6 +407,9 @@ export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
       PERMISSIONS.cash.open,
       PERMISSIONS.cash.close,
       PERMISSIONS.cash.movement,
+      PERMISSIONS.serviceTickets.read,
+      PERMISSIONS.serviceTickets.create,
+      PERMISSIONS.serviceTickets.cancel,
       PERMISSIONS.reports.read,
       PERMISSIONS.reports.commissions,
       PERMISSIONS.reports.export,
@@ -423,12 +445,17 @@ export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
       PERMISSIONS.cash.open,
       PERMISSIONS.cash.close,
       PERMISSIONS.cash.movement,
+      PERMISSIONS.serviceTickets.read,
+      PERMISSIONS.serviceTickets.create,
+      PERMISSIONS.serviceTickets.cancel,
     ],
   },
   {
     code: SYSTEM_ROLES.STYLIST,
     name: 'Profesional',
-    description: 'Consulta su propia agenda y la ficha de las clientas a las que atiende.',
+    description:
+      'Consulta su propia agenda y la ficha de sus clientas, y registra los servicios que ' +
+      'realiza para que caja los cobre.',
     permissions: [
       PERMISSIONS.appointments.readOwn,
       PERMISSIONS.appointments.createOwn,
@@ -439,6 +466,9 @@ export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
       PERMISSIONS.invoices.create,
       PERMISSIONS.payments.create,
       PERMISSIONS.goals.readOwn,
+      PERMISSIONS.serviceTickets.readOwn,
+      PERMISSIONS.serviceTickets.createOwn,
+      PERMISSIONS.serviceTickets.cancelOwn,
     ],
   },
 ] as const;

@@ -38,6 +38,8 @@ import { SalesPersistenceModule } from './sales-persistence.module';
   ],
   controllers: [SalesController],
   providers: [RegisterSaleUseCase, SearchInvoicesUseCase, GetInvoiceUseCase, VoidInvoiceUseCase],
-  exports: [SalesPersistenceModule],
+  // `RegisterSaleUseCase` se exporta para el cobro de comandas (ADR-0019), que factura con
+  // exactamente la misma lógica que el mostrador en lugar de tener la suya.
+  exports: [SalesPersistenceModule, RegisterSaleUseCase],
 })
 export class SalesModule {}

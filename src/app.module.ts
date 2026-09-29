@@ -17,6 +17,7 @@ import { CashModule } from './salon/cash/cash.module';
 import { ReportsModule } from './salon/reports/reports.module';
 import { PurchasesModule } from './salon/purchases/purchases.module';
 import { GoalsModule } from './salon/goals/goals.module';
+import { ServiceTicketsModule } from './salon/service-tickets/service-tickets.module';
 import { SharedModule } from './shared/shared.module';
 import type { Env } from './shared/infrastructure/config/env.schema';
 import {
@@ -95,6 +96,7 @@ import { ScopedThrottlerGuard } from './shared/infrastructure/security/scoped-th
     ReportsModule,
     PurchasesModule,
     GoalsModule,
+    ServiceTicketsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ScopedThrottlerGuard },

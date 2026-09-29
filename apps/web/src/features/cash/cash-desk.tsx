@@ -17,6 +17,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { PendingCharges } from '@/features/service-tickets/pending-charges';
 type Session = {
   id: string;
   status: string;
@@ -118,6 +119,9 @@ export function CashDesk() {
           </Can>
         )}
       </div>
+      <Can permission="service-tickets.read">
+        <PendingCharges cashOpen={!!session} />
+      </Can>
       {session ? (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

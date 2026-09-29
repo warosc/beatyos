@@ -94,6 +94,7 @@ const SOFT_DELETABLE_EXCLUSIONS: ReadonlySet<string> = new Set([
   'AppointmentService',
   'PurchaseOrderLine',
   'InvoiceLine',
+  'ServiceTicketLine',
 ]);
 
 type QueryArgs = {

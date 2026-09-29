@@ -72,6 +72,7 @@ model Tenant {
   documentSequences DocumentSequence[]
   clientPhotos      ClientPhoto[]
   goals             Goal[]
+  serviceTickets    ServiceTicket[]
 
   @@index([status, deletedAt])
   @@map("tenants")
@@ -351,10 +352,11 @@ model Client {
   updatedBy   String?
   deletedBy   String?
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  appointments Appointment[]
-  invoices     Invoice[]
-  photos       ClientPhoto[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments   Appointment[]
+  invoices       Invoice[]
+  photos         ClientPhoto[]
+  serviceTickets ServiceTicket[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, lastName, firstName])
@@ -387,14 +389,15 @@ model Stylist {
   updatedBy String?
   deletedBy String?
 
-  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user         User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
-  schedules    StylistSchedule[]
-  timeOff      StylistTimeOff[]
-  skills       StylistService[]
-  appointments Appointment[]
-  invoiceLines InvoiceLine[]
-  goals        Goal[]
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user           User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  schedules      StylistSchedule[]
+  timeOff        StylistTimeOff[]
+  skills         StylistService[]
+  appointments   Appointment[]
+  invoiceLines   InvoiceLine[]
+  goals          Goal[]
+  serviceTickets ServiceTicket[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, status])
@@ -571,6 +574,7 @@ model Service {
   invoiceLines     InvoiceLine[]
   consumables      ServiceConsumable[]
   clientPhotos     ClientPhoto[]
+  ticketLines      ServiceTicketLine[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, categoryId])
@@ -697,12 +701,13 @@ model Appointment {
   updatedBy String?
   deletedBy String?
 
-  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client       Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  stylist      Stylist              @relation(fields: [stylistId], references: [id], onDelete: Restrict)
-  services     AppointmentService[]
-  invoice      Invoice?
-  clientPhotos ClientPhoto[]
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client         Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  stylist        Stylist              @relation(fields: [stylistId], references: [id], onDelete: Restrict)
+  services       AppointmentService[]
+  invoice        Invoice?
+  clientPhotos   ClientPhoto[]
+  serviceTickets ServiceTicket[]
 
   @@index([tenantId, startsAt])
   @@index([tenantId, stylistId, startsAt])
@@ -1008,11 +1013,12 @@ model Invoice {
   updatedBy String?
   deletedBy String?
 
-  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client      Client?       @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  appointment Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  lines       InvoiceLine[]
-  payments    Payment[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client        Client?        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  appointment   Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  lines         InvoiceLine[]
+  payments      Payment[]
+  serviceTicket ServiceTicket?
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, status, issuedAt])
@@ -1172,6 +1178,72 @@ model CashMovement {
   @@index([tenantId, sessionId])
   @@index([tenantId, occurredAt])
   @@map("cash_movements")
+}
+
+// ===========================================================================
+// COMANDAS DE SERVICIO
+// ===========================================================================
+
+/// Comanda (ADR-0019): servicios que una profesional declara haber realizado a una
+/// clienta y que caja todavia no ha cobrado. No es un documento fiscal: la factura nace al
+/// cobrarla, con los precios del catalogo en ese momento, y queda enlazada en `invoiceId`.
+model ServiceTicket {
+  id            String              @id @default(uuid(7))
+  tenantId      String
+  stylistId     String
+  clientId      String?
+  /// Nombre de la clienta congelado al registrar. Obligatorio: cubre tambien a la clienta
+  /// de paso que aun no tiene ficha, y caja lo lee sin tener que cruzar con `clients`.
+  clientName    String
+  appointmentId String?
+  invoiceId     String?             @unique
+  status        ServiceTicketStatus @default(PENDING)
+  notes         String?
+
+  chargedAt          DateTime? @db.Timestamptz(3)
+  chargedBy          String?
+  cancelledAt        DateTime? @db.Timestamptz(3)
+  cancelledBy        String?
+  cancellationReason String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+  deletedBy String?
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stylist     Stylist             @relation(fields: [stylistId], references: [id], onDelete: Restrict)
+  client      Client?             @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  appointment Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  invoice     Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  lines       ServiceTicketLine[]
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, stylistId, createdAt])
+  @@index([appointmentId])
+  @@map("service_tickets")
+}
+
+/// Servicio de una comanda. Solo referencia el catalogo: el precio se congela en la
+/// factura al cobrar, que es el unico documento que tiene que sobrevivir a un cambio de
+/// tarifa.
+model ServiceTicketLine {
+  id        String   @id @default(uuid(7))
+  tenantId  String
+  ticketId  String
+  serviceId String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  ticket  ServiceTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  service Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@unique([ticketId, serviceId])
+  @@index([tenantId])
+  @@index([serviceId])
+  @@map("service_ticket_lines")
 }
 
 // ===========================================================================
@@ -1341,6 +1413,12 @@ enum PaymentStatus {
   FAILED
   REFUNDED
   PARTIALLY_REFUNDED
+}
+
+enum ServiceTicketStatus {
+  PENDING
+  CHARGED
+  CANCELLED
 }
 
 enum CashSessionStatus {

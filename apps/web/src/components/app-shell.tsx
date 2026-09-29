@@ -51,6 +51,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return b.data;
     },
   });
+  // Aviso en «Caja» de los servicios que las estilistas han registrado y falta cobrar.
+  const canSeeCharges =
+    !!profile.data &&
+    (profile.data.permissions.includes('*') ||
+      profile.data.permissions.includes('service-tickets.read'));
+  const pendingCharges = useQuery({
+    queryKey: ['service-tickets-pending-count'],
+    enabled: !isPublic && canSeeCharges,
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const r = await sessionFetch('/api/service-tickets?status=PENDING&limit=1');
+      if (!r.ok) return 0;
+      const b = (await r.json()) as { meta?: { total: number } };
+      return b.meta?.total ?? 0;
+    },
+  });
   if (isPublic) return children;
   if (profile.isPending)
     return (
@@ -76,6 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     x[1] === '/' ? pathname === '/' : pathname === x[1] || pathname.startsWith(x[1] + '/'),
   );
   const permitted = !route || allowed(route[3]);
+  const badges: Partial<Record<string, number>> = { '/caja': pendingCharges.data ?? 0 };
   const links = visible.map(([label, href, Icon]) => (
     <Link
       key={href}
@@ -88,6 +105,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     >
       <Icon size={19} />
       {label}
+      <Badge count={badges[href]} />
     </Link>
   ));
   return (
@@ -152,7 +170,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 (pathname === href ? 'text-primary' : 'text-muted-foreground')
               }
             >
-              <Icon size={20} />
+              <span className="relative">
+                <Icon size={20} />
+                <Badge count={badges[href]} floating />
+              </span>
               {label}
             </Link>
           ))}
@@ -162,5 +183,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </div>
     </SessionContext.Provider>
+  );
+}
+function Badge({ count, floating = false }: { count?: number; floating?: boolean }) {
+  if (!count) return null;
+  return (
+    <span
+      aria-label={`${count} servicios por cobrar`}
+      className={
+        'grid min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-bold leading-5 text-primary-foreground ' +
+        (floating ? 'absolute -top-2 -right-3' : 'ml-auto')
+      }
+    >
+      {count > 99 ? '99+' : count}
+    </span>
   );
 }

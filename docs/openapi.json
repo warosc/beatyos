@@ -5591,6 +5591,319 @@
           "Metas e incentivos"
         ]
       }
+    },
+    "/api/v1/service-tickets": {
+      "get": {
+        "description": "Caja filtra por `status=PENDING` para ver lo que falta cobrar. Con `service-tickets.read.own` solo se ven las propias.",
+        "operationId": "service_tickets_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Página a devolver, empezando en 1",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Elementos por página. El máximo de 100 es deliberado: sin tope, un cliente podría pedir la tabla entera y tumbar el servicio sin necesidad de un ataque.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "Ordenación como `campo:dirección`, separando por comas para ordenar por varios. Los campos admitidos dependen del recurso y se validan contra una lista blanca.",
+            "schema": {
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_.]*:(asc|desc)(,[a-zA-Z][a-zA-Z0-9_.]*:(asc|desc))*$",
+              "example": "createdAt:desc,name:asc",
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeDeleted",
+            "required": false,
+            "in": "query",
+            "description": "Incluye los registros eliminados (soft delete). Requiere el permiso `*.restore` del recurso; sin él se ignora silenciosamente.",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "CHARGED",
+                "CANCELLED"
+              ]
+            }
+          },
+          {
+            "name": "stylistId",
+            "required": false,
+            "in": "query",
+            "description": "Solo con `service-tickets.read`. Con `.own` se ignora.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceTicketPageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: service-tickets.read | service-tickets.read.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Lista comandas con su importe actual",
+        "tags": [
+          "Comandas de servicio"
+        ]
+      },
+      "post": {
+        "operationId": "service_tickets_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterServiceTicketDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceTicketResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: service-tickets.create | service-tickets.create.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Registra los servicios realizados a una clienta para que caja los cobre",
+        "tags": [
+          "Comandas de servicio"
+        ]
+      }
+    },
+    "/api/v1/service-tickets/assignable-services": {
+      "get": {
+        "description": "Los activos del catálogo que la administración le ha asignado. Sin asignaciones, todos.",
+        "operationId": "service_tickets_assignable_services",
+        "parameters": [
+          {
+            "name": "stylistId",
+            "required": false,
+            "in": "query",
+            "description": "Solo con `service-tickets.create`. Con `.own` se usa la ficha propia.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AssignableServiceResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: service-tickets.create | service-tickets.create.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Servicios que la profesional puede registrar",
+        "tags": [
+          "Comandas de servicio"
+        ]
+      }
+    },
+    "/api/v1/service-tickets/{id}/charge": {
+      "post": {
+        "operationId": "service_tickets_charge",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChargeServiceTicketDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceTicketChargeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: service-tickets.read + invoices.create + payments.create"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cobra una comanda: emite la factura y la marca cobrada en la misma transacción",
+        "tags": [
+          "Comandas de servicio"
+        ]
+      }
+    },
+    "/api/v1/service-tickets/{id}/cancel": {
+      "post": {
+        "operationId": "service_tickets_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelServiceTicketDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceTicketCancelResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: service-tickets.cancel | service-tickets.cancel.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Anula una comanda pendiente. Con `.own`, solo las propias",
+        "tags": [
+          "Comandas de servicio"
+        ]
+      }
     }
   },
   "info": {
@@ -10282,6 +10595,342 @@
           "status",
           "achievedAt",
           "createdAt"
+        ]
+      },
+      "ServiceTicketLineResponse": {
+        "type": "object",
+        "properties": {
+          "serviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "unitPrice": {
+            "type": "string",
+            "description": "Precio sin impuesto"
+          },
+          "taxRate": {
+            "type": "number",
+            "nullable": true
+          },
+          "lineTotal": {
+            "type": "string",
+            "description": "Precio con impuesto"
+          },
+          "available": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "serviceId",
+          "name",
+          "unitPrice",
+          "taxRate",
+          "lineTotal",
+          "available"
+        ]
+      },
+      "ServiceTicketResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "CHARGED",
+              "CANCELLED"
+            ]
+          },
+          "stylistId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stylistName": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "clientName": {
+            "type": "string"
+          },
+          "appointmentId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "invoiceId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceTicketLineResponse"
+            }
+          },
+          "total": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "chargedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "cancelledAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "cancellationReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "stylistId",
+          "stylistName",
+          "clientId",
+          "clientName",
+          "appointmentId",
+          "invoiceId",
+          "notes",
+          "lines",
+          "total",
+          "currency",
+          "createdAt",
+          "chargedAt",
+          "cancelledAt",
+          "cancellationReason"
+        ]
+      },
+      "ServiceTicketPageResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceTicketResponse"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PageMetaResponse"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ]
+      },
+      "AssignableServiceResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "durationMinutes": {
+            "type": "number"
+          },
+          "price": {
+            "type": "string",
+            "description": "Precio sin impuesto"
+          },
+          "priceWithTax": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "durationMinutes",
+          "price",
+          "priceWithTax",
+          "currency"
+        ]
+      },
+      "RegisterServiceTicketDto": {
+        "type": "object",
+        "properties": {
+          "serviceIds": {
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "Servicios realizados",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "clientId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Ficha de la clienta atendida"
+          },
+          "clientName": {
+            "type": "string",
+            "maxLength": 150,
+            "description": "Nombre de una clienta de paso sin ficha. Se ignora si llega `clientId`."
+          },
+          "appointmentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Cita atendida. Aporta la clienta y queda completada al registrar."
+          },
+          "stylistId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Solo con `service-tickets.create`: profesional que realizó el servicio. Con `service-tickets.create.own` siempre es quien inicia sesión."
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Observaciones para caja"
+          }
+        },
+        "required": [
+          "serviceIds"
+        ]
+      },
+      "TicketPaymentDto": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "enum": [
+              "CASH",
+              "CARD",
+              "TRANSFER",
+              "BIZUM",
+              "GIFT_CARD",
+              "VOUCHER",
+              "OTHER"
+            ],
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0.01,
+            "example": 112
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 150
+          }
+        },
+        "required": [
+          "method",
+          "amount"
+        ]
+      },
+      "ChargeServiceTicketDto": {
+        "type": "object",
+        "properties": {
+          "payments": {
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "Deben sumar exactamente el total de la comanda, como en `POST /sales`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketPaymentDto"
+            }
+          }
+        },
+        "required": [
+          "payments"
+        ]
+      },
+      "ServiceTicketChargeResponse": {
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "CHARGED",
+              "CANCELLED"
+            ]
+          },
+          "invoiceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "string",
+            "example": "F2026-000123"
+          },
+          "total": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticketId",
+          "status",
+          "invoiceId",
+          "number",
+          "total"
+        ]
+      },
+      "CancelServiceTicketDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 250,
+            "example": "Registrado a la clienta equivocada"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "ServiceTicketCancelResponse": {
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "CHARGED",
+              "CANCELLED"
+            ]
+          }
+        },
+        "required": [
+          "ticketId",
+          "status"
         ]
       }
     }

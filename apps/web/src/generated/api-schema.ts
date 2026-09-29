@@ -1468,6 +1468,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/service-tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista comandas con su importe actual
+         * @description Caja filtra por `status=PENDING` para ver lo que falta cobrar. Con `service-tickets.read.own` solo se ven las propias.
+         */
+        get: operations["service_tickets_list"];
+        put?: never;
+        /** Registra los servicios realizados a una clienta para que caja los cobre */
+        post: operations["service_tickets_register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/service-tickets/assignable-services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Servicios que la profesional puede registrar
+         * @description Los activos del catálogo que la administración le ha asignado. Sin asignaciones, todos.
+         */
+        get: operations["service_tickets_assignable_services"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/service-tickets/{id}/charge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cobra una comanda: emite la factura y la marca cobrada en la misma transacción */
+        post: operations["service_tickets_charge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/service-tickets/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Anula una comanda pendiente. Con `.own`, solo las propias */
+        post: operations["service_tickets_cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2988,6 +3063,109 @@ export interface components {
             achievedAt: string | null;
             /** Format: date-time */
             createdAt: string;
+        };
+        ServiceTicketLineResponse: {
+            /** Format: uuid */
+            serviceId: string;
+            name: string;
+            /** @description Precio sin impuesto */
+            unitPrice: string;
+            taxRate: number | null;
+            /** @description Precio con impuesto */
+            lineTotal: string;
+            available: boolean;
+        };
+        ServiceTicketResponse: {
+            id: string;
+            /** @enum {string} */
+            status: "PENDING" | "CHARGED" | "CANCELLED";
+            /** Format: uuid */
+            stylistId: string;
+            stylistName: string;
+            /** Format: uuid */
+            clientId: string | null;
+            clientName: string;
+            /** Format: uuid */
+            appointmentId: string | null;
+            /** Format: uuid */
+            invoiceId: string | null;
+            notes: string | null;
+            lines: components["schemas"]["ServiceTicketLineResponse"][];
+            total: string;
+            currency: string;
+            createdAt: string;
+            chargedAt: string | null;
+            cancelledAt: string | null;
+            cancellationReason: string | null;
+        };
+        ServiceTicketPageResponse: {
+            data: components["schemas"]["ServiceTicketResponse"][];
+            meta: components["schemas"]["PageMetaResponse"];
+        };
+        AssignableServiceResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            durationMinutes: number;
+            /** @description Precio sin impuesto */
+            price: string;
+            priceWithTax: string;
+            currency: string;
+        };
+        RegisterServiceTicketDto: {
+            /** @description Servicios realizados */
+            serviceIds: string[];
+            /**
+             * Format: uuid
+             * @description Ficha de la clienta atendida
+             */
+            clientId?: string;
+            /** @description Nombre de una clienta de paso sin ficha. Se ignora si llega `clientId`. */
+            clientName?: string;
+            /**
+             * Format: uuid
+             * @description Cita atendida. Aporta la clienta y queda completada al registrar.
+             */
+            appointmentId?: string;
+            /**
+             * Format: uuid
+             * @description Solo con `service-tickets.create`: profesional que realizó el servicio. Con `service-tickets.create.own` siempre es quien inicia sesión.
+             */
+            stylistId?: string;
+            /** @description Observaciones para caja */
+            notes?: string;
+        };
+        TicketPaymentDto: {
+            /** @enum {string} */
+            method: "CASH" | "CARD" | "TRANSFER" | "BIZUM" | "GIFT_CARD" | "VOUCHER" | "OTHER";
+            /** @example 112 */
+            amount: number;
+            reference?: string;
+        };
+        ChargeServiceTicketDto: {
+            /** @description Deben sumar exactamente el total de la comanda, como en `POST /sales`. */
+            payments: components["schemas"]["TicketPaymentDto"][];
+        };
+        ServiceTicketChargeResponse: {
+            /** Format: uuid */
+            ticketId: string;
+            /** @enum {string} */
+            status: "PENDING" | "CHARGED" | "CANCELLED";
+            /** Format: uuid */
+            invoiceId: string;
+            /** @example F2026-000123 */
+            number: string;
+            total: string;
+        };
+        CancelServiceTicketDto: {
+            /** @example Registrado a la clienta equivocada */
+            reason: string;
+        };
+        ServiceTicketCancelResponse: {
+            /** Format: uuid */
+            ticketId: string;
+            /** @enum {string} */
+            status: "PENDING" | "CHARGED" | "CANCELLED";
         };
     };
     responses: never;
@@ -6984,6 +7162,204 @@ export interface operations {
                 content?: never;
             };
             /** @description Requiere el permiso: goals.delete */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    service_tickets_list: {
+        parameters: {
+            query?: {
+                /** @description Página a devolver, empezando en 1 */
+                page?: number;
+                /** @description Elementos por página. El máximo de 100 es deliberado: sin tope, un cliente podría pedir la tabla entera y tumbar el servicio sin necesidad de un ataque. */
+                limit?: number;
+                /** @description Ordenación como `campo:dirección`, separando por comas para ordenar por varios. Los campos admitidos dependen del recurso y se validan contra una lista blanca. */
+                sort?: string;
+                /** @description Incluye los registros eliminados (soft delete). Requiere el permiso `*.restore` del recurso; sin él se ignora silenciosamente. */
+                includeDeleted?: boolean;
+                status?: "PENDING" | "CHARGED" | "CANCELLED";
+                /** @description Solo con `service-tickets.read`. Con `.own` se ignora. */
+                stylistId?: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceTicketPageResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: service-tickets.read | service-tickets.read.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    service_tickets_register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterServiceTicketDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceTicketResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: service-tickets.create | service-tickets.create.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    service_tickets_assignable_services: {
+        parameters: {
+            query?: {
+                /** @description Solo con `service-tickets.create`. Con `.own` se usa la ficha propia. */
+                stylistId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignableServiceResponse"][];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: service-tickets.create | service-tickets.create.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    service_tickets_charge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChargeServiceTicketDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceTicketChargeResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: service-tickets.read + invoices.create + payments.create */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    service_tickets_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelServiceTicketDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceTicketCancelResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: service-tickets.cancel | service-tickets.cancel.own */
             403: {
                 headers: {
                     [name: string]: unknown;

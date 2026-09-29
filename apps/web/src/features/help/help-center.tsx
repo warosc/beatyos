@@ -27,9 +27,16 @@ const guides = [
     permissions: ['cash.read'],
   },
   {
+    image: '/help/agenda.svg',
+    title: 'Registra los servicios que realizas',
+    text: 'En tu Perfil elige la clienta (o su cita de hoy) y los servicios que le hiciste. Caja lo recibe al instante para cobrarlo.',
+    href: '/perfil',
+    permissions: ['service-tickets.create.own'],
+  },
+  {
     image: '/help/equipo.svg',
     title: 'Configura servicios y jornadas',
-    text: 'Define comisiones, agrega o retira servicios y registra descansos, vacaciones y horarios por profesional.',
+    text: 'Define comisiones, agrega o retira servicios, asigna qué servicios realiza cada estilista y registra descansos, vacaciones y horarios.',
     href: '/comisiones',
     permissions: ['services.update', 'stylists.manage-schedule'],
   },

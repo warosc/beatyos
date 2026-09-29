@@ -89,6 +89,16 @@ export interface RegisterSaleResult {
 }
 
 /**
+ * Paso que otro módulo necesita dar **dentro** de la transacción de la venta.
+ *
+ * Existe para el cobro de comandas (ADR-0019): la comanda tiene que quedar marcada como
+ * cobrada en la misma unidad de trabajo que emite la factura. Si fuera un paso posterior,
+ * un fallo entre ambos dejaría una factura cobrada con su comanda aún pendiente, y caja
+ * la volvería a cobrar.
+ */
+export type WithinSaleTransaction = (sale: RegisterSaleResult) => Promise<void>;
+
+/**
  * Registra una venta: emite la factura, cobra y descuenta existencias (ADR-0014).
  *
  * Es la operación más entrelazada del sistema —toca facturas, cobros, caja, inventario,
@@ -120,7 +130,10 @@ export class RegisterSaleUseCase implements UseCase<RegisterSaleInput, RegisterS
     private readonly consumeStock: ConsumeStockUseCase,
   ) {}
 
-  async execute(input: RegisterSaleInput): Promise<RegisterSaleResult> {
+  async execute(
+    input: RegisterSaleInput,
+    withinTransaction?: WithinSaleTransaction,
+  ): Promise<RegisterSaleResult> {
     assertNoRepeatedItems(input.lines);
 
     const result = await this.uow.execute(async () => {
@@ -179,7 +192,9 @@ export class RegisterSaleUseCase implements UseCase<RegisterSaleInput, RegisterS
         await this.clients.update(client);
       }
 
-      return { invoice: saved, payments };
+      const sale = { invoice: saved, payments };
+      await withinTransaction?.(sale);
+      return sale;
     });
 
     await this.audit.record({

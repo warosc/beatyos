@@ -16,7 +16,9 @@ type Stylist = {
   commissionRate: number;
   schedule: Block[];
   timeOff: TimeOff[];
+  skills: Skill[];
 };
+type Skill = { serviceId: string; durationMinutes: number | null; commissionRate: number | null };
 type Service = {
   id: string;
   name: string;
@@ -159,6 +161,9 @@ export function Commissions() {
           ))}
         </div>
       </Card>
+      {can('stylists.update') && (
+        <SkillsManager stylists={stylists.data ?? []} services={services.data ?? []} />
+      )}
       {can('stylists.manage-schedule') && <ScheduleManager stylists={stylists.data ?? []} />}{' '}
     </div>
   );
@@ -191,6 +196,116 @@ function Field({
         className="mt-1 h-11 w-full rounded-xl border bg-background px-3"
       />
     </label>
+  );
+}
+
+/**
+ * Servicios que cada estilista puede realizar.
+ *
+ * Es lo que la estilista verá al registrar un servicio en su perfil, y lo que la agenda usa
+ * para ofrecerla. Sin ninguno marcado puede hacerlo todo, igual que en el servidor. Al
+ * guardar se conservan la duración y la comisión propias que ya tuviera cada servicio.
+ */
+function SkillsManager({ stylists, services }: { stylists: Stylist[]; services: Service[] }) {
+  const qc = useQueryClient();
+  const [id, setId] = useState('');
+  const [chosen, setChosen] = useState<string[] | null>(null);
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const selectedId = id || stylists[0]?.id || '';
+  const stylist = stylists.find((x) => x.id === selectedId);
+  const current = chosen ?? stylist?.skills.map((skill) => skill.serviceId) ?? [];
+
+  function toggle(serviceId: string) {
+    setMessage('');
+    setChosen(
+      current.includes(serviceId)
+        ? current.filter((x) => x !== serviceId)
+        : [...current, serviceId],
+    );
+  }
+
+  async function save() {
+    setBusy(true);
+    const previous = new Map(stylist?.skills.map((skill) => [skill.serviceId, skill]));
+    const r = await sessionFetch(`/api/stylists/${selectedId}/skills`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        skills: current.map((serviceId) => ({
+          serviceId,
+          durationMinutes: previous.get(serviceId)?.durationMinutes ?? null,
+          commissionRate: previous.get(serviceId)?.commissionRate ?? null,
+        })),
+      }),
+    });
+    setBusy(false);
+    setMessage(
+      r.ok ? 'Servicios asignados.' : await problem(r, 'No pudimos guardar los servicios.'),
+    );
+    if (r.ok) {
+      setChosen(null);
+      await qc.invalidateQueries({ queryKey: ['commission-stylists'] });
+    }
+  }
+
+  return (
+    <Card className="p-6">
+      <h2 className="font-display text-xl font-semibold">Servicios por estilista</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Marca los servicios que cada estilista realiza. Son los que podrá registrar desde su perfil
+        para que caja los cobre. Sin ninguno marcado, puede registrar cualquiera.
+      </p>
+      <select
+        aria-label="Estilista"
+        value={selectedId}
+        onChange={(e) => {
+          setId(e.target.value);
+          setChosen(null);
+          setMessage('');
+        }}
+        className="mt-4 h-11 w-full rounded-xl border bg-background px-3"
+      >
+        {stylists.map((x) => (
+          <option key={x.id} value={x.id}>
+            {x.displayName}
+          </option>
+        ))}
+      </select>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {services.map((service) => (
+          <label
+            key={service.id}
+            className="flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm"
+          >
+            <input
+              type="checkbox"
+              checked={current.includes(service.id)}
+              onChange={() => toggle(service.id)}
+            />
+            <span>
+              <span className="block font-medium">{service.name}</span>
+              <span className="text-xs text-muted-foreground">
+                {service.durationMinutes} min · {service.price} {service.currency}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Button disabled={!selectedId || busy} onClick={save}>
+          {busy ? 'Guardando…' : 'Guardar servicios'}
+        </Button>
+        {current.length === 0 && (
+          <span className="text-sm text-muted-foreground">Puede registrar cualquier servicio.</span>
+        )}
+      </div>
+      {message && (
+        <p role="status" className="mt-3 text-sm">
+          {message}
+        </p>
+      )}
+    </Card>
   );
 }
 
