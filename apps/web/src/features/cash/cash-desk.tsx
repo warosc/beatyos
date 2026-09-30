@@ -10,6 +10,7 @@ import {
   CircleDollarSign,
   LockKeyhole,
   Plus,
+  Printer,
 } from 'lucide-react';
 import { usePagedList } from '@/lib/use-paged-list';
 import { loadOptions } from '@/lib/pagination';
@@ -18,6 +19,10 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PendingCharges } from '@/features/service-tickets/pending-charges';
+import { PAYMENT_LABEL } from '@/features/sales/types';
+import { money } from '@/lib/utils';
+import { CashReport } from './cash-report';
+import { methodTotal, ShiftSummary, useShiftSummary } from './shift-summary';
 type Session = {
   id: string;
   status: string;
@@ -53,6 +58,7 @@ export function CashDesk() {
   const { can } = useAccess();
   const [page, setPage] = useState(1);
   const [action, setAction] = useState<'open' | 'movement' | 'close' | null>(null);
+  const [report, setReport] = useState<Session | null>(null);
   const current = useQuery({ queryKey: ['cash'], queryFn: () => call('current') });
   const history = usePagedList<Session>(
     'cash-history',
@@ -73,8 +79,10 @@ export function CashDesk() {
     return user ? `${user.firstName} ${user.lastName}` : 'Usuario no disponible';
   };
   const session = current.data;
-  const refresh = async () => {
+  const refresh = async (closed?: Session | null) => {
     setAction(null);
+    // Al cerrar se ofrece el corte para imprimir: es el papel que acompaña al efectivo.
+    if (closed) setReport(closed);
     await qc.invalidateQueries({ queryKey: ['cash'] });
     await qc.invalidateQueries({ queryKey: ['cash-history'] });
   };
@@ -148,9 +156,16 @@ export function CashDesk() {
               )}
             </Card>
           </div>
+          <Can permission="invoices.read">
+            <ShiftSummary shift={session} />
+          </Can>
           <Card className="overflow-hidden">
-            <div className="border-b p-5">
+            <div className="flex items-center justify-between gap-3 border-b p-5">
               <h2 className="font-display text-xl font-semibold">Movimientos de efectivo</h2>
+              <Button variant="ghost" onClick={() => setReport(session)}>
+                <Printer size={16} />
+                Corte parcial
+              </Button>
             </div>
             {session.movements.length ? (
               <div className="divide-y">
@@ -162,7 +177,14 @@ export function CashDesk() {
                       {m.type === 'CASH_IN' ? <ArrowDownLeft /> : <ArrowUpRight />}
                     </span>
                     <div className="flex-1">
-                      <p className="font-semibold">{m.concept}</p>
+                      <p className="font-semibold">
+                        {m.concept}
+                        {m.type === 'REFUND' && (
+                          <span className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-xs text-warning">
+                            Devolución
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(m.occurredAt).toLocaleString('es-GT')}
                       </p>
@@ -198,11 +220,12 @@ export function CashDesk() {
       {action && (
         <CashForm
           action={action}
-          expected={session?.expectedAmount}
+          session={session}
           onClose={() => setAction(null)}
           onSaved={refresh}
         />
       )}
+      {report && <CashReport session={report} onClose={() => setReport(null)} />}
       <Card className="overflow-hidden">
         <div className="border-b p-5">
           <h2 className="font-display text-xl font-semibold">Historial de cajas</h2>
@@ -221,6 +244,9 @@ export function CashDesk() {
                   <th className="p-4 text-right font-medium">Esperado</th>
                   <th className="p-4 text-right font-medium">Contado</th>
                   <th className="p-4 text-right font-medium">Diferencia</th>
+                  <th className="p-4 font-medium">
+                    <span className="sr-only">Corte</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -237,6 +263,15 @@ export function CashDesk() {
                       className={`p-4 text-right font-semibold ${Number(item.difference) < 0 ? 'text-danger' : Number(item.difference) > 0 ? 'text-warning' : ''}`}
                     >
                       {item.difference ? `Q ${item.difference}` : '—'}
+                    </td>
+                    <td className="p-2 text-right">
+                      <Button
+                        variant="ghost"
+                        aria-label={`Imprimir corte del ${new Date(item.openedAt).toLocaleString('es-GT')}`}
+                        onClick={() => setReport(item)}
+                      >
+                        <Printer size={16} />
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -262,17 +297,20 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 function CashForm({
   action,
-  expected,
+  session,
   onClose,
   onSaved,
 }: {
   action: 'open' | 'movement' | 'close';
-  expected?: string;
+  session?: Session | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (closed?: Session | null) => void;
 }) {
+  const { can } = useAccess();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const shift = useShiftSummary(session, action === 'close' && can('invoices.read'));
+  const expected = session?.expectedAmount;
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -284,8 +322,8 @@ function CashForm({
           : action === 'close'
             ? { countedAmount: Number(f.get('amount')), notes: f.get('notes') || undefined }
             : { type: f.get('type'), amount: Number(f.get('amount')), concept: f.get('concept') };
-      await call(action, body);
-      onSaved();
+      const saved = await call(action, body);
+      onSaved(action === 'close' ? saved : null);
     } catch (x) {
       setError(x instanceof Error ? x.message : 'No pudimos completar la operación.');
     } finally {
@@ -311,10 +349,29 @@ function CashForm({
               : 'Registrar movimiento'}
         </h2>
         {action === 'close' && (
-          <p className="rounded-xl bg-secondary p-3 text-sm">
-            El sistema espera <strong>Q {expected}</strong>. Cuenta físicamente el efectivo antes de
-            continuar.
-          </p>
+          <div className="space-y-2 rounded-xl bg-secondary p-3 text-sm">
+            <p>
+              El sistema espera <strong>Q {expected}</strong> en efectivo. Cuéntalo antes de
+              continuar.
+            </p>
+            {shift.data &&
+              (['CARD', 'TRANSFER'] as const).map((method) => {
+                const row = methodTotal(shift.data, method);
+                return (
+                  <p key={method} className="flex justify-between gap-3">
+                    <span>
+                      {PAYMENT_LABEL[method]} del turno
+                      <span className="block text-xs text-muted-foreground">
+                        {method === 'CARD'
+                          ? 'Compárala con el cierre del datáfono'
+                          : 'Compáralas con los depósitos del banco'}
+                      </span>
+                    </span>
+                    <strong className="tabular-nums">{money(row?.net ?? 0)}</strong>
+                  </p>
+                );
+              })}
+          </div>
         )}
         {action === 'movement' && (
           <select name="type" className="h-11 w-full rounded-xl border bg-background px-3">

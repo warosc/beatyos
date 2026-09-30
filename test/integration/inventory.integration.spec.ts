@@ -664,6 +664,50 @@ describe('Inventario (integración)', () => {
 
   // =========================================================================
 
+  describe('filtros del punto de venta', () => {
+    it('lista solo lo que se vende a clientas y sigue activo', async () => {
+      // El punto de venta pide `isActive=true&isRetail=true`: un tinte de uso interno o un
+      // producto retirado no deben ofrecerse en el mostrador.
+      const venta = await createProduct({ sku: 'SH-VENTA', name: 'Champú de venta' });
+      const interno = await createProduct({
+        sku: 'TIN-INTERNO',
+        name: 'Tinte de cabina',
+        isRetail: false,
+        isInternal: true,
+      });
+      const retirado = await createProduct({ sku: 'SH-RETIRADO', name: 'Champú retirado' });
+      await request(server())
+        .patch(api(`/products/${retirado.id}`))
+        .set(auth())
+        .send({ isActive: false })
+        .expect(200);
+
+      const response = await request(server())
+        .get(api('/products'))
+        .query({ isActive: 'true', isRetail: 'true' })
+        .set(auth())
+        .expect(200);
+      const ids = (response.body.data as { id: string }[]).map((item) => item.id);
+
+      expect(ids).toContain(venta.id);
+      expect(ids).not.toContain(interno.id);
+      expect(ids).not.toContain(retirado.id);
+
+      // Sin filtros, el tablero de inventario sigue viéndolo todo.
+      const todo = await request(server()).get(api('/products')).set(auth()).expect(200);
+      const todos = (todo.body.data as { id: string }[]).map((item) => item.id);
+      expect(todos).toEqual(expect.arrayContaining([venta.id, interno.id, retirado.id]));
+    });
+
+    it('rechaza un booleano que no reconoce en lugar de interpretarlo', async () => {
+      await request(server())
+        .get(api('/products'))
+        .query({ isRetail: 'quizas' })
+        .set(auth())
+        .expect(400);
+    });
+  });
+
   describe('baja de producto', () => {
     it('impide dar de baja lo que aún está en la estantería', async () => {
       const { id } = await createProduct({ sku: 'SH-BAJA' });

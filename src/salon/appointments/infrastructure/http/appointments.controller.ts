@@ -43,7 +43,12 @@ import {
   ScheduleAppointmentUseCase,
   SearchAppointmentsUseCase,
 } from '../../application/appointment.use-cases';
-import type { AppointmentSortField } from '../../domain/appointment.repository';
+import type { Appointment } from '../../domain/appointment.entity';
+import {
+  CLIENT_NAME_DIRECTORY,
+  type AppointmentSortField,
+  type ClientNameDirectory,
+} from '../../domain/appointment.repository';
 import {
   AppointmentQueryDto,
   AppointmentResponse,
@@ -76,7 +81,18 @@ export class AppointmentsController {
     private readonly getAvailability: GetAvailabilityUseCase,
     private readonly getCalendar: GetCalendarUseCase,
     @Inject(STYLIST_REPOSITORY) private readonly stylists: StylistRepository,
+    @Inject(CLIENT_NAME_DIRECTORY) private readonly directory: ClientNameDirectory,
   ) {}
+
+  /** Presenta citas con el nombre de su clienta, resuelto en una sola consulta. */
+  private async present(appointments: readonly Appointment[]): Promise<AppointmentResponse[]> {
+    const names = await this.directory.clientNames(appointments.map((a) => a.clientId));
+    return appointments.map((a) => AppointmentResponse.from(a, names.get(a.clientId) ?? null));
+  }
+
+  private async presentOne(appointment: Appointment): Promise<AppointmentResponse> {
+    return (await this.present([appointment]))[0];
+  }
 
   /**
    * Resuelve el ámbito de filas del usuario.
@@ -137,7 +153,7 @@ export class AppointmentsController {
       restrictToStylistId: await this.ownScopeFor(user),
     });
 
-    return AppointmentResponse.from(appointment);
+    return this.presentOne(appointment);
   }
 
   @Get()
@@ -174,7 +190,7 @@ export class AppointmentsController {
       restrictToStylistId: await this.ownScopeFor(user),
     });
 
-    return { data: page.data.map((a) => AppointmentResponse.from(a)), meta: page.meta };
+    return { data: await this.present(page.data), meta: page.meta };
   }
 
   @Get('availability')
@@ -218,7 +234,7 @@ export class AppointmentsController {
       restrictToStylistId: await this.ownScopeFor(user),
     });
 
-    return appointments.map((appointment) => AppointmentResponse.from(appointment));
+    return this.present(appointments);
   }
 
   @Get(':id')
@@ -238,7 +254,7 @@ export class AppointmentsController {
       id,
       restrictToStylistId: await this.ownScopeFor(user),
     });
-    return AppointmentResponse.from(appointment);
+    return this.presentOne(appointment);
   }
 
   @Patch(':id/reschedule')
@@ -264,7 +280,7 @@ export class AppointmentsController {
       force: dto.force,
       actorId: user.sub,
     });
-    return AppointmentResponse.from(appointment);
+    return this.presentOne(appointment);
   }
 
   @Patch(':id/confirm')
@@ -334,7 +350,7 @@ export class AppointmentsController {
       reason: dto.reason,
       actorId: user.sub,
     });
-    return AppointmentResponse.from(appointment);
+    return this.presentOne(appointment);
   }
 
   @Patch(':id/no-show')
@@ -364,6 +380,6 @@ export class AppointmentsController {
       actorId: user.sub,
       restrictToStylistId: await this.ownScopeFor(user),
     });
-    return AppointmentResponse.from(appointment);
+    return this.presentOne(appointment);
   }
 }

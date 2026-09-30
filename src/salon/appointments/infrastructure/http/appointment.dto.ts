@@ -276,6 +276,8 @@ export class AppointmentLineResponse {
 export class AppointmentResponse {
   @ApiProperty() id!: string;
   @ApiProperty({ format: 'uuid' }) clientId!: string;
+  @ApiProperty({ nullable: true, type: String, description: 'Nombre de la clienta' })
+  clientName!: string | null;
   @ApiProperty({ format: 'uuid' }) stylistId!: string;
   @ApiProperty({ format: 'date-time' }) startsAt!: string;
   @ApiProperty({ format: 'date-time' }) endsAt!: string;
@@ -312,10 +314,11 @@ export class AppointmentResponse {
   @ApiProperty({ format: 'date-time' }) createdAt!: string;
   @ApiProperty({ format: 'date-time' }) updatedAt!: string;
 
-  static from(appointment: Appointment): AppointmentResponse {
+  static from(appointment: Appointment, clientName: string | null = null): AppointmentResponse {
     return {
       id: appointment.id,
       clientId: appointment.clientId,
+      clientName,
       stylistId: appointment.stylistId,
       startsAt: appointment.period.startsAt.toISOString(),
       endsAt: appointment.period.endsAt.toISOString(),

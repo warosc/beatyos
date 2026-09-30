@@ -188,6 +188,20 @@ describe('Client', () => {
         DomainValidationError,
       );
     });
+
+    it('deshace la visita de una venta anulada sin bajar de cero', () => {
+      const client = create();
+      client.registerVisit(Money.fromDecimal('45.50', 'EUR'), NOW);
+
+      client.revertVisit(Money.fromDecimal('45.50', 'EUR'), NOW);
+      expect(client.totalVisits).toBe(0);
+      expect(client.totalSpent.toDecimalString()).toBe('0.00');
+
+      // Datos anteriores a estas métricas: no se inventan visitas ni gasto negativos.
+      client.revertVisit(Money.fromDecimal('10.00', 'EUR'), NOW);
+      expect(client.totalVisits).toBe(0);
+      expect(client.totalSpent.toDecimalString()).toBe('0.00');
+    });
   });
 
   describe('puntos de fidelidad', () => {

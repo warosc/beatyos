@@ -1,6 +1,8 @@
 export interface Appointment {
   id: string;
   clientId: string;
+  /** Lo resuelve la API: la agenda no necesita el fichero de clientas para poner nombres. */
+  clientName?: string | null;
   stylistId: string;
   startsAt: string;
   endsAt: string;

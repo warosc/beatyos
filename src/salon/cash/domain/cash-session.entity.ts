@@ -23,7 +23,13 @@ import { Money } from '../../../shared/domain/value-objects/money.vo';
 export type CashSessionStatusValue = 'OPEN' | 'CLOSED';
 
 export type CashMovementTypeValue =
-  'CASH_IN' | 'CASH_OUT' | 'WITHDRAWAL' | 'EXPENSE' | 'CORRECTION';
+  | 'CASH_IN'
+  | 'CASH_OUT'
+  | 'WITHDRAWAL'
+  | 'EXPENSE'
+  | 'CORRECTION'
+  /** Efectivo devuelto al anular una venta (ADR-0020). Solo lo crea la anulación. */
+  | 'REFUND';
 
 export interface CashMovement {
   readonly id: string;
@@ -54,6 +60,7 @@ const MOVEMENT_SIGN: Readonly<Record<CashMovementTypeValue, 1 | -1 | 0>> = {
   WITHDRAWAL: -1,
   EXPENSE: -1,
   CORRECTION: 0,
+  REFUND: -1,
 };
 
 export interface CashSessionProps {
@@ -250,6 +257,15 @@ export class CashSession extends Entity {
       );
     }
 
+    if (params.type === 'REFUND') {
+      // Una devolución a mano no dejaría rastro de qué venta devuelve ni la anularía: el
+      // cajón cuadraría y la venta seguiría contando en ventas, comisiones y metas.
+      throw new BusinessRuleViolationError(
+        'REFUND_REQUIRES_VOID',
+        'Las devoluciones se registran al anular la venta, no como movimiento de caja',
+      );
+    }
+
     const concept = params.concept?.trim();
     if (!concept) {
       throw new DomainValidationError('El movimiento de caja necesita un concepto', 'concept');
@@ -272,11 +288,69 @@ export class CashSession extends Entity {
       }
     }
 
+    return this.append({ ...params, concept });
+  }
+
+  /**
+   * Saca del cajón el efectivo de una venta anulada (ADR-0020).
+   *
+   * Sale de **esta** caja, la abierta, porque es de aquí de donde lo entrega quien está en
+   * el mostrador; la caja en la que se cobró, si ya se cerró, no se toca. Se compara con
+   * todo lo que debería haber —ventas en efectivo incluidas—: el dinero de las ventas está
+   * en el cajón, y es precisamente el que se devuelve.
+   */
+  recordRefund(params: {
+    id: string;
+    amount: Money;
+    invoiceNumber: string;
+    cashSales: Money;
+    now: Date;
+    actorId: string | null;
+  }): CashMovement {
+    if (!this.isOpen) {
+      throw new InvalidStateTransitionError('Caja', this.props.status, 'con devoluciones');
+    }
+    if (!params.amount.isPositive()) {
+      throw new DomainValidationError('El importe a devolver debe ser mayor que cero', 'amount');
+    }
+    const available = this.expectedAmount(params.cashSales);
+    if (params.amount.greaterThan(available)) {
+      throw new BusinessRuleViolationError(
+        'INSUFFICIENT_CASH',
+        `No se pueden devolver ${params.amount.toString()} en efectivo: en la caja debería haber ${available.toString()}`,
+        {
+          sessionId: this.id,
+          available: available.toDecimalString(),
+          requested: params.amount.toDecimalString(),
+        },
+      );
+    }
+    return this.append({
+      id: params.id,
+      type: 'REFUND',
+      amount: params.amount,
+      concept: `Devolución por anulación de ${params.invoiceNumber}`,
+      reference: params.invoiceNumber,
+      now: params.now,
+      actorId: params.actorId,
+    });
+  }
+
+  private append(params: {
+    id: string;
+    type: CashMovementTypeValue;
+    amount: Money;
+    concept: string;
+    reference?: string | null;
+    notes?: string | null;
+    now: Date;
+    actorId: string | null;
+  }): CashMovement {
     const movement: CashMovement = {
       id: params.id,
       type: params.type,
       amount: params.amount,
-      concept,
+      concept: params.concept,
       reference: params.reference?.trim() || null,
       notes: params.notes?.trim() || null,
       occurredAt: params.now,

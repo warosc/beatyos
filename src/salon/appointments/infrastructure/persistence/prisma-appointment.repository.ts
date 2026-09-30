@@ -22,6 +22,7 @@ import type {
   AppointmentFilter,
   AppointmentRepository,
   AppointmentSortField,
+  ClientNameDirectory,
 } from '../../domain/appointment.repository';
 
 const APPOINTMENT_INCLUDE = {
@@ -309,5 +310,22 @@ export class PrismaAppointmentRepository
         deletedBy: row.deletedBy,
       },
     });
+  }
+}
+
+@Injectable()
+export class PrismaClientNameDirectory implements ClientNameDirectory {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async clientNames(clientIds: readonly string[]): Promise<ReadonlyMap<string, string>> {
+    const ids = [...new Set(clientIds)];
+    if (!ids.length) return new Map();
+    const rows = await withMappedErrors('Clienta', () =>
+      this.prisma.client.client.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, firstName: true, lastName: true },
+      }),
+    );
+    return new Map(rows.map((row) => [row.id, `${row.firstName} ${row.lastName}`.trim()]));
   }
 }

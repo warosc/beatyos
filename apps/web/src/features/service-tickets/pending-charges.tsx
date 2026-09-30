@@ -5,13 +5,18 @@ import { FormEvent, useState } from 'react';
 import { Can } from '@/components/session-access';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Pagination } from '@/components/ui/pagination';
+import { toCents } from '@/features/sales/cart';
+import { PaymentDialog, type ConfirmPayments } from '@/features/sales/payment-dialog';
+import { SaleComplete } from '@/features/sales/sale-complete';
+import { SaleDialog } from '@/features/sales/sale-dialog';
 import { loadPage } from '@/lib/pagination';
 import { sessionFetch } from '@/lib/session-fetch';
 import { useDialog } from '@/lib/use-dialog';
 import { money, problem, type ServiceTicket } from './types';
 
-export const PENDING_TICKETS_URL =
-  '/api/service-tickets?status=PENDING&sort=createdAt:asc&limit=100';
+const pendingUrl = (page: number) =>
+  `/api/service-tickets?status=PENDING&sort=createdAt:asc&limit=50&page=${page}`;
 
 const since = (iso: string) => {
   const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
@@ -29,19 +34,31 @@ const since = (iso: string) => {
 export function PendingCharges({ cashOpen }: { cashOpen: boolean }) {
   const [charging, setCharging] = useState<ServiceTicket | null>(null);
   const [cancelling, setCancelling] = useState<ServiceTicket | null>(null);
+  const [charged, setCharged] = useState<{
+    invoiceId: string;
+    number: string;
+    totalCents: number;
+    changeCents: number;
+    tenderedCents: number;
+  } | null>(null);
+  const [printing, setPrinting] = useState(false);
   const [notice, setNotice] = useState('');
+  const [page, setPage] = useState(1);
   const qc = useQueryClient();
   const pending = useQuery({
-    queryKey: ['service-tickets-pending'],
+    queryKey: ['service-tickets-pending', page],
     refetchInterval: 20_000,
-    queryFn: ({ signal }) => loadPage<ServiceTicket>(PENDING_TICKETS_URL, signal),
+    queryFn: ({ signal }) => loadPage<ServiceTicket>(pendingUrl(page), signal),
   });
   const tickets = pending.data?.data ?? [];
+  const total = pending.data?.meta?.total ?? tickets.length;
 
   async function done(message: string) {
     setCharging(null);
     setCancelling(null);
     setNotice(message);
+    // Si era el último de la página, se vuelve a la anterior en lugar de mostrar una vacía.
+    if (tickets.length === 1 && page > 1) setPage(page - 1);
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['service-tickets-pending'] }),
       qc.invalidateQueries({ queryKey: ['service-tickets-pending-count'] }),
@@ -50,6 +67,32 @@ export function PendingCharges({ cashOpen }: { cashOpen: boolean }) {
     ]);
   }
 
+  const charge =
+    (ticket: ServiceTicket): ConfirmPayments =>
+    async (payments, changeCents) => {
+      const r = await sessionFetch(`/api/service-tickets/${ticket.id}/charge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payments }),
+      });
+      if (!r.ok) return problem(r, 'No pudimos cobrar el servicio.');
+      const { data } = (await r.json()) as {
+        data: { invoiceId: string; number: string; total: string };
+      };
+      const cashCents = payments
+        .filter((payment) => payment.method === 'CASH')
+        .reduce((sum, payment) => sum + toCents(payment.amount), 0);
+      setCharged({
+        invoiceId: data.invoiceId,
+        number: data.number,
+        totalCents: toCents(data.total),
+        changeCents,
+        tenderedCents: changeCents > 0 ? cashCents + changeCents : 0,
+      });
+      await done(`Cobrado ${money(data.total)} a ${ticket.clientName} · factura ${data.number}`);
+      return null;
+    };
+
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-5">
@@ -57,9 +100,9 @@ export function PendingCharges({ cashOpen }: { cashOpen: boolean }) {
           <h2 className="flex items-center gap-2 font-display text-xl font-semibold">
             <BellRing size={20} className="text-primary" />
             Servicios por cobrar
-            {tickets.length > 0 && (
+            {total > 0 && (
               <span className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-bold text-primary-foreground">
-                {tickets.length}
+                {total}
               </span>
             )}
           </h2>
@@ -129,12 +172,35 @@ export function PendingCharges({ cashOpen }: { cashOpen: boolean }) {
           </p>
         )
       )}
+      <Pagination meta={pending.data?.meta} pending={pending.isFetching} onPage={setPage} />
       {charging && (
-        <ChargeDialog
-          ticket={charging}
+        <PaymentDialog
+          title="Cobrar servicio"
+          subtitle={`${charging.clientName} · atendida por ${charging.stylistName}`}
+          totalCents={toCents(charging.total)}
+          summary={<TicketSummary ticket={charging} />}
           cashOpen={cashOpen}
           onClose={() => setCharging(null)}
-          onDone={done}
+          onConfirm={charge(charging)}
+        />
+      )}
+      {charged && !printing && (
+        <SaleComplete
+          number={charged.number}
+          totalCents={charged.totalCents}
+          changeCents={charged.changeCents}
+          onNext={() => setCharged(null)}
+          onPrint={() => setPrinting(true)}
+        />
+      )}
+      {charged && printing && (
+        <SaleDialog
+          saleId={charged.invoiceId}
+          cash={{ tenderedCents: charged.tenderedCents, changeCents: charged.changeCents }}
+          onClose={() => {
+            setPrinting(false);
+            setCharged(null);
+          }}
         />
       )}
       {cancelling && (
@@ -144,94 +210,15 @@ export function PendingCharges({ cashOpen }: { cashOpen: boolean }) {
   );
 }
 
-function ChargeDialog({
-  ticket,
-  cashOpen,
-  onClose,
-  onDone,
-}: {
-  ticket: ServiceTicket;
-  cashOpen: boolean;
-  onClose: () => void;
-  onDone: (message: string) => void;
-}) {
-  const [method, setMethod] = useState(cashOpen ? 'CASH' : 'CARD');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const dialogRef = useDialog(onClose);
-
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    const r = await sessionFetch(`/api/service-tickets/${ticket.id}/charge`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payments: [{ method, amount: Number(ticket.total) }] }),
-    });
-    setBusy(false);
-    if (!r.ok) return setError(await problem(r, 'No pudimos cobrar el servicio.'));
-    const { data } = (await r.json()) as { data: { number: string; total: string } };
-    onDone(`Cobrado ${money(data.total)} a ${ticket.clientName} · factura ${data.number}`);
-  }
-
+function TicketSummary({ ticket }: { ticket: ServiceTicket }) {
   return (
-    <div
-      ref={dialogRef}
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Cobrar servicio"
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
-    >
-      <form onSubmit={submit} className="w-full max-w-md space-y-4 rounded-2xl bg-card p-6">
-        <h2 className="font-display text-2xl font-semibold">Cobrar servicio</h2>
-        <p className="text-sm text-muted-foreground">
-          {ticket.clientName} · atendida por {ticket.stylistName}
-        </p>
-        <div className="space-y-2 rounded-xl bg-secondary p-3 text-sm">
-          {ticket.lines.map((l) => (
-            <div key={l.serviceId} className="flex justify-between gap-3">
-              <span>{l.name}</span>
-              <span>{money(l.lineTotal)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between border-t pt-2 text-base font-bold">
-            <span>Total</span>
-            <span>{money(ticket.total)}</span>
-          </div>
+    <div className="space-y-2 rounded-xl bg-secondary p-3 text-sm">
+      {ticket.lines.map((l) => (
+        <div key={l.serviceId} className="flex justify-between gap-3">
+          <span>{l.name}</span>
+          <span className="tabular-nums">{money(l.lineTotal)}</span>
         </div>
-        <label className="block text-sm font-semibold">
-          Método de pago
-          <select
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-            className="mt-1 h-11 w-full rounded-xl border bg-background px-3 font-normal"
-          >
-            <option value="CASH">Efectivo</option>
-            <option value="CARD">Tarjeta</option>
-            <option value="TRANSFER">Transferencia</option>
-          </select>
-        </label>
-        {method === 'CASH' && !cashOpen && (
-          <p className="rounded-xl bg-warning/10 p-3 text-sm text-warning">
-            La caja está cerrada: ábrela antes de cobrar en efectivo.
-          </p>
-        )}
-        {error && (
-          <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
-            {error}
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button disabled={busy || (method === 'CASH' && !cashOpen)}>
-            {busy ? 'Cobrando…' : `Cobrar ${money(ticket.total)}`}
-          </Button>
-        </div>
-      </form>
+      ))}
     </div>
   );
 }

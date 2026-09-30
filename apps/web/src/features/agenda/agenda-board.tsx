@@ -4,11 +4,24 @@ import { Can, useAccess } from '@/components/session-access';
 import { sessionFetch } from '@/lib/session-fetch';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Plus, TriangleAlert, X } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Scissors,
+  TriangleAlert,
+  UserCheck,
+  X,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { loadOptions } from '@/lib/pagination';
+import { RegisterServiceDialog } from '@/features/service-tickets/register-service-dialog';
+import { STATUS_LABEL, type ServiceTicket } from '@/features/service-tickets/types';
+import { PendingRegisterBanner } from '@/features/stylist-day/pending-register-banner';
+import { MY_DAY_KEY } from '@/features/stylist-day/use-my-day';
+import { loadOptions, loadPage } from '@/lib/pagination';
 import type { AgendaClient, Appointment, Service, Stylist } from './types';
 
 type View = 'day' | 'week' | 'month';
@@ -38,7 +51,9 @@ export function AgendaBoard({
   const [anchor, setAnchor] = useState(startOfDay(new Date()));
   const [creating, setCreating] = useState(initialCreating);
   const [selected, setSelected] = useState<Appointment | null>(null);
+  const [registering, setRegistering] = useState<Appointment | null>(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const queryClient = useQueryClient();
   const days = useMemo(() => {
     if (view === 'day') return [anchor];
@@ -165,6 +180,12 @@ export function AgendaBoard({
           )}
         </div>
       </div>
+      <PendingRegisterBanner />
+      {notice && (
+        <p role="status" className="rounded-xl bg-success/10 p-3 text-sm text-success">
+          {notice}
+        </p>
+      )}
       {appointments.isPending && <p role="status">Cargando agenda…</p>}
       {(appointments.error || clients.error || services.error || stylists.error) && (
         <p role="alert">
@@ -261,7 +282,7 @@ export function AgendaBoard({
                           })}
                         </p>
                         <p className="mt-1 truncate font-semibold">
-                          {clientMap.get(a.clientId) ?? 'Clienta'}
+                          {a.clientName ?? clientMap.get(a.clientId) ?? 'Clienta'}
                         </p>
                         <p className="truncate text-muted-foreground">
                           {stylist?.displayName ?? 'Estilista'}
@@ -291,11 +312,41 @@ export function AgendaBoard({
       {selected && (
         <AppointmentActions
           appointment={selected}
+          clientName={selected.clientName ?? clientMap.get(selected.clientId) ?? 'Clienta'}
           stylists={stylists.data ?? []}
           onClose={() => setSelected(null)}
+          onRegister={() => {
+            setRegistering(selected);
+            setSelected(null);
+          }}
           onSaved={async () => {
             setSelected(null);
             await queryClient.invalidateQueries({ queryKey: ['agenda'] });
+          }}
+        />
+      )}
+      {registering && (
+        <RegisterServiceDialog
+          appointment={registering}
+          // Quien puede registrar por otras lo hace a nombre de la profesional de la cita:
+          // la comanda y la comisión son de ella, no de quien teclea.
+          onBehalfOf={
+            can('service-tickets.create')
+              ? {
+                  stylistId: registering.stylistId,
+                  name: stylistMap.get(registering.stylistId)?.displayName ?? 'la profesional',
+                }
+              : undefined
+          }
+          onClose={() => setRegistering(null)}
+          onDone={async (ticket) => {
+            setRegistering(null);
+            setNotice(`Enviado a caja: ${ticket.clientName}. La cita queda completada.`);
+            await Promise.all(
+              [['agenda'], ['agenda-tickets'], MY_DAY_KEY, ['service-tickets-pending-count']].map(
+                (queryKey) => queryClient.invalidateQueries({ queryKey }),
+              ),
+            );
           }}
         />
       )}
@@ -303,31 +354,66 @@ export function AgendaBoard({
   );
 }
 
+const dayBounds = (iso: string) => {
+  const date = new Date(iso);
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return `from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(end.toISOString())}`;
+};
+
 function AppointmentActions({
   appointment,
+  clientName,
   stylists,
   onClose,
+  onRegister,
   onSaved,
 }: {
   appointment: Appointment;
+  clientName: string;
   stylists: Stylist[];
   onClose: () => void;
+  onRegister: () => void;
   onSaved: () => void;
 }) {
+  const { can } = useAccess();
   const [stylistId, setStylistId] = useState(appointment.stylistId);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const isCancelled = appointment.status === 'CANCELLED';
-  async function act(action: 'reschedule' | 'cancel') {
+  const canRegister = can('service-tickets.create') || can('service-tickets.create.own');
+  const canStart = can('appointments.update') || can('appointments.update.own');
+  // ¿Ya se envió a caja? Se mira en las comandas del día de la cita.
+  const tickets = useQuery({
+    queryKey: ['agenda-tickets', dayBounds(appointment.startsAt)],
+    enabled: can('service-tickets.read') || can('service-tickets.read.own'),
+    queryFn: ({ signal }) =>
+      loadPage<ServiceTicket>(
+        `/api/service-tickets?limit=100&${dayBounds(appointment.startsAt)}`,
+        signal,
+      ).then((page) => page.data),
+  });
+  const ticket = tickets.data?.find(
+    (item) => item.appointmentId === appointment.id && item.status !== 'CANCELLED',
+  );
+  const attendable = !isCancelled && appointment.status !== 'NO_SHOW';
+  async function act(action: 'reschedule' | 'cancel' | 'start') {
     setBusy(true);
     setError('');
     const response = await sessionFetch(
-      `/api/agenda/${appointment.id}${action === 'cancel' ? '?action=cancel' : ''}`,
+      `/api/agenda/${appointment.id}${action === 'reschedule' ? '' : `?action=${action}`}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(action === 'cancel' ? { reason: reason || undefined } : { stylistId }),
+        body: JSON.stringify(
+          action === 'cancel'
+            ? { reason: reason || undefined }
+            : action === 'start'
+              ? {}
+              : { stylistId },
+        ),
       },
     );
     setBusy(false);
@@ -350,31 +436,71 @@ function AppointmentActions({
     >
       <div className="w-full max-w-md space-y-5 rounded-2xl bg-card p-6">
         <div className="flex items-center justify-between">
-          <h2 id="appointment-actions-title" className="font-display text-2xl font-semibold">
-            Gestionar cita
-          </h2>
+          <div className="min-w-0">
+            <h2 id="appointment-actions-title" className="font-display text-2xl font-semibold">
+              {clientName}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {new Date(appointment.startsAt).toLocaleString('es-GT', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
+          </div>
           <button onClick={onClose} aria-label="Cerrar">
             <X />
           </button>
         </div>
-        <label className="block text-sm font-semibold">
-          Cambiar estilista
-          <select
-            aria-label="Cambiar estilista"
-            value={stylistId}
-            onChange={(e) => setStylistId(e.target.value)}
-            className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
-          >
-            {stylists
-              .filter((x) => x.isBookable)
-              .map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.displayName}
-                </option>
-              ))}
-          </select>
-        </label>
+        {attendable && canRegister && (
+          <div className="space-y-2">
+            {ticket ? (
+              <p className="flex items-center gap-2 rounded-xl bg-success/10 p-3 text-sm font-medium text-success">
+                <CheckCircle2 size={16} />
+                Enviado a caja · {STATUS_LABEL[ticket.status]}
+              </p>
+            ) : (
+              <Button className="h-12 w-full" disabled={busy} onClick={onRegister}>
+                <Scissors size={17} />
+                Registrar lo realizado
+              </Button>
+            )}
+            {!ticket &&
+              canStart &&
+              (appointment.status === 'SCHEDULED' || appointment.status === 'CONFIRMED') && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={busy}
+                  onClick={() => act('start')}
+                >
+                  <UserCheck size={17} />
+                  Llegó: iniciar atención
+                </Button>
+              )}
+          </div>
+        )}
+        {/* Cada bloque entero va tras su permiso: un selector sin botón no sirve a nadie. */}
         <Can permission="appointments.update">
+          <label className="block text-sm font-semibold">
+            Cambiar estilista
+            <select
+              aria-label="Cambiar estilista"
+              value={stylistId}
+              onChange={(e) => setStylistId(e.target.value)}
+              className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
+            >
+              {stylists
+                .filter((x) => x.isBookable)
+                .map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.displayName}
+                  </option>
+                ))}
+            </select>
+          </label>
           <Button
             className="w-full"
             disabled={busy || stylistId === appointment.stylistId}
@@ -383,16 +509,16 @@ function AppointmentActions({
             Guardar estilista
           </Button>
         </Can>
-        <div className="border-t pt-5">
-          <label className="block text-sm font-semibold">
-            Motivo de cancelación
-            <input
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
-            />
-          </label>
-          <Can permission="appointments.cancel">
+        <Can permission="appointments.cancel">
+          <div className="border-t pt-5">
+            <label className="block text-sm font-semibold">
+              Motivo de cancelación
+              <input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
+              />
+            </label>
             <Button
               variant="outline"
               className="mt-3 w-full text-danger"
@@ -401,8 +527,8 @@ function AppointmentActions({
             >
               {isCancelled ? 'Cita ya cancelada' : 'Cancelar cita'}
             </Button>
-          </Can>
-        </div>
+          </div>
+        </Can>
         {error && (
           <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
             {error}

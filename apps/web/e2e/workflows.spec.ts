@@ -174,13 +174,15 @@ test('cancela una cita y cambia de estilista', async ({ page }) => {
   await authenticated(page);
   await mockAgenda(page, (url, body) => writes.push({ url, body }));
   await page.goto('/agenda');
-  await page.getByText('Ana Prueba').click();
+  // La tarjeta de la cita, no el título del diálogo, que ahora también lleva el nombre.
+  const cita = page.getByRole('button', { name: /Ana Prueba/ });
+  await cita.click();
   await page.getByLabel('Cambiar estilista').selectOption(stylists[1].id);
   await page.getByRole('button', { name: 'Guardar estilista' }).click();
   await expect
     .poll(() => writes.some((x) => (x.body as { stylistId?: string }).stylistId === stylists[1].id))
     .toBeTruthy();
-  await page.getByText('Ana Prueba').click();
+  await cita.click();
   await page.getByLabel('Motivo de cancelación').fill('Solicitud de la clienta');
   await page.getByRole('button', { name: 'Cancelar cita' }).click();
   await expect.poll(() => writes.some((x) => x.url.includes('action=cancel'))).toBeTruthy();
@@ -188,63 +190,58 @@ test('cancela una cita y cambia de estilista', async ({ page }) => {
 
 test('vende un producto en quetzales', async ({ page }) => {
   await authenticated(page);
-  let chargedAmount = 0;
-  await page.route('**/api/inventory?resource=products**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        data: [
-          {
-            id: 'product-1',
-            name: 'Champú',
-            price: '10.04',
-            taxRate: 12,
-            currency: 'GTQ',
-            stockOnHand: '10.000',
-          },
-          {
-            id: 'product-2',
-            name: 'Tinte',
-            price: '10.04',
-            taxRate: 12,
-            currency: 'GTQ',
-            stockOnHand: '10.000',
-          },
-        ],
-      }),
-    }),
-  );
-  await page.route('**/api/agenda?resource=services**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ data: [] }),
-    }),
-  );
-  await page.route('**/api/agenda?resource=clients**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ data: [client] }),
-    }),
+  let sale: { payments: Array<{ method: string; amount: number }> } | null = null;
+  const products = [
+    {
+      id: 'product-1',
+      name: 'Champú',
+      price: '10.04',
+      taxRate: 12,
+      stockOnHand: '10.000',
+      trackStock: true,
+    },
+    {
+      id: 'product-2',
+      name: 'Tinte',
+      price: '10.04',
+      taxRate: 12,
+      stockOnHand: '10.000',
+      trackStock: true,
+    },
+  ];
+  // La búsqueda se hace en el servidor: el doble filtra por nombre como lo haría la API.
+  await page.route('**/api/inventory?resource=products**', (route) => {
+    const search = new URL(route.request().url()).searchParams.get('search') ?? '';
+    return route.fulfill({
+      json: { data: products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())) },
+    });
+  });
+  await page.route('**/api/agenda?resource=**', (route) => route.fulfill({ json: { data: [] } }));
+  await page.route('**/api/stylists/me', (route) => route.fulfill({ json: { data: null } }));
+  await page.route('**/api/service-tickets?**', (route) => route.fulfill({ json: { data: [] } }));
+  await page.route('**/api/cash?resource=current', (route) =>
+    route.fulfill({ json: { data: { id: 'cash-1', status: 'OPEN' } } }),
   );
   await page.route('**/api/sales', (route) => {
-    chargedAmount = (route.request().postDataJSON() as { payments: Array<{ amount: number }> })
-      .payments[0].amount;
+    sale = route.request().postDataJSON();
     return route.fulfill({
       status: 201,
-      contentType: 'application/json',
-      body: JSON.stringify({ data: { number: 'F-2026-000001' } }),
+      json: { data: { number: 'F-2026-000001', total: '22.48' } },
     });
   });
   await page.goto('/ventas');
-  await page.getByRole('button', { name: /Champú/ }).click();
-  await page.getByRole('button', { name: /Tinte/ }).click();
-  await expect(page.getByText(/Q\s*22\.48/)).toBeVisible();
-  await page.getByRole('button', { name: 'Cobrar 22.48' }).click();
-  expect(chargedAmount).toBe(22.48);
+  const search = page.getByRole('combobox', { name: 'Buscar servicio o producto' });
+  await search.fill('Champú');
+  await search.press('Enter');
+  await search.fill('Tinte');
+  await search.press('Enter');
+  await expect(page.getByRole('button', { name: /Cobrar Q\s*22\.48/ })).toBeVisible();
+  await page.keyboard.press('F2');
+  await page.getByLabel('Efectivo recibido').fill('50');
+  await expect(page.getByText(/Q\s*27\.52/)).toBeVisible();
+  await page.getByLabel('Efectivo recibido').press('Enter');
   await expect(page.getByText('Venta F-2026-000001 completada')).toBeVisible();
+  expect(sale!.payments).toEqual([{ method: 'CASH', amount: 22.48 }]);
 });
 
 test('abre y cierra la caja', async ({ page }) => {
@@ -284,6 +281,12 @@ test('abre y cierra la caja', async ({ page }) => {
       }),
     });
   });
+  // Caja también lista los servicios por cobrar y los usuarios de la auditoría. Sin dobles,
+  // esas llamadas salen a la API real si hay una en marcha, y su 401 cierra la sesión.
+  await page.route('**/api/service-tickets?**', (route) => route.fulfill({ json: { data: [] } }));
+  await page.route('**/api/admin?resource=users**', (route) =>
+    route.fulfill({ json: { data: [] } }),
+  );
   await page.goto('/caja');
   await page.getByRole('button', { name: 'Abrir caja' }).click();
   await page.getByLabel('Monto').fill('100');

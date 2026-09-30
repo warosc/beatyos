@@ -39,6 +39,11 @@ describe('cambios sobre una cita', () => {
     expect(calledUrl().pathname).toMatch(/\/appointments\/a1\/cancel$/);
   });
 
+  it('marca el inicio de la atención', async () => {
+    await patch('a1', 'action=start');
+    expect(calledUrl().pathname).toMatch(/\/appointments\/a1\/start$/);
+  });
+
   it.each(['', 'action=reschedule', 'action=delete'])(
     'reprograma en cualquier otro caso (%s)',
     async (query) => {

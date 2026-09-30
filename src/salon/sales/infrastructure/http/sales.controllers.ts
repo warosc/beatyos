@@ -24,12 +24,14 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { InvoiceStatus, PaymentMethod } from '@prisma/client';
 
 import { PERMISSIONS } from '../../../../core/permissions/domain/permission-catalog';
 import type { AccessTokenClaims } from '../../../../shared/application/ports';
+import { WILDCARD_PERMISSION } from '../../../../shared/domain/authorization';
 import { ForbiddenActionError } from '../../../../shared/domain/errors';
 import type { Env } from '../../../../shared/infrastructure/config/env.schema';
 import { CurrentUser, RequirePermissions } from '../../../../shared/infrastructure/http/decorators';
@@ -37,9 +39,16 @@ import {
   GetInvoiceUseCase,
   RegisterSaleUseCase,
   SearchInvoicesUseCase,
+  SummarizeSalesUseCase,
   VoidInvoiceUseCase,
 } from '../../application/sales.use-cases';
-import { InvoiceEnvelopeResponse, InvoicePageResponse, toInvoiceResponse } from './sales.response';
+import {
+  InvoiceEnvelopeResponse,
+  InvoicePageResponse,
+  SalesSummaryEnvelopeResponse,
+  toInvoiceResponse,
+  toSalesSummaryResponse,
+} from './sales.response';
 
 /**
  * Adaptador HTTP de ventas.
@@ -111,6 +120,7 @@ export class CreateSaleDto {
 export class VoidInvoiceDto {
   @ApiProperty({ example: 'Cobrada por error a la clienta equivocada' })
   @IsString()
+  @MinLength(3)
   @MaxLength(250)
   reason!: string;
 }
@@ -124,6 +134,11 @@ export class InvoiceQueryDto {
   @IsOptional()
   @IsEnum(InvoiceStatus)
   status?: InvoiceStatus;
+
+  @ApiPropertyOptional({ enum: PaymentMethod, description: 'Cobradas con este método' })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  method?: PaymentMethod;
 
   @ApiPropertyOptional() @IsOptional() @IsISO8601() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsISO8601() to?: string;
@@ -144,6 +159,11 @@ export class InvoiceQueryDto {
   limit?: number;
 }
 
+export class SalesSummaryQueryDto {
+  @ApiProperty({ example: '2026-09-29T06:00:00.000Z' }) @IsISO8601() from!: string;
+  @ApiProperty({ example: '2026-09-30T05:59:59.999Z' }) @IsISO8601() to!: string;
+}
+
 // ---------------------------------------------------------------------------
 
 @ApiTags('Ventas y facturación')
@@ -156,6 +176,7 @@ export class SalesController {
     private readonly getInvoice: GetInvoiceUseCase,
     private readonly registerSale: RegisterSaleUseCase,
     private readonly voidInvoice: VoidInvoiceUseCase,
+    private readonly summarizeSales: SummarizeSalesUseCase,
     config: ConfigService<Env, true>,
   ) {
     this.currency = config.get('DEFAULT_CURRENCY', { infer: true });
@@ -166,19 +187,45 @@ export class SalesController {
   @ApiOperation({ operationId: 'sales_list', summary: 'Buscar facturas' })
   @ApiOkResponse({ type: InvoicePageResponse })
   async list(@Query() query: InvoiceQueryDto) {
-    const page = await this.searchInvoices.execute({
+    const { page, payments, names } = await this.searchInvoices.execute({
       filter: {
         search: query.search,
         clientId: query.clientId,
         stylistId: query.stylistId,
         status: query.status,
+        method: query.method,
         from: query.from ? new Date(query.from) : undefined,
         to: query.to ? new Date(query.to) : undefined,
       },
       page: { page: query.page ?? 1, limit: query.limit ?? 100 },
     });
 
-    return { data: page.data.map((invoice) => toInvoiceResponse(invoice)), meta: page.meta };
+    return {
+      data: page.data.map((invoice) =>
+        toInvoiceResponse(
+          invoice,
+          payments.filter((payment) => payment.invoiceId === invoice.id),
+          names,
+        ),
+      ),
+      meta: page.meta,
+    };
+  }
+
+  // Antes de `:id`: si no, «summary» se tomaría por un identificador.
+  @Get('summary')
+  @RequirePermissions(PERMISSIONS.invoices.read)
+  @ApiOperation({
+    operationId: 'sales_summary',
+    summary: 'Cuadre de un periodo: lo facturado y, por método, lo cobrado y lo devuelto',
+  })
+  @ApiOkResponse({ type: SalesSummaryEnvelopeResponse })
+  async summary(@Query() query: SalesSummaryQueryDto) {
+    const summary = await this.summarizeSales.execute({
+      from: new Date(query.from),
+      to: new Date(query.to),
+    });
+    return toSalesSummaryResponse(summary, this.currency);
   }
 
   @Get(':id')
@@ -186,8 +233,8 @@ export class SalesController {
   @ApiOperation({ operationId: 'sales_get', summary: 'Consultar una factura, con sus cobros' })
   @ApiOkResponse({ type: InvoiceEnvelopeResponse })
   async detail(@Param('id', ParseUUIDPipe) id: string) {
-    const { invoice, payments } = await this.getInvoice.execute({ invoiceId: id });
-    return toInvoiceResponse(invoice, payments);
+    const { invoice, payments, names } = await this.getInvoice.execute({ invoiceId: id });
+    return toInvoiceResponse(invoice, payments, names);
   }
 
   @Post()
@@ -195,9 +242,12 @@ export class SalesController {
   @ApiOperation({
     operationId: 'sales_create',
     summary: 'Registra una venta: emite la factura, cobra y descuenta existencias por FEFO',
+    description: 'Si alguna línea lleva descuento, exige además el permiso invoices.discount.',
   })
   @ApiCreatedResponse({ type: InvoiceEnvelopeResponse })
   async create(@Body() dto: CreateSaleDto, @CurrentUser() user: AccessTokenClaims) {
+    assertMayDiscount(dto, user);
+
     const { invoice, payments } = await this.registerSale.execute({
       tenantId: requireTenant(user),
       currency: this.currency,
@@ -228,7 +278,11 @@ export class SalesController {
   @RequirePermissions(PERMISSIONS.invoices.void)
   @ApiOperation({
     operationId: 'sales_void',
-    summary: 'Anula una factura. Exige que no tenga cobros',
+    summary: 'Anula una venta devolviendo sus cobros y su género (ADR-0020)',
+    description:
+      'El efectivo sale de la caja abierta: sin caja abierta no se anula una venta cobrada en ' +
+      'efectivo. Los cobros con tarjeta o transferencia quedan devueltos y se reembolsan por su ' +
+      'medio. El stock vuelve a los mismos lotes.',
   })
   @ApiCreatedResponse({ type: InvoiceEnvelopeResponse })
   async void(
@@ -236,17 +290,38 @@ export class SalesController {
     @Body() dto: VoidInvoiceDto,
     @CurrentUser() user: AccessTokenClaims,
   ) {
-    const invoice = await this.voidInvoice.execute({
+    const { invoice, payments } = await this.voidInvoice.execute({
       invoiceId: id,
       reason: dto.reason,
       actorId: user.sub,
     });
 
-    return toInvoiceResponse(invoice);
+    return toInvoiceResponse(invoice, payments);
   }
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Un descuento exige `invoices.discount` además de poder facturar.
+ *
+ * Es un permiso condicionado al cuerpo —la misma venta sin descuento es legítima para
+ * recepción—, así que no cabe en `@RequirePermissions`, que solo mira la ruta.
+ */
+const assertMayDiscount = (dto: CreateSaleDto, user: AccessTokenClaims): void => {
+  const discounts = dto.lines.some((line) => (line.discountAmount ?? 0) > 0);
+  if (!discounts) return;
+
+  const allowed =
+    user.permissions.includes(WILDCARD_PERMISSION) ||
+    user.permissions.includes(PERMISSIONS.invoices.discount);
+  if (!allowed) {
+    throw new ForbiddenActionError(
+      PERMISSIONS.invoices.discount,
+      'Solo la encargada o la propietaria pueden aplicar descuentos',
+    );
+  }
+};
 
 const requireTenant = (user: AccessTokenClaims): string => {
   if (!user.tenantId) {

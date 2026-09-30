@@ -1,3 +1,5 @@
+import { sessionFetch } from '@/lib/session-fetch';
+
 export type ServiceTicketStatus = 'PENDING' | 'CHARGED' | 'CANCELLED';
 
 export interface ServiceTicket {
@@ -41,8 +43,17 @@ export const STATUS_LABEL: Record<ServiceTicketStatus, string> = {
   CANCELLED: 'Anulado',
 };
 
-export const money = (amount: string | number) =>
-  new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(Number(amount));
+export { money } from '@/lib/utils';
+
+export const PENDING_COUNT_KEY = ['service-tickets-pending-count'] as const;
+
+/** Cuántos servicios esperan cobro. Lo consultan el menú (aviso en Caja) y Ventas. */
+export async function fetchPendingCount(): Promise<number> {
+  const r = await sessionFetch('/api/service-tickets?status=PENDING&limit=1');
+  if (!r.ok) return 0;
+  const b = (await r.json()) as { meta?: { total: number } };
+  return b.meta?.total ?? 0;
+}
 
 export async function problem(response: Response, fallback: string) {
   const body = (await response.json().catch(() => ({}))) as {

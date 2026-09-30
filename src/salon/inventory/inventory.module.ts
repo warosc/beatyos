@@ -10,6 +10,7 @@ import {
   GetStockAlertsUseCase,
   ReceiveStockUseCase,
   RestoreProductUseCase,
+  ReturnSaleStockUseCase,
   SearchBatchesUseCase,
   SearchProductsUseCase,
   UpdateProductUseCase,
@@ -51,6 +52,7 @@ import {
     RestoreProductUseCase,
     ReceiveStockUseCase,
     ConsumeStockUseCase,
+    ReturnSaleStockUseCase,
     AdjustStockUseCase,
     GetKardexUseCase,
     SearchBatchesUseCase,
@@ -67,6 +69,7 @@ import {
     // de uso, no el repositorio de lotes: reimplementar el reparto en el modulo de ventas
     // seria tener dos motores de inventario que divergen (ADR-0002).
     ConsumeStockUseCase,
+    ReturnSaleStockUseCase,
     ReceiveStockUseCase,
   ],
 })

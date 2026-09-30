@@ -128,6 +128,24 @@ export interface paths {
         patch: operations["roles_update"];
         trace?: never;
     };
+    "/api/v1/tenant/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Datos del salón para comprobantes */
+        get: operations["tenant_profile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Modificar los datos del salón */
+        patch: operations["tenant_profile_update"];
+        trace?: never;
+    };
     "/api/v1/auth/forgot-password": {
         parameters: {
             query?: never;
@@ -1130,8 +1148,28 @@ export interface paths {
         /** Buscar facturas */
         get: operations["sales_list"];
         put?: never;
-        /** Registra una venta: emite la factura, cobra y descuenta existencias por FEFO */
+        /**
+         * Registra una venta: emite la factura, cobra y descuenta existencias por FEFO
+         * @description Si alguna línea lleva descuento, exige además el permiso invoices.discount.
+         */
         post: operations["sales_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sales/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cuadre de un periodo: lo facturado y, por método, lo cobrado y lo devuelto */
+        get: operations["sales_summary"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1164,7 +1202,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Anula una factura. Exige que no tenga cobros */
+        /**
+         * Anula una venta devolviendo sus cobros y su género (ADR-0020)
+         * @description El efectivo sale de la caja abierta: sin caja abierta no se anula una venta cobrada en efectivo. Los cobros con tarjeta o transferencia quedan devueltos y se reembolsan por su medio. El stock vuelve a los mismos lotes.
+         */
         post: operations["sales_void"];
         delete?: never;
         options?: never;
@@ -1628,6 +1669,37 @@ export interface components {
             data: components["schemas"]["RoleResponse"];
         };
         UpdateRoleDto: Record<string, never>;
+        TenantProfileResponse: {
+            legalName: string | null;
+            /** @description NIT */
+            taxId: string | null;
+            addressLine: string | null;
+            city: string | null;
+            phone: string | null;
+            /** @enum {string} */
+            brandTheme: "terracota" | "menta-rosa" | "rosa-menta" | "lavanda";
+            receiptNote: string | null;
+        };
+        TenantProfileEnvelopeResponse: {
+            data: components["schemas"]["TenantProfileResponse"];
+        };
+        UpdateTenantProfileDto: {
+            name?: string;
+            legalName?: string;
+            /** @description NIT */
+            taxId?: string;
+            addressLine?: string;
+            city?: string;
+            phone?: string;
+            email?: string;
+            /**
+             * @description Combinación de colores del salón
+             * @enum {string}
+             */
+            brandTheme?: "terracota" | "menta-rosa" | "rosa-menta" | "lavanda";
+            /** @description Línea libre al pie de los comprobantes */
+            receiptNote?: string;
+        };
         ForgotPasswordDto: {
             /**
              * Format: email
@@ -2287,6 +2359,8 @@ export interface components {
             id: string;
             /** Format: uuid */
             clientId: string;
+            /** @description Nombre de la clienta */
+            clientName: string | null;
             /** Format: uuid */
             stylistId: string;
             /** Format: date-time */
@@ -2684,6 +2758,7 @@ export interface components {
             data: components["schemas"]["AdjustStockResponse"];
         };
         InvoiceLineResponse: {
+            stylistName: string | null;
             id: string;
             kind: string;
             productId: string | null;
@@ -2700,6 +2775,9 @@ export interface components {
             commissionAmount: string;
         };
         PaymentResponse: {
+            /** Format: date-time */
+            refundedAt: string | null;
+            refundReason: string | null;
             id: string;
             method: string;
             status: string;
@@ -2711,6 +2789,9 @@ export interface components {
             receivedAt: string;
         };
         InvoiceResponse: {
+            clientName: string | null;
+            /** @description Quién registró la venta: la cajera que la cobró. */
+            createdByName: string | null;
             lines: components["schemas"]["InvoiceLineResponse"][];
             payments?: components["schemas"]["PaymentResponse"][];
             id: string;
@@ -2740,6 +2821,24 @@ export interface components {
         InvoicePageResponse: {
             data: components["schemas"]["InvoiceResponse"][];
             meta: components["schemas"]["PageMetaResponse"];
+        };
+        PaymentMethodTotalsResponse: {
+            method: string;
+            received: string;
+            refunded: string;
+            /** @description Cobrado menos devuelto: lo que debe haber quedado por ese medio. */
+            net: string;
+        };
+        SalesSummaryResponse: {
+            byMethod: components["schemas"]["PaymentMethodTotalsResponse"][];
+            count: number;
+            total: string;
+            discountTotal: string;
+            voidCount: number;
+            currency: string;
+        };
+        SalesSummaryEnvelopeResponse: {
+            data: components["schemas"]["SalesSummaryResponse"];
         };
         InvoiceEnvelopeResponse: {
             data: components["schemas"]["InvoiceResponse"];
@@ -3598,6 +3697,69 @@ export interface operations {
                 content?: never;
             };
             /** @description Requiere el permiso: roles.update */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    tenant_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantProfileEnvelopeResponse"];
+                };
+            };
+            /** @description Token ausente, invalido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    tenant_profile_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTenantProfileDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantProfileEnvelopeResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: settings.update */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5794,6 +5956,10 @@ export interface operations {
                 /** @description Semáforo de existencias */
                 stock?: "available" | "low" | "out";
                 categoryId?: string;
+                /** @description Solo activos (true) o solo dados de baja (false) */
+                isActive?: boolean;
+                /** @description Solo los que se venden a clientas */
+                isRetail?: boolean;
                 page?: number;
                 limit?: number;
             };
@@ -6241,6 +6407,8 @@ export interface operations {
                 clientId?: string;
                 stylistId?: string;
                 status?: "DRAFT" | "ISSUED" | "PARTIALLY_PAID" | "PAID" | "OVERDUE" | "VOID";
+                /** @description Cobradas con este método */
+                method?: "CASH" | "CARD" | "TRANSFER" | "BIZUM" | "GIFT_CARD" | "VOUCHER" | "OTHER";
                 from?: string;
                 to?: string;
                 page?: number;
@@ -6305,6 +6473,42 @@ export interface operations {
                 content?: never;
             };
             /** @description Requiere el permiso: invoices.create + payments.create */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    sales_summary: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SalesSummaryEnvelopeResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: invoices.read */
             403: {
                 headers: {
                     [name: string]: unknown;

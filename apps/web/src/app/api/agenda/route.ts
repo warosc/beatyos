@@ -7,6 +7,7 @@ const resources = {
   stylists: 'stylists',
   services: 'services',
   clients: 'clients',
+  categories: 'categories',
   availability: 'appointments/availability',
 } as const;
 

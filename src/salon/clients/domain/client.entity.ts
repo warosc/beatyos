@@ -366,6 +366,27 @@ export class Client extends AggregateRoot {
     };
   }
 
+  /**
+   * Deshace la visita de una venta anulada (ADR-0020).
+   *
+   * No baja de cero aunque los datos vengan de antes de que existieran estas métricas.
+   * `lastVisitAt` no retrocede: la fecha anterior no se guarda, y una fecha inventada sería
+   * peor que una que se queda un poco adelantada.
+   */
+  revertVisit(amount: Money, now: Date): void {
+    if (amount.isNegative()) {
+      throw new DomainValidationError('El importe de una visita no puede ser negativo', 'amount');
+    }
+
+    const spent = this.props.totalSpent.subtract(amount);
+    this.props = {
+      ...this.props,
+      totalVisits: Math.max(0, this.props.totalVisits - 1),
+      totalSpent: spent.isNegative() ? Money.zero(spent.currency) : spent,
+      audit: { ...this.props.audit, updatedAt: now },
+    };
+  }
+
   addLoyaltyPoints(points: number, now: Date): void {
     if (!Number.isInteger(points)) {
       throw new DomainValidationError('Los puntos deben ser un número entero', 'points');

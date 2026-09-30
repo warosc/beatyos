@@ -127,6 +127,7 @@ export const PERMISSION_DEFINITIONS: readonly PermissionDefinition[] = [
   define('invoices', 'update', 'Modificar facturas en borrador'),
   define('invoices', 'issue', 'Emitir facturas'),
   define('invoices', 'void', 'Anular facturas emitidas'),
+  define('invoices', 'discount', 'Aplicar descuentos al cobrar'),
 
   define('payments', 'read', 'Ver cobros'),
   define('payments', 'create', 'Registrar cobros'),
@@ -259,6 +260,7 @@ export const PERMISSIONS = {
     update: 'invoices.update',
     issue: 'invoices.issue',
     void: 'invoices.void',
+    discount: 'invoices.discount',
   },
   payments: { read: 'payments.read', create: 'payments.create', refund: 'payments.refund' },
   cash: {
@@ -325,12 +327,17 @@ const withoutPlatformScope = (codes: readonly string[]) => codes;
  * - La estilista solo tiene los permisos `.own`: su agenda, no la de sus compañeras. En
  *   un sector con mucha rotación y clientela que se lleva quien se va, la lista completa
  *   de clientes es el activo del salón.
- * - La estilista **declara** lo que ha hecho (`service-tickets.create.own`) pero no lo cobra
- *   desde la comanda: cobrar exige `service-tickets.read`, que es de caja. Quien hace el
- *   servicio y quien recibe el dinero son personas distintas, y ese reparto es el control.
+ * - La estilista **declara** lo que ha hecho (`service-tickets.create.own`) pero no cobra:
+ *   ni desde la comanda —exige `service-tickets.read`, que es de caja— ni desde el punto de
+ *   venta —no tiene `invoices.create` ni `payments.create`—. Quien hace el servicio y quien
+ *   recibe el dinero son personas distintas, y ese reparto es el control. Una profesional
+ *   que además atiende la caja recibe también el rol de recepción.
  * - La encargada compra y gestiona inventario, pero no puede **anular facturas emitidas**
  *   (`invoices.void`) ni tocar usuarios: son las dos palancas con las que se tapa un
  *   descuadre, y quedan en manos de la propiedad.
+ * - Recepción cobra a precio de lista: descontar (`invoices.discount`) es de la encargada y
+ *   de la propiedad. Un descuento es dinero que no entra, y quien lo concede debe poder
+ *   responder de él.
  */
 export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
   {
@@ -400,6 +407,7 @@ export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
       PERMISSIONS.invoices.create,
       PERMISSIONS.invoices.update,
       PERMISSIONS.invoices.issue,
+      PERMISSIONS.invoices.discount,
       PERMISSIONS.payments.read,
       PERMISSIONS.payments.create,
       PERMISSIONS.payments.refund,
@@ -463,8 +471,6 @@ export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
       PERMISSIONS.clients.read,
       PERMISSIONS.services.read,
       PERMISSIONS.products.read,
-      PERMISSIONS.invoices.create,
-      PERMISSIONS.payments.create,
       PERMISSIONS.goals.readOwn,
       PERMISSIONS.serviceTickets.readOwn,
       PERMISSIONS.serviceTickets.createOwn,

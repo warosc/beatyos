@@ -500,6 +500,77 @@
         ]
       }
     },
+    "/api/v1/tenant/profile": {
+      "get": {
+        "operationId": "tenant_profile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantProfileEnvelopeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, invalido o caducado"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Datos del salón para comprobantes",
+        "tags": [
+          "Salón"
+        ]
+      },
+      "patch": {
+        "operationId": "tenant_profile_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantProfileEnvelopeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: settings.update"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Modificar los datos del salón",
+        "tags": [
+          "Salón"
+        ]
+      }
+    },
     "/api/v1/auth/forgot-password": {
       "post": {
         "operationId": "Auth_forgotPassword",
@@ -2287,7 +2358,7 @@
             "required": false,
             "in": "query",
             "schema": {
-              "format": "uuid",
+              "maxLength": 64,
               "type": "string"
             }
           },
@@ -3640,8 +3711,26 @@
             "required": false,
             "in": "query",
             "schema": {
-              "format": "uuid",
+              "maxLength": 64,
               "type": "string"
+            }
+          },
+          {
+            "name": "isActive",
+            "required": false,
+            "in": "query",
+            "description": "Solo activos (true) o solo dados de baja (false)",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "isRetail",
+            "required": false,
+            "in": "query",
+            "description": "Solo los que se venden a clientas",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -4311,6 +4400,24 @@
             }
           },
           {
+            "name": "method",
+            "required": false,
+            "in": "query",
+            "description": "Cobradas con este método",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CASH",
+                "CARD",
+                "TRANSFER",
+                "BIZUM",
+                "GIFT_CARD",
+                "VOUCHER",
+                "OTHER"
+              ]
+            }
+          },
+          {
             "name": "from",
             "required": false,
             "in": "query",
@@ -4375,6 +4482,7 @@
         ]
       },
       "post": {
+        "description": "Si alguna línea lleva descuento, exige además el permiso invoices.discount.",
         "operationId": "sales_create",
         "parameters": [],
         "requestBody": {
@@ -4411,6 +4519,58 @@
           }
         ],
         "summary": "Registra una venta: emite la factura, cobra y descuenta existencias por FEFO",
+        "tags": [
+          "Ventas y facturación"
+        ]
+      }
+    },
+    "/api/v1/sales/summary": {
+      "get": {
+        "operationId": "sales_summary",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-29T06:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": "2026-09-30T05:59:59.999Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesSummaryEnvelopeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: invoices.read"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cuadre de un periodo: lo facturado y, por método, lo cobrado y lo devuelto",
         "tags": [
           "Ventas y facturación"
         ]
@@ -4460,6 +4620,7 @@
     },
     "/api/v1/sales/{id}/void": {
       "post": {
+        "description": "El efectivo sale de la caja abierta: sin caja abierta no se anula una venta cobrada en efectivo. Los cobros con tarjeta o transferencia quedan devueltos y se reembolsan por su medio. El stock vuelve a los mismos lotes.",
         "operationId": "sales_void",
         "parameters": [
           {
@@ -4504,7 +4665,7 @@
             "bearer": []
           }
         ],
-        "summary": "Anula una factura. Exige que no tenga cobros",
+        "summary": "Anula una venta devolviendo sus cobros y su género (ADR-0020)",
         "tags": [
           "Ventas y facturación"
         ]
@@ -6236,6 +6397,106 @@
         "type": "object",
         "properties": {}
       },
+      "TenantProfileResponse": {
+        "type": "object",
+        "properties": {
+          "legalName": {
+            "type": "string",
+            "nullable": true
+          },
+          "taxId": {
+            "type": "string",
+            "nullable": true,
+            "description": "NIT"
+          },
+          "addressLine": {
+            "type": "string",
+            "nullable": true
+          },
+          "city": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "brandTheme": {
+            "type": "string",
+            "enum": [
+              "terracota",
+              "menta-rosa",
+              "rosa-menta",
+              "lavanda"
+            ]
+          },
+          "receiptNote": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "legalName",
+          "taxId",
+          "addressLine",
+          "city",
+          "phone",
+          "brandTheme",
+          "receiptNote"
+        ]
+      },
+      "TenantProfileEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TenantProfileResponse"
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "UpdateTenantProfileDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "legalName": {
+            "type": "string"
+          },
+          "taxId": {
+            "type": "string",
+            "description": "NIT"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "brandTheme": {
+            "type": "string",
+            "enum": [
+              "terracota",
+              "menta-rosa",
+              "rosa-menta",
+              "lavanda"
+            ],
+            "description": "Combinación de colores del salón"
+          },
+          "receiptNote": {
+            "type": "string",
+            "description": "Línea libre al pie de los comprobantes"
+          }
+        }
+      },
       "ForgotPasswordDto": {
         "type": "object",
         "properties": {
@@ -7893,6 +8154,11 @@
             "type": "string",
             "format": "uuid"
           },
+          "clientName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre de la clienta"
+          },
           "stylistId": {
             "type": "string",
             "format": "uuid"
@@ -8001,6 +8267,7 @@
         "required": [
           "id",
           "clientId",
+          "clientName",
           "stylistId",
           "startsAt",
           "endsAt",
@@ -9207,6 +9474,10 @@
       "InvoiceLineResponse": {
         "type": "object",
         "properties": {
+          "stylistName": {
+            "type": "string",
+            "nullable": true
+          },
           "id": {
             "type": "string"
           },
@@ -9254,6 +9525,7 @@
           }
         },
         "required": [
+          "stylistName",
           "id",
           "kind",
           "productId",
@@ -9273,6 +9545,15 @@
       "PaymentResponse": {
         "type": "object",
         "properties": {
+          "refundedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "refundReason": {
+            "type": "string",
+            "nullable": true
+          },
           "id": {
             "type": "string"
           },
@@ -9301,6 +9582,8 @@
           }
         },
         "required": [
+          "refundedAt",
+          "refundReason",
           "id",
           "method",
           "status",
@@ -9314,6 +9597,15 @@
       "InvoiceResponse": {
         "type": "object",
         "properties": {
+          "clientName": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdByName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Quién registró la venta: la cajera que la cobró."
+          },
           "lines": {
             "type": "array",
             "items": {
@@ -9397,6 +9689,8 @@
           }
         },
         "required": [
+          "clientName",
+          "createdByName",
           "lines",
           "id",
           "number",
@@ -9435,6 +9729,75 @@
         "required": [
           "data",
           "meta"
+        ]
+      },
+      "PaymentMethodTotalsResponse": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string"
+          },
+          "received": {
+            "type": "string"
+          },
+          "refunded": {
+            "type": "string"
+          },
+          "net": {
+            "type": "string",
+            "description": "Cobrado menos devuelto: lo que debe haber quedado por ese medio."
+          }
+        },
+        "required": [
+          "method",
+          "received",
+          "refunded",
+          "net"
+        ]
+      },
+      "SalesSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "byMethod": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentMethodTotalsResponse"
+            }
+          },
+          "count": {
+            "type": "number"
+          },
+          "total": {
+            "type": "string"
+          },
+          "discountTotal": {
+            "type": "string"
+          },
+          "voidCount": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "byMethod",
+          "count",
+          "total",
+          "discountTotal",
+          "voidCount",
+          "currency"
+        ]
+      },
+      "SalesSummaryEnvelopeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SalesSummaryResponse"
+          }
+        },
+        "required": [
+          "data"
         ]
       },
       "InvoiceEnvelopeResponse": {

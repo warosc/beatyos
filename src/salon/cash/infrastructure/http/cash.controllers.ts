@@ -2,16 +2,7 @@ import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import {
-  IsEnum,
-  IsInt,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { CashMovementType } from '@prisma/client';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 
@@ -54,8 +45,13 @@ export class OpenCashDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) notes?: string;
 }
 
+// `REFUND` no se anota a mano: lo crea la anulación de una venta (ADR-0020).
+const MANUAL_MOVEMENT_TYPES = Object.values(CashMovementType).filter((type) => type !== 'REFUND');
+
 export class CashMovementDto {
-  @ApiProperty({ enum: CashMovementType }) @IsEnum(CashMovementType) type!: CashMovementType;
+  @ApiProperty({ enum: MANUAL_MOVEMENT_TYPES })
+  @IsIn(MANUAL_MOVEMENT_TYPES)
+  type!: Exclude<CashMovementType, 'REFUND'>;
 
   @ApiProperty({ example: 25.5, description: 'Siempre positivo; el sentido lo da el tipo' })
   @Type(() => Number)

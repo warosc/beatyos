@@ -83,3 +83,14 @@ una comanda no anulada por cita (índice único parcial), `CHARGED ⇒ invoiceId
   discrepen; el que tiene que sobrevivir a un cambio de tarifa es la factura.
 - **Anidar unidades de trabajo**: el puerto `UnitOfWork` no promete reentrada; el paso
   `withinTransaction` hace explícito qué corre dentro.
+
+## Actualización (2026-09-30): la profesional ya no cobra por ningún cauce
+
+La decisión 5 dejaba a la profesional sin poder cobrar una comanda, pero el rol `STYLIST`
+conservaba `invoices.create` y `payments.create` de antes de que existieran las comandas, así
+que seguía pudiendo cobrar desde el punto de venta. Era justo la mezcla que este ADR quería
+eliminar. Se le retiran ambos permisos: declara en «Mi día» o desde la cita, y cobra caja.
+Una profesional que además atiende el mostrador recibe también el rol de recepción.
+
+Recepción puede declarar **a nombre de** la profesional de una cita (`stylistId`, con
+`service-tickets.create`): la comanda y la comisión siguen siendo de quien hizo el trabajo.

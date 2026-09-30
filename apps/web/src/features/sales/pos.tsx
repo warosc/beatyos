@@ -1,275 +1,219 @@
 'use client';
-import { sessionFetch } from '@/lib/session-fetch';
-import { Can, useAccess } from '@/components/session-access';
-import { loadOptions } from '@/lib/pagination';
+import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Minus, Plus, Search, ShoppingBag, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-type Item = {
-  id: string;
-  name: string;
-  price: string;
-  priceWithTax?: string;
-  taxRate: number;
-  currency: string;
-  stockOnHand?: string;
-  kind: 'PRODUCT' | 'SERVICE';
-};
-type Client = { id: string; fullName: string };
-type Cart = { item: Item; quantity: number };
-type MyStylist = { id: string; displayName: string };
+import { BellRing } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { useAccess } from '@/components/session-access';
+import { CASH_KEY, fetchCurrentCash } from '@/features/cash/cash-api';
+import { fetchPendingCount, PENDING_COUNT_KEY, problem } from '@/features/service-tickets/types';
+import { loadOptions } from '@/lib/pagination';
+import { sessionFetch } from '@/lib/session-fetch';
+import { addItem, cartTotals, toCents, toSaleLines, type CartLine, type SaleItem } from './cart';
+import { CartPanel, type Notice } from './cart-panel';
+import { CatalogPanel, FREQUENT_KEY } from './catalog-panel';
+import type { PosClient } from './client-combobox';
+import { recordSale } from './frequent-items';
+import { PaymentDialog, type ConfirmPayments } from './payment-dialog';
+import { SaleComplete } from './sale-complete';
+import { SaleDialog } from './sale-dialog';
+import { SalesTabs } from './sales-tabs';
+import type { Sale } from './types';
+import type { PosStylist } from './stylist-select';
+import { usePosShortcuts } from './use-shortcuts';
 
-const lineTotal = (item: Item, quantity: number): number => {
-  const subtotalInCents = Math.round(Number(item.price) * 100 * quantity);
-  const taxInCents = Math.round((subtotalInCents * Number(item.taxRate)) / 100);
-  return (subtotalInCents + taxInCents) / 100;
+type Completed = {
+  sale: Sale;
+  totalCents: number;
+  changeCents: number;
+  tenderedCents: number;
 };
 
-const money = (amount: number) =>
-  new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(amount);
+/**
+ * Punto de venta.
+ *
+ * Aquí se cobra lo que llega al mostrador sin comanda: productos y servicios sueltos. Los
+ * servicios que registran las estilistas se cobran en Caja; esta pantalla solo avisa de que
+ * hay alguno esperando.
+ */
 export function Pos() {
-  const cache = useQueryClient();
+  const qc = useQueryClient();
   const { can } = useAccess();
-  const [cart, setCart] = useState<Cart[]>([]);
-  const [search, setSearch] = useState('');
-  const [client, setClient] = useState('');
-  const [method, setMethod] = useState('CARD');
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
-  const products = useQuery({
-    queryKey: ['pos-products'],
-    enabled: can('products.read'),
-    queryFn: async () =>
-      (await loadOptions<Omit<Item, 'kind'>>('/api/inventory?resource=products')).map((x) => ({
-        ...x,
-        kind: 'PRODUCT' as const,
-      })),
-  });
-  const services = useQuery({
-    queryKey: ['pos-services'],
-    enabled: can('services.read'),
-    queryFn: async () =>
-      (await loadOptions<Omit<Item, 'kind'>>('/api/agenda?resource=services&limit=100')).map(
-        (x) => ({
-          ...x,
-          kind: 'SERVICE' as const,
-        }),
-      ),
-  });
-  const clients = useQuery({
-    queryKey: ['pos-clients'],
-    enabled: can('clients.read'),
-    queryFn: () => loadOptions<Client>('/api/agenda?resource=clients&limit=100&sort=name:asc'),
-  });
-  // Si quien cobra es una estilista, sus líneas quedan atribuidas a sí misma desde ya: es lo
-  // que necesitará el informe de comisiones cuando exista, y no cuesta nada tenerlo ya bien.
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [lines, setLinesState] = useState<CartLine[]>([]);
+  // La cuenta más reciente, también entre dos renders: dos artículos agregados seguidos —o
+  // uno que llega de una búsqueda aún en curso— no deben pisarse con una copia vieja.
+  const latestLines = useRef<CartLine[]>([]);
+  const setLines = (next: CartLine[]) => {
+    latestLines.current = next;
+    setLinesState(next);
+  };
+  const [client, setClient] = useState<PosClient | null>(null);
+  // `undefined` mientras nadie lo ha elegido: entonces atiende quien cobra, si es estilista.
+  const [chosenStylist, setChosenStylist] = useState<string | null | undefined>(undefined);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [completed, setCompleted] = useState<Completed | null>(null);
+  const [printing, setPrinting] = useState(false);
+
+  const canCharge = can('invoices.create', 'payments.create');
+  const canChooseStylist = can('stylists.read');
+  const canReadCash = can('cash.read');
+
   const myStylist = useQuery({
     queryKey: ['my-stylist'],
     queryFn: async () => {
       const response = await sessionFetch('/api/stylists/me');
-      const body = (await response.json()) as { data: MyStylist | null };
+      const body = (await response.json()) as { data: PosStylist | null };
       return body.data;
     },
   });
-  const items = [...(products.data ?? []), ...(services.data ?? [])].filter((x) =>
-    x.name.toLowerCase().includes(search.toLowerCase()),
-  );
-  const total = useMemo(
-    () => cart.reduce((sum, line) => sum + lineTotal(line.item, line.quantity), 0),
-    [cart],
-  );
-  function add(item: Item) {
-    const available = item.kind === 'PRODUCT' ? Number(item.stockOnHand ?? 0) : Infinity;
-    setCart((c) => {
-      const old = c.find((x) => x.item.id === item.id);
-      if ((old?.quantity ?? 0) >= available) {
-        setNotice({ kind: 'error', text: `No hay más existencias disponibles de ${item.name}.` });
-        return c;
-      }
-      setNotice(null);
-      return old
-        ? c.map((x) => (x.item.id === item.id ? { ...x, quantity: x.quantity + 1 } : x))
-        : [...c, { item, quantity: 1 }];
-    });
+  const stylists = useQuery({
+    queryKey: ['pos-stylists'],
+    enabled: canChooseStylist,
+    staleTime: 5 * 60_000,
+    queryFn: ({ signal }) =>
+      loadOptions<PosStylist>('/api/agenda?resource=stylists&status=ACTIVE&sort=name:asc', signal),
+  });
+  const cash = useQuery({ queryKey: CASH_KEY, enabled: canReadCash, queryFn: fetchCurrentCash });
+  // La misma consulta que el aviso del menú: comparten caché y no se pide dos veces.
+  const pendingTickets = useQuery({
+    queryKey: PENDING_COUNT_KEY,
+    enabled: can('service-tickets.read'),
+    refetchInterval: 30_000,
+    queryFn: fetchPendingCount,
+  });
+
+  const cashOpen = canReadCash && cash.isSuccess ? cash.data != null : null;
+  // Una estilista sin permiso para ver al equipo cobra a su nombre, como hasta ahora.
+  const lineStylist = canChooseStylist
+    ? chosenStylist === undefined
+      ? (myStylist.data?.id ?? null)
+      : chosenStylist
+    : (myStylist.data?.id ?? null);
+
+  function add(item: SaleItem) {
+    const result = addItem(latestLines.current, item, lineStylist);
+    setLines(result.lines);
+    setNotice(result.error ? { kind: 'error', text: result.error } : null);
   }
-  async function charge() {
-    setBusy(true);
+
+  function openPayment() {
+    if (!canCharge || !lines.length || paying || completed) return;
     setNotice(null);
-    const r = await sessionFetch('/api/sales', {
+    setPaying(true);
+  }
+
+  usePosShortcuts({ onSearch: () => searchRef.current?.focus(), onCharge: openPayment });
+
+  const confirm: ConfirmPayments = async (payments, changeCents) => {
+    const response = await sessionFetch('/api/sales', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clientId: client || undefined,
-        lines: cart.map((x) => ({
-          kind: x.item.kind,
-          itemId: x.item.id,
-          quantity: x.quantity,
-          stylistId: myStylist.data?.id,
-        })),
-        payments: [{ method, amount: Number(total.toFixed(2)) }],
-      }),
+      body: JSON.stringify({ clientId: client?.id, lines: toSaleLines(lines), payments }),
     });
-    setBusy(false);
-    if (!r.ok) {
-      const b = (await r.json()) as {
-        detail?: string;
-        message?: string;
-        errors?: { message: string }[];
-      };
-      setNotice({
-        kind: 'error',
-        text:
-          b.errors?.map((error) => error.message).join('. ') ??
-          b.detail ??
-          b.message ??
-          'No pudimos procesar la venta.',
-      });
-      return;
-    }
-    const b = (await r.json()) as { data: { number: string } };
-    setNotice({ kind: 'success', text: `Venta ${b.data.number} completada` });
-    setCart([]);
-    await cache.invalidateQueries();
+    if (!response.ok) return problem(response, 'No pudimos procesar la venta.');
+
+    const { data } = (await response.json()) as { data: Sale };
+    recordSale(lines.map((line) => line.item));
+    setPaying(false);
+    // Lo entregado en efectivo es lo cobrado en efectivo más el vuelto. Solo existe ahora:
+    // la API no lo guarda, así que solo el comprobante del momento lo muestra.
+    const cashCents = payments
+      .filter((payment) => payment.method === 'CASH')
+      .reduce((sum, payment) => sum + toCents(payment.amount), 0);
+    setCompleted({
+      sale: { ...data, clientName: client?.fullName ?? null },
+      totalCents: toCents(data.total),
+      changeCents,
+      tenderedCents: changeCents > 0 ? cashCents + changeCents : 0,
+    });
+    setLines([]);
+    setClient(null);
+    // Solo lo que la venta ha cambiado: existencias, caja y atajos. Volver a pedir todo el
+    // catálogo y todas las clientas tras cada cobro era lo que hacía lenta la pantalla.
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['pos-catalog'] }),
+      qc.invalidateQueries({ queryKey: CASH_KEY }),
+      qc.invalidateQueries({ queryKey: FREQUENT_KEY }),
+    ]);
+    return null;
+  };
+
+  function nextSale() {
+    setCompleted(null);
+    setPrinting(false);
+    // Tras cerrar el diálogo, que devuelve el foco a donde estaba: la venta siguiente
+    // empieza escribiendo.
+    setTimeout(() => searchRef.current?.focus(), 0);
   }
+
+  const pending = pendingTickets.data ?? 0;
+
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
-      <section className="space-y-5">
-        {(products.error || services.error || clients.error) && (
-          <p role="alert">
-            No se pudo cargar el catálogo completo.{' '}
-            <button onClick={() => cache.invalidateQueries()}>Reintentar</button>
-          </p>
-        )}
-        <div>
-          <p className="text-sm font-medium text-primary">Punto de venta</p>
-          <h1 className="font-display text-4xl font-semibold">Nueva venta</h1>
-        </div>
-        <label className="flex h-12 items-center gap-2 rounded-xl border bg-card px-4">
-          <Search />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Buscar servicio o producto"
-            placeholder="Buscar servicio o producto…"
-            className="w-full bg-transparent outline-none"
-          />
-        </label>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((item) => (
-            <button
-              key={`${item.kind}-${item.id}`}
-              onClick={() => add(item)}
-              disabled={item.kind === 'PRODUCT' && Number(item.stockOnHand ?? 0) <= 0}
-              className="rounded-2xl border bg-card p-5 text-left transition hover:border-primary hover:shadow-md"
-            >
-              <span className="text-xs font-bold text-primary">
-                {item.kind === 'PRODUCT' ? 'PRODUCTO' : 'SERVICIO'}
-              </span>
-              <h2 className="mt-2 font-semibold">{item.name}</h2>
-              <p className="mt-4 text-xl font-bold">{money(lineTotal(item, 1))}</p>
-              {item.stockOnHand && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Stock: {Number(item.stockOnHand)}
-                </p>
-              )}
-            </button>
-          ))}
-        </div>
-      </section>
-      <Card className="flex h-fit min-h-[620px] flex-col p-5 xl:sticky xl:top-24">
-        <h2 className="flex items-center gap-2 font-display text-2xl font-semibold">
-          <ShoppingBag />
-          Ticket
-        </h2>
-        <select
-          aria-label="Cliente de la venta"
-          value={client}
-          onChange={(e) => setClient(e.target.value)}
-          className="mt-5 h-11 rounded-xl border bg-background px-3 text-sm"
+    <div className="flex flex-col gap-4 lg:h-[calc(100dvh-8.25rem)]">
+      <SalesTabs />
+      {pending > 0 && (
+        <Link
+          href="/caja"
+          className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm hover:bg-primary/10"
         >
-          <option value="">Cliente ocasional</option>
-          {clients.data?.map((x) => (
-            <option key={x.id} value={x.id}>
-              {x.fullName}
-            </option>
-          ))}
-        </select>
-        <div className="my-5 flex-1 space-y-3">
-          {cart.map((x) => (
-            <div key={`${x.item.kind}-${x.item.id}`} className="rounded-xl bg-muted p-3">
-              <div className="flex justify-between">
-                <p className="font-semibold">{x.item.name}</p>
-                <button onClick={() => setCart((c) => c.filter((y) => y.item.id !== x.item.id))}>
-                  <Trash2 size={16} />
-                </button>
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() =>
-                      setCart((c) =>
-                        c.map((y) =>
-                          y.item.id === x.item.id
-                            ? { ...y, quantity: Math.max(1, y.quantity - 1) }
-                            : y,
-                        ),
-                      )
-                    }
-                    className="grid size-8 place-items-center rounded-lg bg-card"
-                  >
-                    <Minus size={14} />
-                  </button>
-                  <span>{x.quantity}</span>
-                  <button
-                    onClick={() => add(x.item)}
-                    className="grid size-8 place-items-center rounded-lg bg-card"
-                  >
-                    <Plus size={14} />
-                  </button>
-                </div>
-                <strong>{money(lineTotal(x.item, x.quantity))}</strong>
-              </div>
-            </div>
-          ))}
-          {!cart.length && (
-            <p className="py-16 text-center text-sm text-muted-foreground">
-              Selecciona productos o servicios.
-            </p>
-          )}
-        </div>
-        <div className="border-t pt-4">
-          <div className="flex justify-between text-xl font-bold">
-            <span>Total</span>
-            <span>{money(total)}</span>
-          </div>
-          <select
-            aria-label="Método de pago"
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-            className="my-4 h-11 w-full rounded-xl border bg-background px-3"
-          >
-            <option value="CARD">Tarjeta</option>
-            <option value="CASH">Efectivo</option>
-            <option value="TRANSFER">Transferencia</option>
-          </select>
-          {notice && (
-            <p
-              role={notice.kind === 'error' ? 'alert' : 'status'}
-              className={`mb-3 flex items-start gap-2 rounded-xl p-3 text-sm ${notice.kind === 'error' ? 'bg-danger/10 text-danger' : 'bg-secondary'}`}
-            >
-              {notice.kind === 'error' && <AlertCircle className="mt-0.5 shrink-0" size={16} />}
-              {notice.text}
-            </p>
-          )}
-          <Can permission={['invoices.create', 'payments.create']}>
-            <Button className="w-full" disabled={!cart.length || busy} onClick={charge}>
-              {busy ? 'Procesando…' : `Cobrar ${total.toFixed(2)}`}
-            </Button>
-          </Can>
-        </div>
-      </Card>
+          <BellRing size={16} className="shrink-0 text-primary" />
+          <span>
+            {pending === 1
+              ? 'Hay 1 servicio de estilista por cobrar.'
+              : `Hay ${pending} servicios de estilistas por cobrar.`}
+          </span>
+          <strong className="ml-auto text-primary">Ir a Caja →</strong>
+        </Link>
+      )}
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(380px,460px)]">
+        <CatalogPanel onAdd={add} searchRef={searchRef} />
+        <CartPanel
+          lines={lines}
+          onLines={setLines}
+          stylists={canChooseStylist ? (stylists.data ?? []) : null}
+          defaultStylistId={lineStylist}
+          onDefaultStylist={setChosenStylist}
+          client={client}
+          onClient={setClient}
+          canChooseClient={can('clients.read')}
+          canDiscount={can('invoices.discount')}
+          canCharge={canCharge}
+          cashOpen={cashOpen}
+          notice={notice}
+          onNotice={setNotice}
+          onCharge={openPayment}
+        />
+      </div>
+
+      {paying && (
+        <PaymentDialog
+          title="Cobrar venta"
+          subtitle={`${client?.fullName ?? 'Cliente ocasional'} · ${lines.length} ${lines.length === 1 ? 'línea' : 'líneas'}`}
+          totalCents={cartTotals(lines).totalCents}
+          cashOpen={cashOpen}
+          onClose={() => setPaying(false)}
+          onConfirm={confirm}
+        />
+      )}
+      {completed && !printing && (
+        <SaleComplete
+          number={completed.sale.number}
+          totalCents={completed.totalCents}
+          changeCents={completed.changeCents}
+          onPrint={() => setPrinting(true)}
+          onNext={nextSale}
+        />
+      )}
+      {completed && printing && (
+        <SaleDialog
+          saleId={completed.sale.id}
+          initial={completed.sale}
+          cash={{ tenderedCents: completed.tenderedCents, changeCents: completed.changeCents }}
+          closeLabel="Nueva venta"
+          onClose={nextSale}
+        />
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { Plus, Trophy, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { money } from '@/lib/utils';
 
 type Metric = 'SERVICE_REVENUE' | 'PRODUCT_REVENUE';
 type GoalStatus = 'ACTIVE' | 'ACHIEVED' | 'EXPIRED';
@@ -31,9 +32,6 @@ const METRIC_LABEL: Record<Metric, string> = {
   SERVICE_REVENUE: 'Servicios',
   PRODUCT_REVENUE: 'Productos',
 };
-
-const money = (amount: string) =>
-  new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(Number(amount));
 
 export function GoalsBoard() {
   const { can } = useAccess();

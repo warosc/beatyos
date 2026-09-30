@@ -146,6 +146,8 @@ services:
     environment:
       API_URL: http://api:3000/api/v1
       COOKIE_SECURE: 'false'
+      # Colores antes de iniciar sesión; después manda el tema elegido por el salón.
+      BRAND_THEME: ${BRAND_THEME:-terracota}
     ports:
       - '${WEB_PORT:-3001}:3001'
     profiles: ['full']

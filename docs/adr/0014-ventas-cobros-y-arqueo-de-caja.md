@@ -1,6 +1,6 @@
 # ADR-0014: Ventas, cobros y arqueo de caja
 
-- **Estado:** Aceptado
+- **Estado:** Aceptado · §4 enmendado por [ADR-0020](0020-anulacion-de-ventas-cobradas.md)
 - **Fecha:** 2026-09-03
 - **Cumple:** [ADR-0001](0001-arquitectura-hexagonal.md), [ADR-0002](0002-stack-tecnologico.md), [ADR-0010](0010-dinero-y-precision-decimal.md)
 - **Depende de:** [ADR-0013](0013-reconciliacion-del-motor-de-inventario.md)

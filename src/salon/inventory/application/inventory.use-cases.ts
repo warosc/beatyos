@@ -1012,6 +1012,82 @@ export class GetStockAlertsUseCase implements UseCase<{ withinDays?: number }, S
   }
 }
 
+// ===========================================================================
+// Devolución de una venta anulada
+// ===========================================================================
+
+export interface ReturnSaleStockInput {
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly invoiceNumber: string;
+  readonly actorId: string | null;
+}
+
+/**
+ * Devuelve al almacén lo que se llevó una venta anulada (ADR-0020).
+ *
+ * Se guía por los asientos `SALE_OUT` que dejó la venta, no por sus líneas: así cada
+ * unidad vuelve **al mismo lote** del que salió y con el mismo coste, y la trazabilidad
+ * sigue diciendo la verdad. Leer las líneas obligaría a repartir otra vez por FEFO, y la
+ * devolución acabaría en un lote distinto del que se vendió.
+ */
+@Injectable()
+export class ReturnSaleStockUseCase implements UseCase<ReturnSaleStockInput, InventoryMovement[]> {
+  constructor(
+    @Inject(PRODUCT_REPOSITORY) private readonly products: ProductRepository,
+    @Inject(BATCH_REPOSITORY) private readonly batches: BatchRepository,
+    @Inject(MOVEMENT_REPOSITORY) private readonly movements: MovementRepository,
+    @Inject(ID_GENERATOR) private readonly ids: IdGenerator,
+    @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(UNIT_OF_WORK) private readonly uow: UnitOfWork,
+  ) {}
+
+  execute(input: ReturnSaleStockInput): Promise<InventoryMovement[]> {
+    return this.uow.execute(async () => {
+      const sold = await this.movements.search(
+        { sourceType: 'INVOICE', sourceId: input.invoiceId, type: 'SALE_OUT' },
+        // Una venta tiene como mucho 100 líneas, y cada una unos pocos lotes.
+        { page: 1, limit: 1000 },
+      );
+      const now = this.clock.now();
+      const returned: InventoryMovement[] = [];
+
+      for (const out of sold.data) {
+        const quantity = round3(-out.quantityDelta);
+        if (!(quantity > 0)) continue;
+
+        if (out.batchId) await this.batches.restock(out.batchId, quantity, input.actorId);
+        const balanceAfter = await this.products.applyStockDelta(
+          out.productId,
+          quantity,
+          input.actorId,
+        );
+        returned.push(
+          await this.movements.append(
+            InventoryMovement.record({
+              id: this.ids.generate(),
+              tenantId: input.tenantId,
+              productId: out.productId,
+              type: 'RETURN_IN',
+              quantityDelta: quantity,
+              balanceAfter,
+              unitCost: out.unitCost,
+              sourceType: 'INVOICE',
+              sourceId: input.invoiceId,
+              reason: `Anulación de ${input.invoiceNumber}`,
+              batchId: out.batchId,
+              now,
+              actorId: input.actorId,
+            }),
+          ),
+        );
+      }
+
+      return returned;
+    });
+  }
+}
+
 const round3 = (value: number): number => Math.round(value * 1000) / 1000;
 
 const unique = (values: readonly string[]): string[] => [...new Set(values)];

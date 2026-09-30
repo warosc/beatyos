@@ -4,11 +4,13 @@ import {
   DOCUMENT_NUMBER_GENERATOR,
   INVOICE_REPOSITORY,
   PAYMENT_REPOSITORY,
+  SALES_DIRECTORY,
 } from './domain/sales.repositories';
 import {
   PrismaDocumentNumberGenerator,
   PrismaInvoiceRepository,
   PrismaPaymentRepository,
+  PrismaSalesDirectory,
 } from './infrastructure/persistence/prisma-sales.repositories';
 
 /**
@@ -29,7 +31,8 @@ import {
     { provide: INVOICE_REPOSITORY, useClass: PrismaInvoiceRepository },
     { provide: PAYMENT_REPOSITORY, useClass: PrismaPaymentRepository },
     { provide: DOCUMENT_NUMBER_GENERATOR, useClass: PrismaDocumentNumberGenerator },
+    { provide: SALES_DIRECTORY, useClass: PrismaSalesDirectory },
   ],
-  exports: [INVOICE_REPOSITORY, PAYMENT_REPOSITORY, DOCUMENT_NUMBER_GENERATOR],
+  exports: [INVOICE_REPOSITORY, PAYMENT_REPOSITORY, DOCUMENT_NUMBER_GENERATOR, SALES_DIRECTORY],
 })
 export class SalesPersistenceModule {}

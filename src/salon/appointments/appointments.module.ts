@@ -10,9 +10,12 @@ import {
   GetAvailabilityUseCase,
   GetCalendarUseCase,
 } from './application/appointment.use-cases';
-import { APPOINTMENT_REPOSITORY } from './domain/appointment.repository';
+import { APPOINTMENT_REPOSITORY, CLIENT_NAME_DIRECTORY } from './domain/appointment.repository';
 import { AppointmentsController } from './infrastructure/http/appointments.controller';
-import { PrismaAppointmentRepository } from './infrastructure/persistence/prisma-appointment.repository';
+import {
+  PrismaAppointmentRepository,
+  PrismaClientNameDirectory,
+} from './infrastructure/persistence/prisma-appointment.repository';
 
 @Module({
   imports: [CatalogModule, StylistsModule],
@@ -26,6 +29,7 @@ import { PrismaAppointmentRepository } from './infrastructure/persistence/prisma
     GetAvailabilityUseCase,
     GetCalendarUseCase,
     { provide: APPOINTMENT_REPOSITORY, useClass: PrismaAppointmentRepository },
+    { provide: CLIENT_NAME_DIRECTORY, useClass: PrismaClientNameDirectory },
   ],
   exports: [APPOINTMENT_REPOSITORY],
 })

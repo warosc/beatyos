@@ -9,6 +9,7 @@ import {
   GetInvoiceUseCase,
   RegisterSaleUseCase,
   SearchInvoicesUseCase,
+  SummarizeSalesUseCase,
   VoidInvoiceUseCase,
 } from './application/sales.use-cases';
 import { SalesController } from './infrastructure/http/sales.controllers';
@@ -37,7 +38,13 @@ import { SalesPersistenceModule } from './sales-persistence.module';
     StylistsModule,
   ],
   controllers: [SalesController],
-  providers: [RegisterSaleUseCase, SearchInvoicesUseCase, GetInvoiceUseCase, VoidInvoiceUseCase],
+  providers: [
+    RegisterSaleUseCase,
+    SearchInvoicesUseCase,
+    GetInvoiceUseCase,
+    SummarizeSalesUseCase,
+    VoidInvoiceUseCase,
+  ],
   // `RegisterSaleUseCase` se exporta para el cobro de comandas (ADR-0019), que factura con
   // exactamente la misma lógica que el mostrador en lugar de tener la suya.
   exports: [SalesPersistenceModule, RegisterSaleUseCase],

@@ -30,7 +30,10 @@ import {
   SERVICE_REPOSITORY,
   type ServiceRepository,
 } from '../../catalog/domain/catalog.repositories';
-import { ConsumeStockUseCase } from '../../inventory/application/inventory.use-cases';
+import {
+  ConsumeStockUseCase,
+  ReturnSaleStockUseCase,
+} from '../../inventory/application/inventory.use-cases';
 import {
   PRODUCT_REPOSITORY,
   type ProductRepository,
@@ -46,11 +49,17 @@ import {
   DOCUMENT_NUMBER_GENERATOR,
   INVOICE_REPOSITORY,
   PAYMENT_REPOSITORY,
+  SALES_DIRECTORY,
+  type DateRange,
   type DocumentNumberGenerator,
   type InvoiceFilter,
   type InvoiceRepository,
   type InvoiceSortField,
+  type InvoiceTotals,
+  type PaymentMethodTotals,
   type PaymentRepository,
+  type SalesDirectory,
+  type SalesNames,
 } from '../domain/sales.repositories';
 
 // ===========================================================================
@@ -375,24 +384,56 @@ export class RegisterSaleUseCase implements UseCase<RegisterSaleInput, RegisterS
 // Consultas
 // ===========================================================================
 
+/** Nombres de todo lo que aparece en un grupo de ventas, en una sola consulta. */
+const namesOf = (directory: SalesDirectory, invoices: readonly Invoice[]): Promise<SalesNames> =>
+  directory.namesFor({
+    clientIds: invoices.flatMap((invoice) => (invoice.clientId ? [invoice.clientId] : [])),
+    userIds: invoices.flatMap((invoice) =>
+      invoice.audit.createdBy ? [invoice.audit.createdBy] : [],
+    ),
+    stylistIds: invoices.flatMap((invoice) =>
+      invoice.lines.flatMap((line) => (line.stylistId ? [line.stylistId] : [])),
+    ),
+  });
+
+export interface SalesPage {
+  readonly page: Page<Invoice>;
+  readonly payments: readonly Payment[];
+  readonly names: SalesNames;
+}
+
+/**
+ * Ventas realizadas, con sus cobros y los nombres que hacen falta para cuadrar: de quién
+ * era la venta, quién la cobró y quién hizo cada servicio.
+ */
 @Injectable()
 export class SearchInvoicesUseCase implements UseCase<
   { filter: InvoiceFilter; page: PageRequest<InvoiceSortField> },
-  Page<Invoice>
+  SalesPage
 > {
-  constructor(@Inject(INVOICE_REPOSITORY) private readonly invoices: InvoiceRepository) {}
+  constructor(
+    @Inject(INVOICE_REPOSITORY) private readonly invoices: InvoiceRepository,
+    @Inject(PAYMENT_REPOSITORY) private readonly payments: PaymentRepository,
+    @Inject(SALES_DIRECTORY) private readonly directory: SalesDirectory,
+  ) {}
 
-  execute(input: {
+  async execute(input: {
     filter: InvoiceFilter;
     page: PageRequest<InvoiceSortField>;
-  }): Promise<Page<Invoice>> {
-    return this.invoices.search(input.filter, input.page);
+  }): Promise<SalesPage> {
+    const page = await this.invoices.search(input.filter, input.page);
+    const [payments, names] = await Promise.all([
+      this.payments.findByInvoiceIds(page.data.map((invoice) => invoice.id)),
+      namesOf(this.directory, page.data),
+    ]);
+    return { page, payments, names };
   }
 }
 
 export interface InvoiceDetail {
   readonly invoice: Invoice;
   readonly payments: readonly Payment[];
+  readonly names: SalesNames;
 }
 
 @Injectable()
@@ -400,11 +441,47 @@ export class GetInvoiceUseCase implements UseCase<{ invoiceId: string }, Invoice
   constructor(
     @Inject(INVOICE_REPOSITORY) private readonly invoices: InvoiceRepository,
     @Inject(PAYMENT_REPOSITORY) private readonly payments: PaymentRepository,
+    @Inject(SALES_DIRECTORY) private readonly directory: SalesDirectory,
   ) {}
 
   async execute(input: { invoiceId: string }): Promise<InvoiceDetail> {
     const invoice = await this.invoices.findByIdOrFail(input.invoiceId);
-    return { invoice, payments: await this.payments.findByInvoiceId(invoice.id) };
+    const [payments, names] = await Promise.all([
+      this.payments.findByInvoiceId(invoice.id),
+      namesOf(this.directory, [invoice]),
+    ]);
+    return { invoice, payments, names };
+  }
+}
+
+export interface SalesSummary {
+  readonly invoices: InvoiceTotals;
+  readonly byMethod: readonly PaymentMethodTotals[];
+}
+
+/**
+ * Cuadre de un periodo —un día, un turno de caja—: lo facturado y, por método, lo cobrado
+ * y lo devuelto. Es la cifra que se compara con el cajón, el datáfono y el banco.
+ */
+@Injectable()
+export class SummarizeSalesUseCase implements UseCase<DateRange, SalesSummary> {
+  constructor(
+    @Inject(INVOICE_REPOSITORY) private readonly invoices: InvoiceRepository,
+    @Inject(PAYMENT_REPOSITORY) private readonly payments: PaymentRepository,
+  ) {}
+
+  async execute(range: DateRange): Promise<SalesSummary> {
+    if (range.from > range.to) {
+      throw new BusinessRuleViolationError(
+        'INVALID_DATE_RANGE',
+        'La fecha de inicio es posterior a la de fin',
+      );
+    }
+    const [invoices, byMethod] = await Promise.all([
+      this.invoices.summarize(range),
+      this.payments.summarizeByMethod(range),
+    ]);
+    return { invoices, byMethod };
   }
 }
 
@@ -418,36 +495,155 @@ export interface VoidInvoiceInput {
   readonly actorId: string | null;
 }
 
+export interface VoidInvoiceResult {
+  readonly invoice: Invoice;
+  readonly payments: readonly Payment[];
+  /** Efectivo que salió de la caja abierta. Cero si la venta no tenía cobros en efectivo. */
+  readonly cashRefunded: Money;
+}
+
 /**
- * Anula una factura y devuelve el género al almacén.
+ * Anula una venta, cobrada o no, deshaciendo todo lo que la venta hizo (ADR-0020).
  *
- * La restricción de que no tenga cobros la impone el agregado. Aquí solo se coordina la
- * devolución del stock, que es la parte que el documento por sí solo no puede hacer.
+ * El ADR-0014 exige devolver antes de anular, y aquí se respeta: primero se devuelve cada
+ * cobro y después se anula la factura, que sigue negándose a anularse con dinero cobrado.
+ * Lo que cambia es que las dos cosas van en una sola operación deliberada de la propietaria,
+ * y que la pregunta que motivó aquella regla —de qué caja sale el efectivo— tiene respuesta
+ * fija: de la caja abierta, la que tiene delante quien lo entrega. Sin caja abierta no se
+ * puede anular una venta con cobros en efectivo.
+ *
+ * Todo va en una unidad de trabajo: una venta anulada con el stock sin reponer, o con el
+ * dinero devuelto y la factura en pie, es un descuadre que nadie sabría explicar.
  */
 @Injectable()
-export class VoidInvoiceUseCase implements UseCase<VoidInvoiceInput, Invoice> {
+export class VoidInvoiceUseCase implements UseCase<VoidInvoiceInput, VoidInvoiceResult> {
   constructor(
     @Inject(INVOICE_REPOSITORY) private readonly invoices: InvoiceRepository,
+    @Inject(PAYMENT_REPOSITORY) private readonly payments: PaymentRepository,
+    @Inject(CASH_SESSION_REPOSITORY) private readonly sessions: CashSessionRepository,
+    @Inject(CLIENT_REPOSITORY) private readonly clients: ClientRepository,
+    @Inject(ID_GENERATOR) private readonly ids: IdGenerator,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(UNIT_OF_WORK) private readonly uow: UnitOfWork,
     @Inject(AUDIT_RECORDER) private readonly audit: AuditRecorder,
+    private readonly returnStock: ReturnSaleStockUseCase,
   ) {}
 
-  async execute(input: VoidInvoiceInput): Promise<Invoice> {
-    const voided = await this.uow.execute(async () => {
+  async execute(input: VoidInvoiceInput): Promise<VoidInvoiceResult> {
+    const reason = input.reason?.trim();
+    if (!reason) {
+      throw new BusinessRuleViolationError(
+        'VOID_REASON_REQUIRED',
+        'La anulación necesita un motivo',
+      );
+    }
+
+    const result = await this.uow.execute(async () => {
+      const now = this.clock.now();
       const invoice = await this.invoices.findByIdOrFail(input.invoiceId);
-      invoice.void(input.reason, this.clock.now(), input.actorId);
-      return this.invoices.update(invoice);
+      if (invoice.status === 'VOID') {
+        throw new ConflictError(
+          'INVOICE_ALREADY_VOID',
+          `La venta ${invoice.number} ya está anulada`,
+          {
+            invoiceId: invoice.id,
+          },
+        );
+      }
+
+      const payments = await this.payments.findByInvoiceId(invoice.id);
+      const pending = payments.filter((payment) => payment.netAmount.isPositive());
+      const cashRefunded = pending
+        .filter((payment) => payment.isCash)
+        .reduce((sum, payment) => sum.add(payment.netAmount), Money.zero(invoice.currency));
+
+      // La caja se comprueba antes de tocar nada: sin ella no hay de dónde sacar el efectivo.
+      const session = cashRefunded.isPositive() ? await this.sessions.findOpen() : null;
+      if (cashRefunded.isPositive() && !session) {
+        throw new BusinessRuleViolationError(
+          'CASH_REFUND_REQUIRES_OPEN_SESSION',
+          `La venta ${invoice.number} se cobró en efectivo: abre la caja para devolver ${cashRefunded.toString()}`,
+          { invoiceId: invoice.id, cash: cashRefunded.toDecimalString() },
+        );
+      }
+
+      for (const payment of pending) {
+        const amount = payment.netAmount;
+        payment.refund(amount, reason, now);
+        await this.payments.update(payment);
+        invoice.registerRefund(amount, now, input.actorId);
+      }
+
+      if (session) {
+        const cashSales = await this.payments.cashTotalForSession(session.id, session.currency);
+        session.recordRefund({
+          id: this.ids.generate(),
+          amount: cashRefunded,
+          invoiceNumber: invoice.number,
+          cashSales,
+          now,
+          actorId: input.actorId,
+        });
+        await this.sessions.update(session);
+      }
+
+      const appointmentId = invoice.appointmentId;
+      invoice.void(reason, now, input.actorId);
+      const voided = await this.invoices.update(invoice);
+
+      const restocked = await this.returnStock.execute({
+        tenantId: voided.tenantId,
+        invoiceId: voided.id,
+        invoiceNumber: voided.number,
+        actorId: input.actorId,
+      });
+
+      // Las estadísticas de la clienta se sumaron al emitir; se restan al anular.
+      if (voided.clientId) {
+        const client = await this.clients.findByIdOrFail(voided.clientId);
+        client.revertVisit(voided.total, now);
+        await this.clients.update(client);
+      }
+
+      return {
+        invoice: voided,
+        payments,
+        cashRefunded,
+        sessionId: session?.id ?? null,
+        appointmentId,
+        restocked: restocked.map((movement) => ({
+          productId: movement.productId,
+          batchId: movement.batchId,
+          quantity: movement.quantityDelta,
+        })),
+      };
     });
 
     await this.audit.record({
       action: 'UPDATE',
       entityType: 'Invoice',
-      entityId: voided.id,
-      after: { status: 'VOID', reason: input.reason, number: voided.number },
+      entityId: result.invoice.id,
+      after: {
+        status: 'VOID',
+        number: result.invoice.number,
+        reason,
+        refunded: result.payments.map((payment) => ({
+          paymentId: payment.id,
+          method: payment.method,
+          amount: payment.refundedAmount.toDecimalString(),
+        })),
+        cashRefunded: result.cashRefunded.toDecimalString(),
+        cashSessionId: result.sessionId,
+        releasedAppointmentId: result.appointmentId,
+        restocked: result.restocked,
+      },
     });
 
-    return voided;
+    return {
+      invoice: result.invoice,
+      payments: result.payments,
+      cashRefunded: result.cashRefunded,
+    };
   }
 }
 
@@ -459,12 +655,19 @@ export class VoidInvoiceUseCase implements UseCase<VoidInvoiceInput, Invoice> {
  * Dos líneas del mismo producto no son un error aritmético —el total sale bien— pero
  * producen un ticket confuso y, sobre todo, dos descuentos de stock separados que en el
  * kardex parecen dos ventas. Agruparlas es también lo que espera quien lee la factura.
+ *
+ * Un servicio sí puede repetirse si lo hicieron profesionales distintas: el lavado de una
+ * y el de otra son dos trabajos, con dos comisiones, y agruparlos obligaría a atribuir
+ * ambos a una sola. No mueve stock, así que la razón del kardex no aplica.
  */
 const assertNoRepeatedItems = (lines: readonly SaleLineInput[]): void => {
   const seen = new Set<string>();
 
   for (const line of lines) {
-    const key = `${line.kind}:${line.itemId}`;
+    const key =
+      line.kind === 'SERVICE'
+        ? `${line.kind}:${line.itemId}:${line.stylistId ?? ''}`
+        : `${line.kind}:${line.itemId}`;
     if (seen.has(key)) {
       throw new ConflictError(
         'DUPLICATE_SALE_LINE',

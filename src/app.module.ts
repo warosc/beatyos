@@ -7,6 +7,7 @@ import { AuthModule } from './core/auth/auth.module';
 import { HealthModule } from './core/health/health.module';
 import { UsersModule } from './core/users/users.module';
 import { RolesModule } from './core/roles/roles.module';
+import { TenantsModule } from './core/tenants/tenants.module';
 import { ClientsModule } from './salon/clients/clients.module';
 import { AppointmentsModule } from './salon/appointments/appointments.module';
 import { CatalogModule } from './salon/catalog/catalog.module';
@@ -82,6 +83,7 @@ import { ScopedThrottlerGuard } from './shared/infrastructure/security/scoped-th
     // --- Núcleo ---
     UsersModule,
     RolesModule,
+    TenantsModule,
     AuthModule,
     HealthModule,
 

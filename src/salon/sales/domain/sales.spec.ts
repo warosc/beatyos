@@ -241,6 +241,45 @@ describe('Invoice', () => {
       expect(() => invoice.void('Error', NOW, 'user-1')).toThrow(/Devuelva el importe/);
     });
 
+    it('anula una factura cobrada después de devolver lo cobrado (ADR-0020)', () => {
+      const invoice = Invoice.issue({
+        id: 'invoice-2',
+        tenantId: TENANT,
+        number: 'F-2026-000002',
+        lines: [aLine()],
+        currency: 'GTQ',
+        appointmentId: 'appointment-1',
+        now: NOW,
+        actorId: 'user-1',
+      });
+      invoice.registerPayment(gtq('112.00'), NOW, 'user-1');
+
+      invoice.registerRefund(gtq('112.00'), NOW, 'user-1');
+      invoice.void('Cobrada por error', NOW, 'user-1');
+
+      expect(invoice.status).toBe('VOID');
+      expect(invoice.paidTotal.toDecimalString()).toBe('0.00');
+      // La cita queda libre para volver a cobrarse.
+      expect(invoice.appointmentId).toBeNull();
+    });
+
+    it('sigue sin anular si se devolvió solo una parte', () => {
+      const invoice = anInvoice();
+      invoice.registerPayment(gtq('112.00'), NOW, 'user-1');
+      invoice.registerRefund(gtq('50.00'), NOW, 'user-1');
+
+      expect(() => invoice.void('Error', NOW, 'user-1')).toThrow(/Devuelva el importe/);
+    });
+
+    it('no devuelve más de lo cobrado', () => {
+      const invoice = anInvoice();
+      invoice.registerPayment(gtq('50.00'), NOW, 'user-1');
+
+      expect(() => invoice.registerRefund(gtq('50.01'), NOW, 'user-1')).toThrow(
+        BusinessRuleViolationError,
+      );
+    });
+
     it('exige un motivo', () => {
       expect(() => anInvoice().void('   ', NOW, 'user-1')).toThrow(DomainValidationError);
     });

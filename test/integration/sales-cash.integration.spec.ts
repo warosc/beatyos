@@ -170,6 +170,79 @@ describe('Ventas y caja (integración)', () => {
       expect(response.body.detail).toMatch(/una sola línea/);
     });
 
+    it('admite el mismo servicio en dos líneas si lo hicieron profesionales distintas', async () => {
+      // Dos lavados de dos estilistas son dos trabajos con dos comisiones. Agruparlos
+      // obligaría a atribuir ambos a una sola.
+      const otraId = await inspect(async () => {
+        const otra = await prisma.client.stylist.create({
+          data: {
+            tenantId: salonA.tenantId,
+            firstName: 'Nora',
+            lastName: 'Paz',
+            email: 'nora@salon-a.test',
+            commissionRate: '10.00',
+          },
+        });
+        return otra.id;
+      });
+      const total = Number(await totalFor(salonA.serviceId));
+
+      const response = await sell({
+        lines: [
+          { kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1, stylistId: salonA.stylistId },
+          { kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1, stylistId: otraId },
+        ],
+        payments: [{ method: 'CARD', amount: Number((total * 2).toFixed(2)) }],
+      }).expect(201);
+
+      const lines = response.body.data.lines as { stylistId: string; commissionAmount: string }[];
+      expect(lines.map((line) => line.stylistId).sort()).toEqual([salonA.stylistId, otraId].sort());
+      // Cada una cobra su comisión con su propia tasa: 15 % y 10 % sobre la base de 25,00.
+      expect(lines.map((line) => line.commissionAmount).sort()).toEqual(['2.50', '3.75']);
+    });
+
+    it('sigue rechazando el mismo servicio de la misma profesional en dos líneas', async () => {
+      const line = {
+        kind: 'SERVICE',
+        itemId: salonA.serviceId,
+        quantity: 1,
+        stylistId: salonA.stylistId,
+      };
+
+      await sell({ lines: [line, line], payments: [{ method: 'CARD', amount: 10 }] }).expect(409);
+    });
+
+    it('solo concede descuentos quien tiene invoices.discount', async () => {
+      const base = { kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1, discountAmount: 5 };
+      // 25,00 − 5,00 = 20,00 de base; con el 21 % sembrado, 24,20.
+      const body = { lines: [base], payments: [{ method: 'CARD', amount: 24.2 }] };
+
+      const recepcion = await request(server())
+        .post(api('/auth/login'))
+        .send({ email: salonA.receptionEmail, password: TEST_PASSWORD })
+        .expect(200);
+      const denied = await request(server())
+        .post(api('/sales'))
+        .set({ Authorization: `Bearer ${recepcion.body.data.accessToken as string}` })
+        .send(body)
+        .expect(403);
+      expect(denied.body.code).toBe('FORBIDDEN_ACTION');
+      expect(await inspect(() => prisma.client.invoice.count())).toBe(0);
+
+      // La misma venta sin descuento es legítima para recepción.
+      await request(server())
+        .post(api('/sales'))
+        .set({ Authorization: `Bearer ${recepcion.body.data.accessToken as string}` })
+        .send({
+          lines: [{ kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1 }],
+          payments: [{ method: 'CARD', amount: Number(await totalFor(salonA.serviceId)) }],
+        })
+        .expect(201);
+
+      const owner = await sell(body).expect(201);
+      expect(owner.body.data).toMatchObject({ discountTotal: '5.00', total: '24.20' });
+    });
+
     it('congela precio e impuesto en la factura', async () => {
       // Una factura es un documento histórico: si mañana sube el precio, la de hoy tiene
       // que seguir diciendo lo que se cobró hoy.
@@ -494,8 +567,9 @@ describe('Ventas y caja (integración)', () => {
       expect(listado.body.data).toHaveLength(1);
       expect(listado.body.meta.total).toBe(1);
 
-      // El listado no trae los cobros —serian tantas consultas como facturas—; el detalle si.
-      expect(listado.body.data[0]).not.toHaveProperty('payments');
+      // El listado trae los cobros —para cuadrar hace falta ver con qué se pagó cada venta—,
+      // resueltos en una sola consulta para toda la página, no una por factura.
+      expect(listado.body.data[0].payments).toHaveLength(1);
 
       const detalle = await request(server())
         .get(api(`/sales/${sale.body.data.id}`))
@@ -508,6 +582,75 @@ describe('Ventas y caja (integración)', () => {
         status: 'COMPLETED',
         amount: total.toFixed(2),
       });
+    });
+
+    it('trae en la lista los cobros y los nombres que hacen falta para cuadrar', async () => {
+      const total = Number(await totalFor(salonA.serviceId));
+      await sell({
+        clientId: salonA.clientId,
+        lines: [
+          { kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1, stylistId: salonA.stylistId },
+        ],
+        payments: [{ method: 'CARD', amount: total, reference: '4242' }],
+      }).expect(201);
+
+      const lista = await request(server()).get(api('/sales')).set(auth()).expect(200);
+      const [venta] = lista.body.data as Record<string, unknown>[];
+
+      expect(venta).toMatchObject({
+        clientName: 'Rosa Iglesias',
+        createdByName: 'Carmen Ruiz',
+        lines: [expect.objectContaining({ stylistName: 'Sara Molina' })],
+        payments: [expect.objectContaining({ method: 'CARD', reference: '4242' })],
+      });
+    });
+
+    it('filtra por método y resume el periodo por método', async () => {
+      await openCash().expect(201);
+      const total = Number(await totalFor(salonA.serviceId));
+      const line = { kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1 };
+      await sell({ lines: [line], payments: [{ method: 'CASH', amount: total }] }).expect(201);
+      await sell({
+        lines: [line],
+        payments: [
+          { method: 'CASH', amount: 10 },
+          { method: 'CARD', amount: Number((total - 10).toFixed(2)) },
+        ],
+      }).expect(201);
+
+      const enTarjeta = await request(server())
+        .get(api('/sales'))
+        .query({ method: 'CARD' })
+        .set(auth())
+        .expect(200);
+      expect(enTarjeta.body.data).toHaveLength(1);
+
+      const resumen = await request(server())
+        .get(api('/sales/summary'))
+        .query({ from: `${isoDay(-1)}T00:00:00Z`, to: `${isoDay(1)}T23:59:59Z` })
+        .set(auth())
+        .expect(200);
+      const porMetodo = Object.fromEntries(
+        (resumen.body.data.byMethod as { method: string; received: string }[]).map((row) => [
+          row.method,
+          row.received,
+        ]),
+      );
+      expect(resumen.body.data).toMatchObject({
+        count: 2,
+        total: (total * 2).toFixed(2),
+        voidCount: 0,
+      });
+      expect(porMetodo).toEqual({
+        CASH: (total + 10).toFixed(2),
+        CARD: (total - 10).toFixed(2),
+      });
+
+      await request(server())
+        .get(api('/sales/summary'))
+        .query({ from: `${isoDay(1)}T00:00:00Z`, to: `${isoDay(-1)}T00:00:00Z` })
+        .set(auth())
+        .expect(422);
     });
 
     it('filtra por estado y por profesional', async () => {
@@ -561,21 +704,163 @@ describe('Ventas y caja (integración)', () => {
 
   // =========================================================================
 
-  describe('anulación', () => {
-    it('impide anular una factura cobrada', async () => {
+  describe('anulación con reversa (ADR-0020)', () => {
+    const voidSale = (id: string, headers = auth()) =>
+      request(server())
+        .post(api(`/sales/${id}/void`))
+        .set(headers)
+        .send({ reason: 'Cobrada a la clienta equivocada' });
+
+    it('devuelve la tarjeta, repone el mismo lote y descuenta la visita de la clienta', async () => {
+      const productId = await createProduct({
+        sku: 'TINTE-ANULA',
+        tracksBatches: true,
+        price: 100,
+      });
+      await receive({
+        productId,
+        quantity: 5,
+        unitCost: 40,
+        batchNumber: 'L-ANULA',
+        expiresAt: isoDay(90),
+      }).expect(201);
+      const sale = await sell({
+        clientId: salonA.clientId,
+        lines: [{ kind: 'PRODUCT', itemId: productId, quantity: 2 }],
+        payments: [{ method: 'CARD', amount: 224 }],
+      }).expect(201);
+
+      const voided = await voidSale(sale.body.data.id as string).expect(201);
+
+      expect(voided.body.data).toMatchObject({ status: 'VOID', paidTotal: '0.00' });
+      expect(voided.body.data.payments).toEqual([
+        expect.objectContaining({ method: 'CARD', status: 'REFUNDED', refundedAmount: '224.00' }),
+      ]);
+
+      const { batch, returned, client } = await inspect(async () => ({
+        batch: await prisma.client.productBatch.findFirst({ where: { productId } }),
+        returned: await prisma.client.inventoryMovement.findMany({
+          where: { sourceId: sale.body.data.id as string, type: 'RETURN_IN' },
+        }),
+        client: await prisma.client.client.findFirst({ where: { id: salonA.clientId } }),
+      }));
+      expect(batch!.remainingQuantity.toFixed(3)).toBe('5.000');
+      expect(returned).toHaveLength(1);
+      expect(returned[0]).toMatchObject({ batchId: batch!.id, sourceType: 'INVOICE' });
+      expect(returned[0].quantityDelta.toFixed(3)).toBe('2.000');
+      expect(client!.totalVisits).toBe(0);
+
+      // El cuadre del día muestra lo devuelto por tarjeta.
+      const resumen = await request(server())
+        .get(api('/sales/summary'))
+        .query({ from: `${isoDay(-1)}T00:00:00Z`, to: `${isoDay(1)}T23:59:59Z` })
+        .set(auth())
+        .expect(200);
+      expect(resumen.body.data).toMatchObject({ count: 0, voidCount: 1 });
+      expect(resumen.body.data.byMethod).toEqual([
+        expect.objectContaining({
+          method: 'CARD',
+          received: '224.00',
+          refunded: '224.00',
+          net: '0.00',
+        }),
+      ]);
+    });
+
+    it('saca el efectivo de la caja abierta como devolución', async () => {
+      await openCash(100).expect(201);
+      const total = Number(await totalFor(salonA.serviceId));
+      const sale = await sell({
+        lines: [{ kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1 }],
+        payments: [{ method: 'CASH', amount: total }],
+      }).expect(201);
+
+      await voidSale(sale.body.data.id as string).expect(201);
+
+      const caja = await request(server()).get(api('/cash/current')).set(auth()).expect(200);
+      expect(caja.body.data.movements).toEqual([
+        expect.objectContaining({
+          type: 'REFUND',
+          amount: total.toFixed(2),
+          reference: sale.body.data.number,
+        }),
+      ]);
+      // Fondo + venta − devolución: vuelve a estar solo el fondo.
+      expect(caja.body.data.expectedAmount).toBe('100.00');
+    });
+
+    it('sin caja abierta no anula una venta en efectivo, y la caja cerrada no cambia después', async () => {
+      await openCash(100).expect(201);
+      const total = Number(await totalFor(salonA.serviceId));
+      const sale = await sell({
+        lines: [{ kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1 }],
+        payments: [{ method: 'CASH', amount: total }],
+      }).expect(201);
+      await request(server())
+        .post(api('/cash/close'))
+        .set(auth())
+        .send({ countedAmount: 100 + total })
+        .expect(201);
+
+      const rechazo = await voidSale(sale.body.data.id as string).expect(422);
+      expect(rechazo.body.code).toBe('CASH_REFUND_REQUIRES_OPEN_SESSION');
+
+      await openCash(200).expect(201);
+      await voidSale(sale.body.data.id as string).expect(201);
+
+      const historial = await request(server()).get(api('/cash/history')).set(auth()).expect(200);
+      const [abierta, cerrada] = historial.body.data as Record<string, string>[];
+      // La caja del cobro sigue diciendo lo que se cobró y se contó aquel día.
+      expect(cerrada).toMatchObject({ cashSales: total.toFixed(2), difference: '0.00' });
+      // La devolución sale de la caja de hoy.
+      expect(abierta.expectedAmount).toBe((200 - total).toFixed(2));
+    });
+
+    it('libera la cita para que pueda volver a cobrarse', async () => {
+      // La fixture no trae citas: se crea una ya atendida, lista para cobrar.
+      const appointmentId = await inspect(async () => {
+        const startsAt = new Date(Date.now() - 2 * 3_600_000);
+        const row = await prisma.client.appointment.create({
+          data: {
+            tenantId: salonA.tenantId,
+            clientId: salonA.clientId,
+            stylistId: salonA.stylistId,
+            startsAt,
+            endsAt: new Date(startsAt.getTime() + 3_600_000),
+            status: 'COMPLETED',
+          },
+        });
+        return row.id;
+      });
+      const total = Number(await totalFor(salonA.serviceId));
+      const body = {
+        appointmentId,
+        lines: [{ kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1 }],
+        payments: [{ method: 'CARD', amount: total }],
+      };
+      const sale = await sell(body).expect(201);
+
+      await voidSale(sale.body.data.id as string).expect(201);
+      await sell(body).expect(201);
+    });
+
+    it('solo la propietaria anula, y no dos veces', async () => {
       const total = Number(await totalFor(salonA.serviceId));
       const sale = await sell({
         lines: [{ kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1 }],
         payments: [{ method: 'CARD', amount: total }],
       }).expect(201);
 
-      const response = await request(server())
-        .post(api(`/sales/${sale.body.data.id}/void`))
-        .set(auth())
-        .send({ reason: 'Cobrada a la clienta equivocada' })
-        .expect(422);
+      const recepcion = await request(server())
+        .post(api('/auth/login'))
+        .send({ email: salonA.receptionEmail, password: TEST_PASSWORD })
+        .expect(200);
+      await voidSale(sale.body.data.id as string, {
+        Authorization: `Bearer ${recepcion.body.data.accessToken as string}`,
+      }).expect(403);
 
-      expect(response.body.detail).toMatch(/Devuelva el importe/);
+      await voidSale(sale.body.data.id as string).expect(201);
+      await voidSale(sale.body.data.id as string).expect(409);
     });
   });
 

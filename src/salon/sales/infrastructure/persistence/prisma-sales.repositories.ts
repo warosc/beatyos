@@ -23,12 +23,17 @@ import { RequestContextStore } from '../../../../shared/infrastructure/context/r
 import { Invoice, type InvoiceLine } from '../../domain/invoice.entity';
 import { Payment } from '../../domain/payment.entity';
 import type {
+  DateRange,
   DocumentNumberGenerator,
   DocumentTypeValue,
   InvoiceFilter,
   InvoiceRepository,
   InvoiceSortField,
+  InvoiceTotals,
+  PaymentMethodTotals,
   PaymentRepository,
+  SalesDirectory,
+  SalesNames,
 } from '../../domain/sales.repositories';
 
 const INVOICE_INCLUDE = {
@@ -181,6 +186,8 @@ export class PrismaInvoiceRepository
         where: { id: invoice.id },
         data: {
           ...this.toPersistence(invoice),
+          // Solo la anulación la cambia: libera la cita para que pueda volver a cobrarse.
+          appointmentId: invoice.appointmentId,
           updatedAt: invoice.audit.updatedAt,
           updatedBy: invoice.audit.updatedBy,
         },
@@ -198,6 +205,30 @@ export class PrismaInvoiceRepository
     return this.update(invoice);
   }
 
+  async summarize(range: DateRange): Promise<InvoiceTotals> {
+    const issuedAt = { gte: range.from, lte: range.to };
+    const [current, voidCount] = await withMappedErrors(this.entityName, () =>
+      Promise.all([
+        this.prisma.client.invoice.aggregate({
+          where: { issuedAt, status: { notIn: ['VOID', 'DRAFT'] } },
+          _count: { _all: true },
+          _sum: { total: true, discountTotal: true },
+        }),
+        this.prisma.client.invoice.count({ where: { issuedAt, status: 'VOID' } }),
+      ]),
+    );
+
+    return {
+      count: current._count._all,
+      total: Money.fromDecimal(current._sum.total?.toFixed(2) ?? '0.00', this.currency),
+      discountTotal: Money.fromDecimal(
+        current._sum.discountTotal?.toFixed(2) ?? '0.00',
+        this.currency,
+      ),
+      voidCount,
+    };
+  }
+
   protected buildWhere(filter: InvoiceFilter): Record<string, unknown> {
     return this.compose(
       this.textSearch(filter.search, ['number', 'notes']),
@@ -210,6 +241,7 @@ export class PrismaInvoiceRepository
         ? { issuedAt: this.dateRange(filter.from, filter.to) }
         : undefined,
       filter.onlyUnpaid ? { balanceDue: { gt: 0 }, status: { not: 'VOID' } } : undefined,
+      filter.method ? { payments: { some: { method: filter.method } } } : undefined,
     );
   }
 
@@ -340,13 +372,56 @@ export class PrismaPaymentRepository implements PaymentRepository {
     return rows.map((row) => this.toDomain(row));
   }
 
+  async findByInvoiceIds(invoiceIds: readonly string[]): Promise<Payment[]> {
+    if (!invoiceIds.length) return [];
+    const rows = await withMappedErrors(this.entityName, () =>
+      this.prisma.client.payment.findMany({
+        where: { invoiceId: { in: [...invoiceIds] } },
+        orderBy: { receivedAt: 'asc' },
+      }),
+    );
+    return rows.map((row) => this.toDomain(row));
+  }
+
+  async summarizeByMethod(range: DateRange): Promise<PaymentMethodTotals[]> {
+    const [received, refunded] = await withMappedErrors(this.entityName, () =>
+      Promise.all([
+        this.prisma.client.payment.groupBy({
+          by: ['method'],
+          where: { receivedAt: { gte: range.from, lte: range.to }, status: { not: 'FAILED' } },
+          _sum: { amount: true },
+        }),
+        this.prisma.client.payment.groupBy({
+          by: ['method'],
+          where: { refundedAt: { gte: range.from, lte: range.to } },
+          _sum: { refundedAmount: true },
+        }),
+      ]),
+    );
+
+    const methods = new Set([...received, ...refunded].map((row) => row.method));
+    return [...methods].map((method) => ({
+      method,
+      received: Money.fromDecimal(
+        received.find((row) => row.method === method)?._sum.amount?.toFixed(2) ?? '0.00',
+        this.currency,
+      ),
+      refunded: Money.fromDecimal(
+        refunded.find((row) => row.method === method)?._sum.refundedAmount?.toFixed(2) ?? '0.00',
+        this.currency,
+      ),
+    }));
+  }
+
   /**
-   * Efectivo neto imputado a una sesión de caja.
+   * Efectivo cobrado en una sesión de caja, **sin restar devoluciones**.
    *
-   * Resta lo devuelto: un cobro de 100 con 30 devueltos deja 70 en el cajón, y contar los
-   * 100 haría que el arqueo señalara un descuadre que en realidad no existe.
+   * Una devolución sale del cajón que esté abierto cuando se hace, que puede no ser el del
+   * cobro, y queda anotada allí como movimiento `REFUND` (ADR-0020). Restarla también aquí
+   * la contaría dos veces y, peor, cambiaría a posteriori las ventas de una caja ya cerrada
+   * y cuadrada.
    *
-   * Se resuelve con dos agregados en la base y no trayéndose los cobros para sumarlos aquí:
+   * Se resuelve con un agregado en la base y no trayéndose los cobros para sumarlos aquí:
    * es la cifra que se pinta en cada carga de la pantalla de caja, y un sábado no son pocos.
    */
   async cashTotalForSession(sessionId: string, currency: string): Promise<Money> {
@@ -355,16 +430,28 @@ export class PrismaPaymentRepository implements PaymentRepository {
         where: {
           sessionId,
           method: 'CASH',
-          status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED'] },
+          status: { in: ['COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED'] },
         },
-        _sum: { amount: true, refundedAmount: true },
+        _sum: { amount: true },
       }),
     );
 
-    const received = Money.fromDecimal(result._sum.amount?.toFixed(2) ?? '0.00', currency);
-    const refunded = Money.fromDecimal(result._sum.refundedAmount?.toFixed(2) ?? '0.00', currency);
+    return Money.fromDecimal(result._sum.amount?.toFixed(2) ?? '0.00', currency);
+  }
 
-    return received.subtract(refunded);
+  async update(payment: Payment): Promise<Payment> {
+    const row = await withMappedErrors(this.entityName, () =>
+      this.prisma.client.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: payment.status,
+          refundedAt: payment.refundedAt,
+          refundedAmount: payment.refundedAmount.toDecimalString(),
+          refundReason: payment.refundReason,
+        },
+      }),
+    );
+    return this.toDomain(row);
   }
 
   private toDomain(row: PaymentRow): Payment {
@@ -386,6 +473,53 @@ export class PrismaPaymentRepository implements PaymentRepository {
       refundReason: row.refundReason,
       createdBy: row.createdBy,
     });
+  }
+}
+
+// ===========================================================================
+// Nombres para mostrar
+// ===========================================================================
+
+@Injectable()
+export class PrismaSalesDirectory implements SalesDirectory {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async namesFor(ids: {
+    readonly clientIds: readonly string[];
+    readonly userIds: readonly string[];
+    readonly stylistIds: readonly string[];
+  }): Promise<SalesNames> {
+    const unique = (values: readonly string[]) => [...new Set(values)];
+    const [clients, users, stylists] = await withMappedErrors('Nombres', () =>
+      Promise.all([
+        ids.clientIds.length
+          ? this.prisma.client.client.findMany({
+              where: { id: { in: unique(ids.clientIds) } },
+              select: { id: true, firstName: true, lastName: true },
+            })
+          : [],
+        ids.userIds.length
+          ? this.prisma.client.user.findMany({
+              where: { id: { in: unique(ids.userIds) } },
+              select: { id: true, firstName: true, lastName: true },
+            })
+          : [],
+        ids.stylistIds.length
+          ? this.prisma.client.stylist.findMany({
+              where: { id: { in: unique(ids.stylistIds) } },
+              select: { id: true, firstName: true, lastName: true, displayName: true },
+            })
+          : [],
+      ]),
+    );
+
+    const fullName = (row: { firstName: string; lastName: string }) =>
+      `${row.firstName} ${row.lastName}`.trim();
+    return {
+      clients: new Map(clients.map((row) => [row.id, fullName(row)])),
+      users: new Map(users.map((row) => [row.id, fullName(row)])),
+      stylists: new Map(stylists.map((row) => [row.id, row.displayName || fullName(row)])),
+    };
   }
 }
 

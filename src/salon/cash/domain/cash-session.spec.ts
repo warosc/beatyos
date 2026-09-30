@@ -170,6 +170,47 @@ describe('CashSession', () => {
     });
   });
 
+  describe('devoluciones por anulación (ADR-0020)', () => {
+    const refund = (session: CashSession, amount: string, cashSales: string) =>
+      session.recordRefund({
+        id: `refund-${(sequence += 1)}`,
+        amount: gtq(amount),
+        invoiceNumber: 'F-2026-000007',
+        cashSales: gtq(cashSales),
+        now: NOW,
+        actorId: 'user-1',
+      });
+
+    it('saca el efectivo del esperado, contando las ventas del día', () => {
+      const session = aSession('100.00');
+      // 150 de devolución con 100 de fondo: solo es posible porque hay 200 de ventas.
+      const movement = refund(session, '150.00', '200.00');
+
+      expect(movement).toMatchObject({ type: 'REFUND', reference: 'F-2026-000007' });
+      expect(session.expectedAmount(gtq('200.00')).toDecimalString()).toBe('150.00');
+    });
+
+    it('no devuelve más de lo que debería haber en el cajón', () => {
+      const session = aSession('100.00');
+      expect(() => refund(session, '300.01', '200.00')).toThrow(/debería haber/);
+    });
+
+    it('no se anota a mano como un movimiento más', () => {
+      expect(() => record(aSession(), 'REFUND', '10.00')).toThrow(/al anular la venta/);
+    });
+
+    it('exige la caja abierta', () => {
+      const session = aSession();
+      session.close({
+        countedAmount: gtq('500.00'),
+        cashSales: gtq('0.00'),
+        now: NOW,
+        actorId: 'user-1',
+      });
+      expect(() => refund(session, '10.00', '0.00')).toThrow(InvalidStateTransitionError);
+    });
+  });
+
   describe('cierre', () => {
     it('registra la diferencia cuando falta dinero', () => {
       const session = aSession('500.00');

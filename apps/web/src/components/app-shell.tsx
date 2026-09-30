@@ -1,7 +1,8 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import {
   CalendarDays,
   ChartNoAxesCombined,
@@ -13,6 +14,7 @@ import {
   Scissors,
   Settings,
   ShoppingBag,
+  Sun,
   Trophy,
   Truck,
   Users,
@@ -20,10 +22,17 @@ import {
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LogoutButton } from '@/components/logout-button';
 import { SessionContext } from '@/components/session-access';
+import { fetchTenantProfile, TENANT_PROFILE_KEY } from '@/features/sales/types';
+import { fetchPendingCount, PENDING_COUNT_KEY } from '@/features/service-tickets/types';
+import { useIsStylist } from '@/features/stylist-day/my-stylist';
+import { useMyDay } from '@/features/stylist-day/use-my-day';
+import { applyBrand } from '@/lib/brand';
 import { sessionFetch } from '@/lib/session-fetch';
 import type { SessionUser } from '@/lib/auth';
+const MY_DAY = '/mi-dia';
 const nav = [
   ['Inicio', '/', LayoutDashboard, ['reports.read']],
+  ['Mi día', MY_DAY, Sun, ['service-tickets.create.own']],
   ['Agenda', '/agenda', CalendarDays, ['appointments.read', 'appointments.read.own']],
   ['Clientes', '/clientes', Users, ['clients.read']],
   ['Inventario', '/inventario', Package, ['products.read']],
@@ -57,16 +66,43 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     (profile.data.permissions.includes('*') ||
       profile.data.permissions.includes('service-tickets.read'));
   const pendingCharges = useQuery({
-    queryKey: ['service-tickets-pending-count'],
+    queryKey: PENDING_COUNT_KEY,
     enabled: !isPublic && canSeeCharges,
     refetchInterval: 30_000,
-    queryFn: async () => {
-      const r = await sessionFetch('/api/service-tickets?status=PENDING&limit=1');
-      if (!r.ok) return 0;
-      const b = (await r.json()) as { meta?: { total: number } };
-      return b.meta?.total ?? 0;
-    },
+    queryFn: fetchPendingCount,
   });
+  // «Mi día» es de quien atiende clientas: exige la ficha de profesional además del permiso.
+  const stylist = useIsStylist(isPublic ? [] : (profile.data?.permissions ?? []));
+  const myDay = useMyDay(!isPublic && stylist.isStylist);
+  const router = useRouter();
+  const canSeeDashboard =
+    !!profile.data &&
+    (profile.data.permissions.includes('*') || profile.data.permissions.includes('reports.read'));
+  // Quien no ve el panel de reportes no aterriza en una página vacía: la profesional va a su
+  // día, que es donde trabaja.
+  useEffect(() => {
+    if (isPublic || pathname !== '/' || !profile.data || canSeeDashboard || stylist.pending) return;
+    if (stylist.isStylist) router.replace(MY_DAY);
+  }, [
+    isPublic,
+    pathname,
+    profile.data,
+    canSeeDashboard,
+    stylist.pending,
+    stylist.isStylist,
+    router,
+  ]);
+  // Los colores son del salón de la sesión: se aplican al entrar y al cambiarlos.
+  const salon = useQuery({
+    queryKey: TENANT_PROFILE_KEY,
+    enabled: !isPublic && !!profile.data,
+    staleTime: 10 * 60_000,
+    queryFn: fetchTenantProfile,
+  });
+  const brandTheme = salon.data?.brandTheme;
+  useEffect(() => {
+    if (brandTheme) applyBrand(brandTheme);
+  }, [brandTheme]);
   if (isPublic) return children;
   if (profile.isPending)
     return (
@@ -87,12 +123,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     permissions.length === 0 ||
     user.permissions.includes('*') ||
     permissions.some((p) => user.permissions.includes(p));
-  const visible = nav.filter((x) => allowed(x[3]));
+  const visible = nav.filter((x) => allowed(x[3]) && (x[1] !== MY_DAY || stylist.isStylist));
   const route = nav.find((x) =>
     x[1] === '/' ? pathname === '/' : pathname === x[1] || pathname.startsWith(x[1] + '/'),
   );
   const permitted = !route || allowed(route[3]);
-  const badges: Partial<Record<string, number>> = { '/caja': pendingCharges.data ?? 0 };
+  const badges: Partial<Record<string, number>> = {
+    '/caja': pendingCharges.data ?? 0,
+    // Citas que ya tocaban y la profesional aún no ha enviado a caja.
+    [MY_DAY]: myDay.day.pendingCount,
+  };
   const links = visible.map(([label, href, Icon]) => (
     <Link
       key={href}

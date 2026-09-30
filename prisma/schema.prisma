@@ -43,6 +43,11 @@ model Tenant {
   locale      String       @default("es-GT")
   status      TenantStatus @default(ACTIVE)
   planCode    String       @default("standard")
+  /// Combinación de colores de la interfaz de este salón. Los valores válidos los fija la
+  /// aplicación (`BRAND_THEMES`), no la base: añadir una paleta no debe exigir migración.
+  brandTheme  String       @default("terracota")
+  /// Línea libre al pie de los comprobantes: redes, horario, un agradecimiento propio.
+  receiptNote String?
   trialEndsAt DateTime?    @db.Timestamptz(3)
   createdAt   DateTime     @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
@@ -1432,6 +1437,8 @@ enum CashMovementType {
   WITHDRAWAL
   EXPENSE
   CORRECTION
+  /// Efectivo devuelto al anular una venta cobrada (ADR-0020).
+  REFUND
 }
 
 /// Tipo de foto dentro del historial de una clienta.

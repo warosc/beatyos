@@ -39,6 +39,7 @@ describe('agenda', () => {
     ['stylists', /\/stylists$/],
     ['services', /\/services$/],
     ['clients', /\/clients$/],
+    ['categories', /\/categories$/],
   ])('resuelve %s en su recurso de la API', async (resource, path) => {
     await GET(new NextRequest(url(`resource=${resource}`)));
     expect(calledUrl().pathname).toMatch(path);

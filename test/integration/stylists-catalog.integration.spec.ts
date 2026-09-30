@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 
 import { PrismaService } from '@shared/infrastructure/persistence/prisma/prisma.service';
+import { QueryScopeStore } from '@shared/infrastructure/persistence/prisma/query-scope';
 import { zonedTimeToInstant } from '@shared/domain/time/zoned-time';
 
 import { api, createTestApp, resetDatabase } from './app-harness';
@@ -400,6 +401,34 @@ describe('Profesionales y catálogo (integración)', () => {
   });
 
   describe('categorías', () => {
+    it('filtra por una categoría cuyo identificador no es un UUID', async () => {
+      // Un seed anterior dejó categorías con identificadores legibles. `/categories` los
+      // devuelve, así que el filtro del catálogo tiene que aceptarlos.
+      await QueryScopeStore.crossTenant(async () => {
+        await prisma.client.category.create({
+          data: {
+            id: 'cat-legado-peluqueria',
+            tenantId: salonA.tenantId,
+            kind: 'SERVICE',
+            name: 'Legado',
+            slug: 'legado',
+          },
+        });
+        await prisma.client.service.update({
+          where: { id: salonA.serviceId },
+          data: { categoryId: 'cat-legado-peluqueria' },
+        });
+      });
+
+      const response = await request(app.getHttpServer())
+        .get(api('/services'))
+        .query({ categoryId: 'cat-legado-peluqueria' })
+        .set(auth())
+        .expect(200);
+
+      expect((response.body.data as { id: string }[]).map((s) => s.id)).toEqual([salonA.serviceId]);
+    });
+
     it('genera el slug sin acentos', async () => {
       const response = await request(app.getHttpServer())
         .post(api('/categories'))

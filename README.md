@@ -70,7 +70,7 @@ Todas con la contraseña `SalonDemo2026`:
 | `propietaria@bella-vista.es` | `OWNER` | Acceso total al salón |
 | `encargada@bella-vista.es` | `MANAGER` | Gestión diaria, sin anular facturas ni tocar usuarios |
 | `recepcion@bella-vista.es` | `RECEPTIONIST` | Agenda y cobro, **sin ver costes ni márgenes** |
-| `estilista@bella-vista.es` | `STYLIST` | Solo su propia agenda |
+| `estilista@bella-vista.es` | `STYLIST` | «Mi día»: su agenda y declarar lo que hizo para que caja lo cobre. **No cobra** |
 
 Existe un segundo salón (`estilo-urbano.es`, mismas cuentas y contraseña) para comprobar
 a mano que el aislamiento entre inquilinos funciona.
@@ -401,8 +401,8 @@ infraestructura.
 | Módulo | Qué resuelve |
 | ------ | ------------ |
 | **Inventario, lotes y Kardex** | Ledger append-only, reparto **FEFO** con coste real por lote, y descuento de existencias con `UPDATE` condicional que cierra la pérdida de escrituras bajo concurrencia (ADR-0012, ADR-0013) |
-| **Ventas y facturación** | Numeración densa y sin huecos, precios e impuestos congelados al emitir, cobro parcial, anulación y devoluciones. Descuenta stock delegando en el motor de inventario, sin reimplementarlo (ADR-0014) |
-| **Caja** | Apertura, movimientos, arqueo y cierre. El efectivo esperado se calcula en **un solo sitio**, y una sola caja abierta por salón lo garantiza un índice único parcial (ADR-0014) |
+| **Ventas y facturación** | Numeración densa y sin huecos, precios e impuestos congelados al emitir, cobro parcial, anulación y devoluciones. Descuenta stock delegando en el motor de inventario, sin reimplementarlo (ADR-0014). Historial con cuadre por método de pago, comprobante imprimible (no es FEL) y anulación de ventas cobradas con reversa: el efectivo sale de la caja abierta y el género vuelve a su lote (ADR-0020) |
+| **Caja** | Apertura, movimientos, arqueo y cierre. El efectivo esperado se calcula en **un solo sitio**, y una sola caja abierta por salón lo garantiza un índice único parcial (ADR-0014). Resumen del turno por método (efectivo, tarjeta, transferencia) y corte imprimible |
 | **Informes y KPIs** | Ventas, ticket medio, retención, ocupación y ranking de profesionales, agrupados por días **en la hora del salón** y no en UTC (ADR-0015) |
 | **Fotos e historial de clienta** | Almacén de objetos compatible con S3, tipo deducido de los bytes del fichero, consentimiento obligatorio y borrado en dos tiempos que llega al fichero (ADR-0016) |
 | **Comisiones y metas** | Comisión en cascada (habilidad → servicio → general), congelada al facturar; metas de facturación con recompensa y ámbito `.own` (ADR-0018) |

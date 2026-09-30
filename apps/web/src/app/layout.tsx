@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
+import { cookies } from 'next/headers';
 import { AppShell } from '@/components/app-shell';
 import { Providers } from '@/components/providers';
+import { asBrand, BRAND_COOKIE, DEFAULT_BRAND } from '@/lib/brand';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -16,9 +18,15 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Los colores del salón salen ya en el HTML, sin parpadeo: el último salón usado en este
+  // navegador o, en una instalación de un solo salón, el que fije `BRAND_THEME`.
+  const brand =
+    asBrand((await cookies()).get(BRAND_COOKIE)?.value) ??
+    asBrand(process.env.BRAND_THEME) ??
+    DEFAULT_BRAND;
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" data-brand={brand} suppressHydrationWarning>
       <body className="font-sans antialiased">
         <Providers>
           <AppShell>{children}</AppShell>

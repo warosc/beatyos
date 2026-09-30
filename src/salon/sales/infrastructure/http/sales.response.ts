@@ -3,6 +3,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { PageMetaResponse } from '../../../../shared/infrastructure/http/dto/pagination.dto';
 import type { Invoice } from '../../domain/invoice.entity';
 import type { Payment } from '../../domain/payment.entity';
+import type { SalesNames } from '../../domain/sales.repositories';
+import type { SalesSummary } from '../../application/sales.use-cases';
 
 /**
  * Presentador de ventas (ADR-0014, ADR-0018).
@@ -16,6 +18,7 @@ export class InvoiceLineResponse {
   productId!: string | null;
   serviceId!: string | null;
   stylistId!: string | null;
+  @ApiProperty({ nullable: true, type: String }) stylistName!: string | null;
   description!: string;
   quantity!: string;
   unitPrice!: string;
@@ -36,6 +39,8 @@ export class PaymentResponse {
   currency!: string;
   reference!: string | null;
   receivedAt!: Date;
+  @ApiProperty({ nullable: true, type: Date }) refundedAt!: Date | null;
+  @ApiProperty({ nullable: true, type: String }) refundReason!: string | null;
 }
 
 export class InvoiceResponse {
@@ -43,6 +48,9 @@ export class InvoiceResponse {
   number!: string;
   status!: string;
   clientId!: string | null;
+  @ApiProperty({ nullable: true, type: String }) clientName!: string | null;
+  /** Quién registró la venta: la cajera que la cobró. */
+  @ApiProperty({ nullable: true, type: String }) createdByName!: string | null;
   appointmentId!: string | null;
   issuedAt!: Date | null;
   dueAt!: Date | null;
@@ -65,11 +73,14 @@ export class InvoiceResponse {
 export const toInvoiceResponse = (
   invoice: Invoice,
   payments?: readonly Payment[],
+  names?: SalesNames,
 ): InvoiceResponse => ({
   id: invoice.id,
   number: invoice.number,
   status: invoice.status,
   clientId: invoice.clientId,
+  clientName: (invoice.clientId && names?.clients.get(invoice.clientId)) || null,
+  createdByName: (invoice.audit.createdBy && names?.users.get(invoice.audit.createdBy)) || null,
   appointmentId: invoice.appointmentId,
   issuedAt: invoice.issuedAt,
   dueAt: invoice.dueAt,
@@ -91,6 +102,7 @@ export const toInvoiceResponse = (
     productId: line.productId,
     serviceId: line.serviceId,
     stylistId: line.stylistId,
+    stylistName: (line.stylistId && names?.stylists.get(line.stylistId)) || null,
     description: line.description,
     quantity: line.quantity.toFixed(3),
     unitPrice: line.unitPrice.toDecimalString(),
@@ -112,6 +124,8 @@ export const toInvoiceResponse = (
           currency: payment.amount.currency,
           reference: payment.reference,
           receivedAt: payment.receivedAt,
+          refundedAt: payment.refundedAt,
+          refundReason: payment.refundReason,
         })),
       }
     : {}),
@@ -123,6 +137,44 @@ export const toInvoiceResponse = (
 
 export class InvoiceEnvelopeResponse {
   @ApiProperty({ type: InvoiceResponse }) data!: InvoiceResponse;
+}
+
+export class PaymentMethodTotalsResponse {
+  method!: string;
+  received!: string;
+  refunded!: string;
+  /** Cobrado menos devuelto: lo que debe haber quedado por ese medio. */
+  net!: string;
+}
+
+export class SalesSummaryResponse {
+  count!: number;
+  total!: string;
+  discountTotal!: string;
+  voidCount!: number;
+  currency!: string;
+  @ApiProperty({ type: [PaymentMethodTotalsResponse] }) byMethod!: PaymentMethodTotalsResponse[];
+}
+
+export const toSalesSummaryResponse = (
+  summary: SalesSummary,
+  currency: string,
+): SalesSummaryResponse => ({
+  count: summary.invoices.count,
+  total: summary.invoices.total.toDecimalString(),
+  discountTotal: summary.invoices.discountTotal.toDecimalString(),
+  voidCount: summary.invoices.voidCount,
+  currency,
+  byMethod: summary.byMethod.map((row) => ({
+    method: row.method,
+    received: row.received.toDecimalString(),
+    refunded: row.refunded.toDecimalString(),
+    net: row.received.subtract(row.refunded).toDecimalString(),
+  })),
+});
+
+export class SalesSummaryEnvelopeResponse {
+  @ApiProperty({ type: SalesSummaryResponse }) data!: SalesSummaryResponse;
 }
 
 export class InvoicePageResponse {

@@ -315,11 +315,43 @@ export class Invoice extends Entity {
   }
 
   /**
+   * Registra dinero devuelto a la clienta: baja lo cobrado.
+   *
+   * Es el paso previo a anular una factura cobrada (ADR-0020). No cambia el estado por sí
+   * solo: una factura con lo cobrado devuelto sigue siendo un documento emitido hasta que
+   * alguien decide anularla.
+   */
+  registerRefund(amount: Money, now: Date, actorId: string | null): void {
+    if (this.props.status === 'VOID') {
+      throw new InvalidStateTransitionError('Factura', 'VOID', 'con devoluciones');
+    }
+    if (!amount.isPositive()) {
+      throw new DomainValidationError('El importe devuelto debe ser mayor que cero', 'amount');
+    }
+    if (amount.greaterThan(this.props.paidTotal)) {
+      throw new BusinessRuleViolationError(
+        'REFUND_EXCEEDS_PAID',
+        `No se pueden devolver ${amount.toString()}: la factura ${this.props.number} tiene ${this.props.paidTotal.toString()} cobrados`,
+        { invoiceId: this.id, paidTotal: this.props.paidTotal.toDecimalString() },
+      );
+    }
+
+    this.props = {
+      ...this.props,
+      paidTotal: this.props.paidTotal.subtract(amount),
+      audit: { ...this.props.audit, updatedAt: now, updatedBy: actorId },
+    };
+  }
+
+  /**
    * Anula la factura.
    *
    * Una factura con cobros **no se anula**: primero se devuelve el dinero. Anularla dejando
    * los cobros en pie descuadraría la caja del día, y el arqueo de esa noche no cerraría
    * sin que nadie supiera por qué.
+   *
+   * Anulada, deja libre su cita: el servicio no se cobró, y tiene que poder cobrarse otra
+   * vez. La relación queda en la auditoría.
    */
   void(reason: string, now: Date, actorId: string | null): void {
     if (this.props.status === 'VOID') {
@@ -336,6 +368,7 @@ export class Invoice extends Entity {
     this.props = {
       ...this.props,
       status: 'VOID',
+      appointmentId: null,
       voidedAt: now,
       voidReason: requireText(reason, 'reason', 'La anulación necesita un motivo'),
       audit: { ...this.props.audit, updatedAt: now, updatedBy: actorId },

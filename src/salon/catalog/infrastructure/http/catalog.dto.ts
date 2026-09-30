@@ -258,9 +258,12 @@ export class ServiceQueryDto extends PaginationQueryDto {
   @Transform(trim)
   search?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  // Sin `@IsUUID`: hay categorías con identificadores de un seed anterior que no son UUID, y
+  // un filtro no puede rechazar un identificador que la propia API devuelve en `/categories`.
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(64)
   categoryId?: string;
 
   @ApiPropertyOptional()

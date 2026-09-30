@@ -131,6 +131,32 @@ describe('Comandas de servicio (integración)', () => {
     await charge(ticket.id, stylistToken).expect(403);
   });
 
+  it('la estilista tampoco vende por el punto de venta', async () => {
+    // Declarar lo hecho y recibir el dinero son de personas distintas: ese reparto es el
+    // control. Sin esto, la profesional cobraba desde Ventas saltándose la caja.
+    await request(server())
+      .post(api('/sales'))
+      .set(auth(stylistToken))
+      .send({
+        lines: [{ kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1 }],
+        payments: [{ method: 'CARD', amount: Number(TOTAL) }],
+      })
+      .expect(403);
+  });
+
+  it('recepción registra a nombre de la estilista y la comisión es de ella', async () => {
+    const ticket = (
+      await registerTicket(receptionToken, { stylistId: salonA.stylistId }).expect(201)
+    ).body.data;
+    expect(ticket.stylistId).toBe(salonA.stylistId);
+
+    const charged = (await charge(ticket.id).expect(201)).body.data;
+    const line = await inspect(() =>
+      prisma.client.invoiceLine.findFirst({ where: { invoiceId: charged.invoiceId } }),
+    );
+    expect(line!.stylistId).toBe(salonA.stylistId);
+  });
+
   it('un importe distinto del total no se cobra', async () => {
     const ticket = (await registerTicket().expect(201)).body.data;
 

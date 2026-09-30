@@ -5,7 +5,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const token = (await cookies()).get('beautyos_access')?.value;
   if (!token) return NextResponse.json({ message: 'Sesión expirada.' }, { status: 401 });
   const { id } = await params;
-  const action = request.nextUrl.searchParams.get('action') === 'cancel' ? 'cancel' : 'reschedule';
+  // Solo estas acciones; cualquier otra cosa se trata como reprogramar, que valida su cuerpo.
+  const requested = request.nextUrl.searchParams.get('action');
+  const action = requested === 'cancel' || requested === 'start' ? requested : 'reschedule';
   const response = await fetch(`${API_URL}/appointments/${encodeURIComponent(id)}/${action}`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

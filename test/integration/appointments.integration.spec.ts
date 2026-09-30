@@ -86,6 +86,20 @@ describe('Agenda (integración)', () => {
       });
 
   describe('reserva', () => {
+    it('el calendario trae el nombre de la clienta, sin pedir el fichero de clientas', async () => {
+      await book(at(10)).expect(201);
+
+      const calendar = await request(app.getHttpServer())
+        .get(api('/appointments/calendar'))
+        .query({ from: at(8), to: at(20) })
+        .set(auth())
+        .expect(200);
+
+      expect(calendar.body.data).toEqual([
+        expect.objectContaining({ clientId: salonA.clientId, clientName: 'Rosa Iglesias' }),
+      ]);
+    });
+
     it('agenda y calcula la duración con el margen de limpieza', async () => {
       const response = await book(at(10)).expect(201);
 

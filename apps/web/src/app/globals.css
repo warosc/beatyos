@@ -7,6 +7,9 @@
   --card-foreground: var(--foreground);
   --primary: oklch(0.48 0.1 35);
   --primary-foreground: oklch(0.99 0.005 70);
+  /* Color principal cuando es texto, icono, borde o foco. Casi siempre el mismo; una paleta
+     pastel lo oscurece para que se lea. */
+  --primary-ink: var(--primary);
   --secondary: oklch(0.94 0.025 65);
   --secondary-foreground: oklch(0.32 0.04 45);
   --muted: oklch(0.95 0.008 60);
@@ -31,6 +34,90 @@
   --border: oklch(0.3 0.014 45);
 }
 
+/*
+ * Colores por salón. `data-brand` lo pone el layout (del salón de la sesión, o del último
+ * que usó este navegador) y cada bloque redefine los mismos tokens que `:root`. Las paletas
+ * oscuras van después de las claras: tienen la misma especificidad y gana la última.
+ *
+ * En las paletas pastel, `--primary` es el tono tierno de botones y rellenos —con texto
+ * oscuro encima— y `--primary-ink` el tono oscuro de la misma familia para textos, iconos,
+ * bordes y foco: un pastel como texto sobre blanco no se lee. En oscuro no hace falta la
+ * distinción: el principal ya es claro sobre fondo oscuro.
+ */
+:root[data-brand='menta-rosa'] {
+  --background: oklch(0.985 0.008 350);
+  --foreground: oklch(0.24 0.03 170);
+  --primary: oklch(0.82 0.09 158);
+  --primary-foreground: oklch(0.26 0.06 165);
+  --primary-ink: oklch(0.46 0.1 162);
+  --secondary: oklch(0.93 0.04 350);
+  --secondary-foreground: oklch(0.38 0.09 350);
+  --muted: oklch(0.96 0.018 160);
+  --muted-foreground: oklch(0.5 0.03 165);
+  --border: oklch(0.91 0.02 350);
+}
+:root[data-brand='rosa-menta'] {
+  --background: oklch(0.985 0.006 20);
+  --foreground: oklch(0.25 0.03 355);
+  --primary: oklch(0.84 0.07 5);
+  --primary-foreground: oklch(0.28 0.07 0);
+  --primary-ink: oklch(0.5 0.15 5);
+  --secondary: oklch(0.93 0.04 160);
+  --secondary-foreground: oklch(0.35 0.06 165);
+  --muted: oklch(0.96 0.012 350);
+  --muted-foreground: oklch(0.52 0.03 355);
+  --border: oklch(0.91 0.02 350);
+}
+:root[data-brand='lavanda'] {
+  --background: oklch(0.985 0.006 300);
+  --foreground: oklch(0.24 0.03 295);
+  --primary: oklch(0.52 0.13 300);
+  --primary-foreground: oklch(0.99 0.008 300);
+  --secondary: oklch(0.93 0.035 320);
+  --secondary-foreground: oklch(0.36 0.08 310);
+  --muted: oklch(0.96 0.012 300);
+  --muted-foreground: oklch(0.52 0.03 300);
+  --border: oklch(0.91 0.018 300);
+}
+.dark[data-brand='menta-rosa'] {
+  --background: oklch(0.17 0.015 170);
+  --foreground: oklch(0.94 0.01 160);
+  --card: oklch(0.21 0.018 170);
+  --primary: oklch(0.78 0.1 160);
+  --primary-foreground: oklch(0.2 0.03 165);
+  --primary-ink: var(--primary);
+  --secondary: oklch(0.3 0.04 350);
+  --secondary-foreground: oklch(0.93 0.02 350);
+  --muted: oklch(0.25 0.015 170);
+  --muted-foreground: oklch(0.7 0.02 165);
+  --border: oklch(0.31 0.02 170);
+}
+.dark[data-brand='rosa-menta'] {
+  --background: oklch(0.17 0.015 350);
+  --foreground: oklch(0.94 0.01 350);
+  --card: oklch(0.21 0.018 350);
+  --primary: oklch(0.78 0.11 5);
+  --primary-foreground: oklch(0.2 0.03 0);
+  --primary-ink: var(--primary);
+  --secondary: oklch(0.3 0.035 165);
+  --secondary-foreground: oklch(0.92 0.02 160);
+  --muted: oklch(0.25 0.015 350);
+  --muted-foreground: oklch(0.7 0.02 350);
+  --border: oklch(0.31 0.02 350);
+}
+.dark[data-brand='lavanda'] {
+  --background: oklch(0.17 0.015 295);
+  --foreground: oklch(0.94 0.01 300);
+  --card: oklch(0.21 0.018 295);
+  --primary: oklch(0.78 0.1 300);
+  --primary-foreground: oklch(0.2 0.03 295);
+  --secondary: oklch(0.3 0.035 320);
+  --secondary-foreground: oklch(0.93 0.02 320);
+  --muted: oklch(0.25 0.015 295);
+  --muted-foreground: oklch(0.7 0.02 300);
+  --border: oklch(0.31 0.02 295);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -38,6 +125,10 @@
   --color-card-foreground: var(--card-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  /* `text-primary`, `border-primary` y `ring-primary` usan la tinta; `bg-primary`, el relleno. */
+  --text-color-primary: var(--primary-ink);
+  --border-color-primary: var(--primary-ink);
+  --ring-color-primary: var(--primary-ink);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -67,4 +158,32 @@ a {
 }
 ::selection {
   background: color-mix(in oklab, var(--primary) 25%, transparent);
+}
+
+/*
+ * Impresión de comprobantes y cierres de caja. Se imprime solo `.print-area`, sin menú ni
+ * diálogo alrededor, en negro sobre blanco aunque la pantalla esté en modo oscuro.
+ */
+@media print {
+  @page {
+    margin: 6mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+    color: #000 !important;
+    border-color: #000 !important;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+    background: #fff !important;
+  }
 }

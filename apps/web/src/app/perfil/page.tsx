@@ -3,7 +3,6 @@ import { cookies } from 'next/headers';
 import { Mail, ShieldCheck, UserRound } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { ChangePasswordForm } from '@/features/profile/change-password-form';
-import { MyServices } from '@/features/service-tickets/my-services';
 import type { SessionUser } from '@/lib/auth';
 
 interface Profile extends SessionUser {
@@ -16,10 +15,6 @@ interface Profile extends SessionUser {
 }
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3000/api/v1';
-
-/** El módulo de servicios realizados es de quien atiende clientas, no de toda cuenta. */
-const canRegisterServices = (profile: Profile) =>
-  profile.permissions.includes('service-tickets.create.own');
 
 export default async function ProfilePage() {
   const token = (await cookies()).get('beautyos_access')?.value;
@@ -44,7 +39,6 @@ export default async function ProfilePage() {
       </div>
       {profile ? (
         <>
-          {canRegisterServices(profile) && <MyServices />}
           <Card className="p-6">
             <div className="flex items-center gap-5">
               <div className="grid size-20 place-items-center rounded-full bg-secondary font-display text-2xl font-bold text-secondary-foreground">

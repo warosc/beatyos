@@ -43,7 +43,17 @@ export class ProductQueryDto {
   @IsIn(STOCK_STATUSES)
   stock?: StockQueryValue;
 
-  @ApiPropertyOptional() @IsOptional() @IsUUID() categoryId?: string;
+  // Sin `@IsUUID`, por lo mismo que en servicios: hay categorías con identificadores de un
+  // seed anterior que no son UUID.
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(64) categoryId?: string;
+
+  @ApiPropertyOptional({ description: 'Solo activos (true) o solo dados de baja (false)' })
+  @BooleanParam()
+  isActive?: boolean;
+
+  @ApiPropertyOptional({ description: 'Solo los que se venden a clientas' })
+  @BooleanParam()
+  isRetail?: boolean;
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()

@@ -123,6 +123,8 @@ export class ProductsController {
       filter: {
         search: query.search,
         categoryId: query.categoryId,
+        isActive: query.isActive,
+        isRetail: query.isRetail,
         stock: query.stock ? STOCK_BY_QUERY[query.stock] : undefined,
       },
       page: { page: query.page ?? 1, limit: query.limit ?? DEFAULT_LIMIT },
