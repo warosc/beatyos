@@ -26,7 +26,7 @@ export function LogoutButton() {
       <button
         disabled={busy}
         onClick={logout}
-        className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-sm hover:bg-muted disabled:opacity-50"
+        className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
       >
         <LogOut size={19} />
         {busy ? 'Saliendo…' : 'Cerrar sesión'}

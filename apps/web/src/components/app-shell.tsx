@@ -17,6 +17,7 @@ import {
   Sun,
   Trophy,
   Truck,
+  UserRound,
   Users,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -143,11 +144,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         (pathname === href ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground')
       }
     >
-      <Icon size={19} />
+      <Icon size={19} className={pathname === href ? 'text-primary' : undefined} />
       {label}
       <Badge count={badges[href]} />
     </Link>
   ));
+  const onProfile = pathname === '/perfil';
   return (
     <SessionContext.Provider value={user}>
       <div className="min-h-screen lg:grid lg:grid-cols-[248px_1fr]">
@@ -156,14 +158,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             href="/"
             className="mb-9 flex items-center gap-3 font-display text-xl font-semibold"
           >
-            <Scissors />
+            <Scissors className="text-primary" />
             BeautyOS
           </Link>
           <nav aria-label="Navegación principal" className="space-y-1">
             {links}
           </nav>
           <div className="mt-auto">
-            <Link href="/perfil" className="flex min-h-12 items-center px-3">
+            <Link
+              href="/perfil"
+              aria-current={onProfile ? 'page' : undefined}
+              className={
+                'flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium hover:bg-muted ' +
+                (onProfile ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground')
+              }
+            >
+              <UserRound size={19} className={onProfile ? 'text-primary' : undefined} />
               Perfil y ajustes
             </Link>
             <LogoutButton />
@@ -171,12 +181,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </aside>
         <div className="min-w-0 pb-24 lg:pb-0">
           <header className="sticky top-0 z-20 flex min-h-17 items-center gap-3 border-b bg-background px-4">
-            <span className="mr-auto font-display text-xl">BeautyOS</span>
+            <span className="mr-auto min-w-0 truncate font-display text-xl">
+              {salon.data?.name ?? 'BeautyOS'}
+            </span>
             <ThemeToggle />
             <Link
               href="/perfil"
               aria-label="Abrir perfil"
-              className="grid size-11 place-items-center rounded-full bg-secondary"
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-secondary font-semibold text-secondary-foreground"
             >
               {user.firstName?.[0]}
               {user.lastName?.[0]}
@@ -217,7 +229,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {label}
             </Link>
           ))}
-          <Link href="/perfil" className="flex min-w-20 items-center justify-center text-xs">
+          <Link
+            href="/perfil"
+            aria-current={onProfile ? 'page' : undefined}
+            className={
+              'flex min-h-16 min-w-20 shrink-0 flex-col items-center justify-center gap-1 text-xs ' +
+              (onProfile ? 'text-primary' : 'text-muted-foreground')
+            }
+          >
+            <UserRound size={20} />
             Perfil
           </Link>
         </nav>
