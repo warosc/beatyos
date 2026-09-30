@@ -99,6 +99,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # `.env.test` no se versiona (`.env*` está ignorado) y sin él la API no arranca:
+      # faltan los secretos JWT y los límites altos de peticiones. La plantilla ya apunta
+      # a esta base de datos y a este almacén.
+      - name: Configuración de pruebas
+        run: cp .env.test.example .env.test
+
+      # Almacén S3 para las fotos de clientas (ADR-0016). MinIO dejó de publicar imágenes;
+      # versitygw es un gateway S3 libre. Credenciales iguales a `.env.test.example`.
+      - name: Almacén de objetos
+        run: >-
+          docker run -d --name s3 -p 9000:7070
+          -e ROOT_ACCESS_KEY=salon_minio -e ROOT_SECRET_KEY=salon_minio_dev_password
+          --tmpfs /data --tmpfs /meta
+          versity/versitygw:v1.8.0 posix --sidecar /meta /data
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -143,6 +158,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # Igual que en la suite de integración.
+      - name: Configuración de pruebas
+        run: cp .env.test.example .env.test
+
+      - name: Almacén de objetos
+        run: >-
+          docker run -d --name s3 -p 9000:7070
+          -e ROOT_ACCESS_KEY=salon_minio -e ROOT_SECRET_KEY=salon_minio_dev_password
+          --tmpfs /data --tmpfs /meta
+          versity/versitygw:v1.8.0 posix --sidecar /meta /data
 
       - uses: actions/setup-node@v4
         with:
