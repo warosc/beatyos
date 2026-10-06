@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures';
+import { expect, owner, test } from './fixtures';
 import type { Page } from '@playwright/test';
 
 type PurchaseOrderTest = {
@@ -592,7 +592,9 @@ test('la dueña crea un servicio escribiendo lo que cobra', async ({ page }) => 
       name: created.name,
       commissionRate: null,
       durationMinutes: created.durationMinutes,
+      bufferMinutes: created.bufferMinutes,
       priceWithTax: '100.00',
+      taxRate: 12,
     });
     return route.fulfill({ status: 201, json: { data: services[0] } });
   });
@@ -619,7 +621,96 @@ test('la dueña crea un servicio escribiendo lo que cobra', async ({ page }) => 
     bufferMinutes: 10,
     commissionRate: null,
   });
-  await expect(page.getByText(/Corte de señora · 45 min · Q\s?100\.00/)).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: 'Corte de señora' })).toContainText(
+    /Q\s?100\.00 · 45 min \+ 10 de limpieza/,
+  );
   // Listo para el siguiente: el nombre vuelve a estar vacío y con el foco.
   await expect(page.getByLabel('Nombre del servicio')).toBeFocused();
+});
+
+test('la encargada edita y elimina un servicio', async ({ page }) => {
+  await authenticated(page);
+  await page.route('**/api/auth/me', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          ...owner,
+          id: 'manager',
+          roles: ['MANAGER'],
+          permissions: [
+            'services.read',
+            'services.create',
+            'services.update',
+            'services.delete',
+            'stylists.read',
+            'stylists.update',
+          ],
+        },
+      },
+    }),
+  );
+  let services = [
+    {
+      id: 'svc-1',
+      name: 'Corte de señora',
+      durationMinutes: 45,
+      bufferMinutes: 10,
+      priceWithTax: '100.00',
+      taxRate: 12,
+      commissionRate: null as number | null,
+    },
+  ];
+  const patches: unknown[] = [];
+  let deleted = false;
+  await page.route('**/api/agenda?resource=**', (route) =>
+    route.fulfill({ json: { data: route.request().url().includes('services') ? services : [] } }),
+  );
+  await page.route('**/api/services/svc-1', (route) => {
+    if (route.request().method() === 'PATCH') {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      patches.push(body);
+      services = [{ ...services[0]!, ...body, priceWithTax: '150.00' }];
+      return route.fulfill({ json: { data: services[0] } });
+    }
+    deleted = true;
+    services = [];
+    return route.fulfill({ status: 204, body: '' });
+  });
+
+  await page.goto('/comisiones');
+  await page.getByRole('button', { name: 'Editar Corte de señora' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Editar Corte de señora' });
+  // Abre con lo que la dueña reconoce: el precio que paga la clienta, no el de sin IVA.
+  await expect(dialog.getByLabel('Precio que paga la clienta (Q)')).toHaveValue('100');
+  await dialog.getByLabel('Nombre del servicio').fill('Corte y peinado');
+  await dialog.getByLabel('Precio que paga la clienta (Q)').fill('150');
+  await dialog.getByLabel('Duración (minutos)').fill('60');
+  await dialog.getByRole('button', { name: 'Guardar cambios' }).click();
+
+  await expect(page.getByText('«Corte y peinado» se actualizó.')).toBeVisible();
+  expect(patches[0]).toEqual({
+    name: 'Corte y peinado',
+    durationMinutes: 60,
+    bufferMinutes: 10,
+    commissionRate: null,
+    price: '133.93',
+  });
+
+  // Cambiar solo la comisión no manda el precio: no hay cambio de precio que auditar.
+  await page.getByRole('button', { name: 'Editar Corte y peinado' }).click();
+  const again = page.getByRole('dialog', { name: 'Editar Corte y peinado' });
+  await again.getByLabel('Comisión especial (%, opcional)').fill('30');
+  await again.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(again).toBeHidden();
+  expect(patches[1]).toEqual({
+    name: 'Corte y peinado',
+    durationMinutes: 60,
+    bufferMinutes: 10,
+    commissionRate: 30,
+  });
+
+  page.once('dialog', (confirm) => void confirm.accept());
+  await page.getByRole('button', { name: 'Eliminar Corte y peinado' }).click();
+  await expect(page.getByText('«Corte y peinado» se eliminó.')).toBeVisible();
+  expect(deleted).toBe(true);
 });

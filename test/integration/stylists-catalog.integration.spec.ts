@@ -540,6 +540,59 @@ describe('Profesionales y catálogo (integración)', () => {
         .set(headers)
         .send({ code: 'NEW-1', name: 'Nuevo', durationMinutes: 30, price: '10.00' })
         .expect(403);
+      await request(app.getHttpServer())
+        .patch(api(`/services/${salonA.serviceId}`))
+        .set(headers)
+        .send({ price: '1.00' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .delete(api(`/services/${salonA.serviceId}`))
+        .set(headers)
+        .expect(403);
+    });
+
+    it('la encargada, como la propietaria, edita y elimina servicios', async () => {
+      const roles = await request(app.getHttpServer()).get(api('/roles')).set(auth()).expect(200);
+      const manager = (roles.body.data as Array<{ id: string; code: string }>).find(
+        (role) => role.code === 'MANAGER',
+      );
+      await request(app.getHttpServer())
+        .post(api('/users'))
+        .set(auth())
+        .send({
+          email: 'encargada@salon-a.test',
+          password: TEST_PASSWORD,
+          firstName: 'Elena',
+          lastName: 'Ríos',
+          roleIds: [manager?.id],
+        })
+        .expect(201);
+      const login = await request(app.getHttpServer())
+        .post(api('/auth/login'))
+        .send({ email: 'encargada@salon-a.test', password: TEST_PASSWORD })
+        .expect(200);
+      const headers = { Authorization: `Bearer ${login.body.data.accessToken as string}` };
+
+      const edited = await request(app.getHttpServer())
+        .patch(api(`/services/${salonA.serviceId}`))
+        .set(headers)
+        .send({ name: 'Corte y peinado', price: '89.29', durationMinutes: 50, commissionRate: 30 })
+        .expect(200);
+      expect(edited.body.data).toMatchObject({
+        name: 'Corte y peinado',
+        price: '89.29',
+        durationMinutes: 50,
+        commissionRate: 30,
+      });
+
+      await request(app.getHttpServer())
+        .delete(api(`/services/${salonA.serviceId}`))
+        .set(headers)
+        .expect(204);
+      await request(app.getHttpServer())
+        .get(api(`/services/${salonA.serviceId}`))
+        .set(headers)
+        .expect(404);
     });
   });
 });

@@ -2,13 +2,17 @@
 import { useAccess } from '@/components/session-access';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ServiceCreator } from '@/features/settings/service-creator';
+import {
+  ServiceCreator,
+  ServiceEditor,
+  type CatalogService,
+} from '@/features/settings/service-form';
 import { sessionFetch } from '@/lib/session-fetch';
 import { loadOptions } from '@/lib/pagination';
 import { money } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useState } from 'react';
-import { CalendarOff, Trash2 } from 'lucide-react';
+import { CalendarOff, Pencil, Trash2 } from 'lucide-react';
 
 type Block = { id?: string; dayOfWeek: number; start: string; end: string };
 type TimeOff = { id: string; startsAt: string; endsAt: string; reason: string | null };
@@ -21,14 +25,6 @@ type Stylist = {
   skills: Skill[];
 };
 type Skill = { serviceId: string; durationMinutes: number | null; commissionRate: number | null };
-type Service = {
-  id: string;
-  name: string;
-  commissionRate: number | null;
-  durationMinutes: number;
-  /** Lo que paga la clienta: es el precio que la dueña reconoce como suyo. */
-  priceWithTax: string;
-};
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 async function problem(r: Response, fallback: string) {
   const b = (await r.json().catch(() => ({}))) as { detail?: string; message?: string };
@@ -39,6 +35,7 @@ export function Commissions() {
   const { can } = useAccess();
   const qc = useQueryClient();
   const [notice, setNotice] = useState('');
+  const [editing, setEditing] = useState<CatalogService | null>(null);
   const stylists = useQuery({
     queryKey: ['commission-stylists'],
     enabled: can('stylists.read') || can('stylists.update'),
@@ -47,8 +44,24 @@ export function Commissions() {
   const services = useQuery({
     queryKey: ['commission-services'],
     enabled: can('services.read') || can('services.update'),
-    queryFn: ({ signal }) => loadOptions<Service>('/api/agenda?resource=services', signal),
+    queryFn: ({ signal }) => loadOptions<CatalogService>('/api/agenda?resource=services', signal),
   });
+  const refreshServices = () => qc.invalidateQueries({ queryKey: ['commission-services'] });
+  async function removeService(service: CatalogService) {
+    if (
+      !confirm(
+        `¿Eliminar «${service.name}»? Ya no se podrá agendar ni cobrar. Las ventas ya hechas no cambian.`,
+      )
+    )
+      return;
+    setNotice('');
+    const r = await sessionFetch(`/api/services/${encodeURIComponent(service.id)}`, {
+      method: 'DELETE',
+    });
+    if (!r.ok) return setNotice(await problem(r, 'No pudimos eliminar el servicio.'));
+    setNotice(`«${service.name}» se eliminó.`);
+    await refreshServices();
+  }
   return (
     <div className="space-y-6">
       <div>
@@ -63,9 +76,58 @@ export function Commissions() {
           {notice}
         </p>
       )}
-      {can('services.create') && (
-        <ServiceCreator
-          onCreated={() => qc.invalidateQueries({ queryKey: ['commission-services'] })}
+      {can('services.create') && <ServiceCreator onCreated={refreshServices} />}
+      <Card className="p-6">
+        <h2 className="font-display text-xl font-semibold">Servicios</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Cambia el precio, la duración o la comisión, o elimina lo que el salón ya no ofrece.
+        </p>
+        {services.data?.length === 0 && (
+          <p className="mt-3 text-sm text-muted-foreground">Todavía no hay servicios.</p>
+        )}
+        <ul className="mt-3 divide-y">
+          {services.data?.map((x) => (
+            <li key={x.id} className="flex flex-wrap items-center gap-3 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">{x.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {money(x.priceWithTax)} · {x.durationMinutes} min
+                  {x.bufferMinutes > 0 && ` + ${x.bufferMinutes} de limpieza`} · Comisión:{' '}
+                  {x.commissionRate === null ? 'la de cada estilista' : `${x.commissionRate} %`}
+                </p>
+              </div>
+              {can('services.update') && (
+                <Button
+                  variant="outline"
+                  aria-label={`Editar ${x.name}`}
+                  onClick={() => setEditing(x)}
+                >
+                  <Pencil size={16} />
+                  Editar
+                </Button>
+              )}
+              {can('services.delete') && (
+                <Button
+                  variant="ghost"
+                  aria-label={`Eliminar ${x.name}`}
+                  onClick={() => removeService(x)}
+                >
+                  <Trash2 size={16} />
+                  Eliminar
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Card>
+      {editing && (
+        <ServiceEditor
+          service={editing}
+          close={() => setEditing(null)}
+          saved={async (name) => {
+            setNotice(`«${name}» se actualizó.`);
+            await refreshServices();
+          }}
         />
       )}
       <Card className="p-6">
@@ -82,44 +144,6 @@ export function Commissions() {
               editable={can('stylists.update')}
               nullable={false}
             />
-          ))}
-        </div>
-      </Card>
-      <Card className="p-6">
-        <h2 className="font-display text-xl font-semibold">Servicios activos</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Ajusta la comisión o retira un servicio que el negocio ya no ofrece.
-        </p>
-        <div className="mt-3 divide-y">
-          {services.data?.map((x) => (
-            <div key={x.id} className="flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <CommissionRow
-                  id={x.id}
-                  name={`${x.name} · ${x.durationMinutes} min · ${money(x.priceWithTax)}`}
-                  rate={x.commissionRate}
-                  resource="services"
-                  queryKey="commission-services"
-                  editable={can('services.update')}
-                  nullable
-                />
-              </div>
-              {can('services.delete') && (
-                <Button
-                  variant="ghost"
-                  aria-label={`Retirar ${x.name}`}
-                  onClick={async () => {
-                    if (!confirm(`¿Retirar ${x.name} del catálogo?`)) return;
-                    const r = await sessionFetch(`/api/services/${x.id}`, { method: 'DELETE' });
-                    if (!r.ok)
-                      return setNotice(await problem(r, 'No pudimos retirar el servicio.'));
-                    await qc.invalidateQueries({ queryKey: ['commission-services'] });
-                  }}
-                >
-                  <Trash2 size={17} />
-                </Button>
-              )}
-            </div>
           ))}
         </div>
       </Card>
@@ -168,7 +192,13 @@ function Field({
  * para ofrecerla. Sin ninguno marcado puede hacerlo todo, igual que en el servidor. Al
  * guardar se conservan la duración y la comisión propias que ya tuviera cada servicio.
  */
-function SkillsManager({ stylists, services }: { stylists: Stylist[]; services: Service[] }) {
+function SkillsManager({
+  stylists,
+  services,
+}: {
+  stylists: Stylist[];
+  services: CatalogService[];
+}) {
   const qc = useQueryClient();
   const [id, setId] = useState('');
   const [chosen, setChosen] = useState<string[] | null>(null);
