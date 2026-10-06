@@ -43,6 +43,23 @@ describe('Service', () => {
       expect(() => create({ code: '' })).toThrow(DomainValidationError);
     });
 
+    it.each([
+      ['Corte de señora', 'CORTE-SENORA'],
+      ['Tinte + lavado y secado', 'TINTE-LAVADO-SEC'],
+      ['Manicura semipermanente', 'MANICURA-SEMIPER'],
+      ['  uñas   acrílicas ', 'UNAS-ACRILICAS'],
+      ['De la casa', 'CASA'],
+      // Si todo son palabras vacías, se quedan: mejor eso que un código genérico.
+      ['Con', 'CON'],
+      ['✨', 'SERVICIO'],
+    ])('deriva un código válido del nombre «%s»', (name, expected) => {
+      const code = Service.codeFromName(name);
+
+      expect(code).toBe(expected);
+      // Con el sufijo más largo que se le añade sigue siendo un código aceptable.
+      expect(create({ code: `${code}-99` }).code).toBe(`${code}-99`);
+    });
+
     it('rechaza un nombre vacío', () => {
       expect(() => create({ name: '   ' })).toThrow(/nombre del servicio/);
     });

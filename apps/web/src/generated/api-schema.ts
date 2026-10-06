@@ -155,7 +155,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Solicitar recuperación sin revelar si el correo existe */
+        /**
+         * Solicitar recuperación sin revelar si el correo existe
+         * @description Avisa a la propietaria del salón, que asigna una contraseña nueva desde Equipo, y emite además el enlace de un solo uso para el correo.
+         */
         post: operations["Auth_forgotPassword"];
         delete?: never;
         options?: never;
@@ -274,6 +277,60 @@ export interface paths {
          * @description Exige la contraseña actual aunque la sesión esté abierta, y cierra todas las sesiones al completarse.
          */
         post: operations["Auth_changeOwnPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Asignar una contraseña nueva a otro usuario del salón
+         * @description No pide la contraseña actual: es la vía para quien la olvidó. Cierra todas las sesiones del usuario y resuelve su solicitud pendiente, si la tenía.
+         */
+        post: operations["users_resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/password-reset-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Solicitudes de contraseña pendientes en el salón */
+        get: operations["passwordResetRequests_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/password-reset-requests/{id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Descartar una solicitud de contraseña sin cambiar nada */
+        post: operations["passwordResetRequests_dismiss"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1810,6 +1867,24 @@ export interface components {
              */
             newPassword: string;
         };
+        AdminResetPasswordDto: {
+            /**
+             * @description Contraseña que la propietaria asigna y comunica en persona. Rige la misma política que para cualquier otra.
+             * @example TemporalSalon2026
+             */
+            newPassword: string;
+        };
+        PasswordResetRequestResponse: {
+            id: string;
+            userId: string;
+            email: string;
+            fullName: string;
+            /** Format: date-time */
+            requestedAt: string;
+        };
+        PasswordResetRequestListResponse: {
+            data: components["schemas"]["PasswordResetRequestResponse"][];
+        };
         CreateClientDto: {
             /** @example Rosa */
             firstName: string;
@@ -2128,10 +2203,10 @@ export interface components {
         };
         CreateServiceDto: {
             /**
-             * @description Código corto y único dentro del salón
+             * @description Código corto y único dentro del salón. Sin indicar, se genera a partir del nombre («Corte de señora» → `CORTE-SENORA`, con sufijo `-2`, `-3`… si ya está ocupado).
              * @example COR-M
              */
-            code: string;
+            code?: string;
             /** @example Corte de señora */
             name: string;
             /**
@@ -3960,6 +4035,111 @@ export interface operations {
              *     Token ausente, invalido o caducado
              */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    users_resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminResetPasswordDto"];
+            };
+        };
+        responses: {
+            /** @description Contraseña cambiada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: users.reset-password */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    passwordResetRequests_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetRequestListResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: users.reset-password */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    passwordResetRequests_dismiss: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Solicitud descartada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: users.reset-password */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -353,9 +353,10 @@ describe('Autenticación (integración)', () => {
    * entra sin credenciales. Lo que se afirma aquí es que el token no se puede reutilizar,
    * no se puede adivinar leyendo la base y no revela qué correos existen.
    *
-   * Fuera de producción el endpoint devuelve `resetPath` para poder recorrer el flujo sin
-   * buzón de correo; en producción se omite. Ese `if` es hoy la única razón de que la
-   * funcionalidad sea utilizable, porque **no existe puerto de envío de correo**.
+   * Con `NODE_ENV=test` el endpoint devuelve `resetPath` para poder recorrer el flujo sin
+   * buzón de correo; en cualquier otro entorno se omite. Sin proveedor de correo, la vía
+   * que de verdad devuelve el acceso es el aviso a la propietaria
+   * (`password-recovery.integration.spec.ts`).
    */
   describe('recuperación de contraseña', () => {
     const forgot = (email: string) =>

@@ -20,20 +20,19 @@ export function ForgotPasswordForm() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(values),
     });
-    const body = (await response.json().catch(() => null)) as {
-      data?: { message?: string; resetPath?: string };
-      detail?: string;
-    } | null;
     if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { detail?: string } | null;
       setError('root', { message: body?.detail ?? 'No pudimos procesar la solicitud.' });
       return;
     }
     reset();
-    setError('root', { type: 'success', message: body?.data?.message ?? 'Revisa tu correo.' });
-    if (body?.data?.resetPath)
-      window.setTimeout(() => {
-        window.location.href = body.data!.resetPath!;
-      }, 900);
+    // El mismo mensaje exista o no la cuenta: distinguirlos revelaría quién trabaja aquí.
+    setError('root', {
+      type: 'success',
+      message:
+        'Listo. Si el correo está registrado, la propietaria verá tu solicitud y te dará una ' +
+        'contraseña nueva.',
+    });
   });
   return (
     <form onSubmit={submit} className="mt-6 space-y-4">
@@ -56,7 +55,7 @@ export function ForgotPasswordForm() {
         </p>
       )}
       <Button className="w-full" disabled={isSubmitting}>
-        {isSubmitting ? 'Enviando…' : 'Enviar instrucciones'}
+        {isSubmitting ? 'Enviando…' : 'Pedir contraseña nueva'}
       </Button>
     </form>
   );

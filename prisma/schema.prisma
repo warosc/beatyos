@@ -79,6 +79,8 @@ model Tenant {
   goals             Goal[]
   serviceTickets    ServiceTicket[]
 
+  passwordResetRequests PasswordResetRequest[]
+
   @@index([status, deletedAt])
   @@map("tenants")
 }
@@ -162,10 +164,11 @@ model User {
   updatedBy           String?
   deletedBy           String?
 
-  tenant              Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant              Tenant?                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roles               UserRole[]
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  passwordRequests    PasswordResetRequest[]
   stylist             Stylist?
   auditLogs           AuditLog[]
   cashSessions        CashSession[]
@@ -187,6 +190,27 @@ model PasswordResetToken {
 
   @@index([userId, expiresAt])
   @@map("password_reset_tokens")
+}
+
+/// Aviso de «olvidé mi contraseña» para la propietaria del salón, que asigna una nueva
+/// desde Equipo. Es la vía de recuperación que funciona sin correo saliente. Como mucho
+/// una pendiente por usuario: lo garantiza un índice único parcial de la migración, que
+/// Prisma no sabe expresar.
+model PasswordResetRequest {
+  id         String                     @id @default(uuid(7))
+  tenantId   String
+  userId     String
+  status     PasswordResetRequestStatus @default(PENDING)
+  createdAt  DateTime                   @default(now()) @db.Timestamptz(3)
+  resolvedAt DateTime?                  @db.Timestamptz(3)
+  resolvedBy String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, createdAt])
+  @@index([userId])
+  @@map("password_reset_requests")
 }
 
 /// Permiso atomico `recurso.accion`. Global a la plataforma: el catalogo de acciones
@@ -1418,6 +1442,14 @@ enum PaymentStatus {
   FAILED
   REFUNDED
   PARTIALLY_REFUNDED
+}
+
+enum PasswordResetRequestStatus {
+  PENDING
+  /// La propietaria asignó una contraseña nueva.
+  RESOLVED
+  /// La propietaria la descartó: no la pidió quien dice el correo, o ya se resolvió en persona.
+  DISMISSED
 }
 
 enum ServiceTicketStatus {

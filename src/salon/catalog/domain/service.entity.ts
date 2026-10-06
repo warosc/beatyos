@@ -60,6 +60,11 @@ const MAX_DURATION_MINUTES = 8 * 60;
  */
 const DEFAULT_TAX_RATE = 12;
 
+/** Palabras que no distinguen un servicio de otro y solo alargarían su código. */
+const CODE_STOP_WORDS: ReadonlySet<string> = new Set([
+  'A', 'AL', 'CON', 'DE', 'DEL', 'E', 'EL', 'EN', 'LA', 'LAS', 'LOS', 'O', 'PARA', 'POR', 'U', 'Y',
+]); // prettier-ignore
+
 export class Service extends AggregateRoot {
   private constructor(
     id: string,
@@ -370,6 +375,23 @@ export class Service extends AggregateRoot {
       consumables: [...consumables],
       audit: { ...this.props.audit, updatedAt: now, updatedBy: actorId },
     };
+  }
+
+  /**
+   * Código derivado del nombre, para quien da de alta el catálogo sin pensar en códigos:
+   * «Corte de señora» → `CORTE-SENORA`. Quita tildes y palabras vacías y se queda en 16
+   * caracteres, para dejar sitio a un sufijo (`-2`, `-3`…) si ese código ya está ocupado.
+   */
+  static codeFromName(name: string): string {
+    const words = name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .split(/[^A-Z0-9]+/)
+      .filter(Boolean);
+    const meaningful = words.filter((word) => !CODE_STOP_WORDS.has(word));
+    const base = (meaningful.length ? meaningful : words).join('-').slice(0, 16).replace(/-+$/, '');
+    return base.length >= 2 ? base : 'SERVICIO';
   }
 
   // -- Validaciones ---------------------------------------------------------

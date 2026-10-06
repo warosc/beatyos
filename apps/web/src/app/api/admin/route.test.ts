@@ -66,11 +66,35 @@ describe('consola de administración', () => {
   it.each([
     ['roles', /\/users\/u1\/roles$/],
     ['restore', /\/users\/u1\/restore$/],
+    ['password', /\/users\/u1\/password$/],
   ])('envía la acción %s al subrecurso del usuario', async (action, path) => {
     await POST(
       new NextRequest(url(`resource=users&id=u1&action=${action}`), { method: 'POST', body: '{}' }),
     );
     expect(calledUrl().pathname).toMatch(path);
+  });
+
+  it('lleva las solicitudes de contraseña a su recurso', async () => {
+    await GET(new NextRequest(url('resource=password-reset-requests')));
+    expect(calledUrl().pathname).toMatch(/\/password-reset-requests$/);
+    await POST(
+      new NextRequest(url('resource=password-reset-requests&id=r1&action=dismiss'), {
+        method: 'POST',
+      }),
+    );
+    expect(new URL(upstream.mock.calls[1][0] as string).pathname).toMatch(
+      /\/password-reset-requests\/r1\/dismiss$/,
+    );
+  });
+
+  it('no compone rutas con acciones desconocidas', async () => {
+    await POST(
+      new NextRequest(url('resource=users&id=u1&action=..%2Fadmin'), {
+        method: 'POST',
+        body: '{}',
+      }),
+    );
+    expect(calledUrl().pathname).toMatch(/\/users\/u1$/);
   });
 
   it('ignora una acción suelta sin identificador', async () => {

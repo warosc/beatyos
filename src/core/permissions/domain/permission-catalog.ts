@@ -43,6 +43,7 @@ export const PERMISSION_DEFINITIONS: readonly PermissionDefinition[] = [
   define('users', 'delete', 'Dar de baja usuarios'),
   define('users', 'restore', 'Recuperar usuarios dados de baja'),
   define('users', 'assign-roles', 'Asignar roles a un usuario'),
+  define('users', 'reset-password', 'Asignar una contraseña nueva a otro usuario'),
 
   define('roles', 'read', 'Ver roles y sus permisos'),
   define('roles', 'create', 'Crear roles propios del salón'),
@@ -175,6 +176,7 @@ export const PERMISSIONS = {
     delete: 'users.delete',
     restore: 'users.restore',
     assignRoles: 'users.assign-roles',
+    resetPassword: 'users.reset-password',
   },
   roles: {
     read: 'roles.read',

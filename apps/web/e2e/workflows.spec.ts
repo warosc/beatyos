@@ -298,27 +298,35 @@ test('abre y cierra la caja', async ({ page }) => {
   await expect(page.getByText('La caja está cerrada')).toBeVisible();
 });
 
-test('solicita y completa la recuperación de contraseña', async ({ page }) => {
-  await page.route('**/api/auth/forgot-password', (route) =>
-    route.fulfill({
+test('pide una contraseña nueva a la propietaria', async ({ page }) => {
+  let requested: unknown;
+  await page.route('**/api/auth/forgot-password', (route) => {
+    requested = route.request().postDataJSON();
+    // Aunque la API devolviera un enlace, la página no debe seguirlo: sería entregar la
+    // cuenta a quien escriba el correo.
+    return route.fulfill({
       status: 202,
       contentType: 'application/json',
       body: JSON.stringify({
-        data: {
-          message: 'Si el correo existe, recibirás instrucciones.',
-          resetPath: '/reset-password?token=e2e-reset-token',
-        },
+        data: { message: 'Aviso registrado.', resetPath: '/reset-password?token=no-seguir' },
       }),
-    }),
-  );
+    });
+  });
+
+  await page.goto('/forgot-password');
+  await page.getByLabel('Correo electrónico').fill('estilista@bella-vista.es');
+  await page.getByRole('button', { name: 'Pedir contraseña nueva' }).click();
+  await expect(page.getByText(/la propietaria verá tu solicitud/)).toBeVisible();
+  expect(requested).toEqual({ email: 'estilista@bella-vista.es' });
+  await expect(page).toHaveURL(/\/forgot-password$/);
+});
+
+test('completa la recuperación con el enlace del correo', async ({ page }) => {
   await page.route('**/api/auth/reset-password', (route) =>
     route.fulfill({ status: 204, body: '' }),
   );
 
-  await page.goto('/forgot-password');
-  await page.getByLabel('Correo electrónico').fill('propietaria@bella-vista.es');
-  await page.getByRole('button', { name: 'Enviar instrucciones' }).click();
-  await expect(page).toHaveURL(/\/reset-password\?token=e2e-reset-token/);
+  await page.goto('/reset-password?token=e2e-reset-token');
   await expect(page.getByRole('button', { name: 'Guardar contraseña' })).toBeEnabled();
   await page.getByLabel('Contraseña nueva').fill('NuevaClave2026');
   await page.getByLabel('Confirmar contraseña').fill('NuevaClave2026');
@@ -472,7 +480,14 @@ test('administra usuarios y roles del equipo', async ({ page }) => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          data: resource === 'users' ? users : resource === 'roles' ? roles : permissions,
+          data:
+            resource === 'users'
+              ? users
+              : resource === 'roles'
+                ? roles
+                : resource === 'permissions'
+                  ? permissions
+                  : [],
         }),
       });
     if (request.method() === 'POST' && resource === 'users') {
@@ -516,4 +531,95 @@ test('administra usuarios y roles del equipo', async ({ page }) => {
   await page.getByRole('button', { name: 'Crear usuario' }).click();
   await expect(page.getByText('María López')).toBeVisible();
   expect((createdPayload as { roleIds: string[] }).roleIds).toEqual([receptionistRole.id]);
+});
+
+test('la propietaria atiende una solicitud de contraseña desde Equipo', async ({ page }) => {
+  await authenticated(page);
+  let requests = [
+    {
+      id: 'request-1',
+      userId: 'user-stylist',
+      email: 'sara@beautyos.gt',
+      fullName: 'Sara Molina',
+      requestedAt: '2026-10-06T15:00:00.000Z',
+    },
+  ];
+  let assigned: { id: string | null; body: unknown } | undefined;
+  await page.route('**/api/admin**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && url.searchParams.get('action') === 'password') {
+      assigned = { id: url.searchParams.get('id'), body: request.postDataJSON() };
+      requests = [];
+      return route.fulfill({ status: 204, body: '' });
+    }
+    const resource = url.searchParams.get('resource');
+    return route.fulfill({
+      json: { data: resource === 'password-reset-requests' ? requests : [] },
+    });
+  });
+
+  await page.goto('/configuracion');
+  // El aviso llega también al menú, para verlo desde cualquier pantalla.
+  await expect(
+    page.getByLabel('1 solicitudes de contraseña').filter({ visible: true }),
+  ).toBeVisible();
+  await expect(page.getByText('1 persona no puede entrar')).toBeVisible();
+  await page.getByRole('button', { name: 'Asignar contraseña' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Contraseña de Sara Molina' });
+  await dialog.getByRole('button', { name: 'Generar una' }).click();
+  const generated = await dialog.getByLabel('Contraseña nueva').inputValue();
+  expect(generated).toMatch(/^[A-Z][a-z]{3,}[A-Z][a-z]{3,}\d{4}$/);
+  await dialog.getByRole('button', { name: 'Guardar contraseña' }).click();
+
+  await expect(dialog.getByText(generated)).toBeVisible();
+  expect(assigned).toEqual({ id: 'user-stylist', body: { newPassword: generated } });
+  await dialog.getByRole('button', { name: 'Hecho' }).click();
+  await expect(page.getByText('1 persona no puede entrar')).toBeHidden();
+});
+
+test('la dueña crea un servicio escribiendo lo que cobra', async ({ page }) => {
+  await authenticated(page);
+  const services: Array<Record<string, unknown>> = [];
+  let created: Record<string, unknown> | undefined;
+  await page.route('**/api/agenda?resource=**', (route) =>
+    route.fulfill({ json: { data: route.request().url().includes('services') ? services : [] } }),
+  );
+  await page.route('**/api/services', (route) => {
+    created = route.request().postDataJSON() as Record<string, unknown>;
+    services.push({
+      id: 'service-new',
+      name: created.name,
+      commissionRate: null,
+      durationMinutes: created.durationMinutes,
+      priceWithTax: '100.00',
+    });
+    return route.fulfill({ status: 201, json: { data: services[0] } });
+  });
+
+  await page.goto('/comisiones');
+  await page.getByLabel('Nombre del servicio').fill('Corte de señora');
+  await page.getByLabel('Precio que paga la clienta (Q)').fill('100');
+  await page.getByLabel('Duración (minutos)').fill('45');
+  await page.getByLabel('Limpieza después (minutos, opcional)').fill('10');
+
+  const summary = page.getByRole('status', { name: 'Resumen del servicio' });
+  await expect(summary).toContainText(/La clienta paga Q\s?100\.00/);
+  await expect(summary).toContainText(/Q\s?10\.71 de IVA/);
+  await expect(summary).toContainText('55 min');
+  await page.getByRole('button', { name: 'Crear servicio' }).click();
+
+  await expect(page.getByText('«Corte de señora» quedó creado')).toBeVisible();
+  // El sistema hace las cuentas: guarda la base sin IVA y el código lo pone la API.
+  expect(created).toEqual({
+    name: 'Corte de señora',
+    durationMinutes: 45,
+    price: '89.29',
+    taxRate: 12,
+    bufferMinutes: 10,
+    commissionRate: null,
+  });
+  await expect(page.getByText(/Corte de señora · 45 min · Q\s?100\.00/)).toBeVisible();
+  // Listo para el siguiente: el nombre vuelve a estar vacío y con el foco.
+  await expect(page.getByLabel('Nombre del servicio')).toBeFocused();
 });

@@ -2,7 +2,9 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
 const API = process.env.API_URL ?? 'http://localhost:3000/api/v1';
-const resources = new Set(['users', 'roles', 'permissions']);
+const resources = new Set(['users', 'roles', 'permissions', 'password-reset-requests']);
+// Subrecursos de un elemento: `?resource=users&id=u1&action=roles` → `users/u1/roles`.
+const actions = new Set(['roles', 'restore', 'password', 'dismiss']);
 
 async function forward(request: NextRequest, method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE') {
   const access = (await cookies()).get('beautyos_access')?.value;
@@ -14,8 +16,7 @@ async function forward(request: NextRequest, method: 'GET' | 'POST' | 'PATCH' | 
     return NextResponse.json({ message: 'Recurso no válido.' }, { status: 400 });
   let path = resource === 'permissions' ? 'roles/permissions' : resource;
   if (id) path += `/${encodeURIComponent(id)}`;
-  if (action === 'roles' && id) path += '/roles';
-  if (action === 'restore' && id) path += '/restore';
+  if (action && id && actions.has(action)) path += `/${action}`;
   const query =
     method === 'GET' && resource === 'users'
       ? request.nextUrl.searchParams

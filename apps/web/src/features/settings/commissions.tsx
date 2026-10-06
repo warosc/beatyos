@@ -2,11 +2,13 @@
 import { useAccess } from '@/components/session-access';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ServiceCreator } from '@/features/settings/service-creator';
 import { sessionFetch } from '@/lib/session-fetch';
 import { loadOptions } from '@/lib/pagination';
+import { money } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useState } from 'react';
-import { CalendarOff, Plus, Trash2 } from 'lucide-react';
+import { CalendarOff, Trash2 } from 'lucide-react';
 
 type Block = { id?: string; dayOfWeek: number; start: string; end: string };
 type TimeOff = { id: string; startsAt: string; endsAt: string; reason: string | null };
@@ -24,8 +26,8 @@ type Service = {
   name: string;
   commissionRate: number | null;
   durationMinutes: number;
-  price: string;
-  currency: string;
+  /** Lo que paga la clienta: es el precio que la dueña reconoce como suyo. */
+  priceWithTax: string;
 };
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 async function problem(r: Response, fallback: string) {
@@ -47,28 +49,6 @@ export function Commissions() {
     enabled: can('services.read') || can('services.update'),
     queryFn: ({ signal }) => loadOptions<Service>('/api/agenda?resource=services', signal),
   });
-  async function createService(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setNotice('');
-    const form = e.currentTarget,
-      d = new FormData(form);
-    const r = await sessionFetch('/api/services', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code: d.get('code'),
-        name: d.get('name'),
-        durationMinutes: Number(d.get('duration')),
-        price: Number(d.get('price')).toFixed(2),
-        bufferMinutes: Number(d.get('buffer') || 0),
-        commissionRate: d.get('commission') === '' ? null : Number(d.get('commission')),
-      }),
-    });
-    if (!r.ok) return setNotice(await problem(r, 'No pudimos crear el servicio.'));
-    form.reset();
-    setNotice('Servicio creado correctamente.');
-    await qc.invalidateQueries({ queryKey: ['commission-services'] });
-  }
   return (
     <div className="space-y-6">
       <div>
@@ -84,27 +64,9 @@ export function Commissions() {
         </p>
       )}
       {can('services.create') && (
-        <Card className="p-6">
-          <h2 className="font-display text-xl font-semibold">Agregar servicio</h2>
-          <form onSubmit={createService} className="mt-4 grid gap-3 md:grid-cols-3">
-            <Field name="code" label="Código" placeholder="CORTE-M" />
-            <Field name="name" label="Nombre" />
-            <Field name="duration" label="Duración (min)" type="number" />
-            <Field name="price" label="Precio sin impuesto" type="number" step="0.01" />
-            <Field name="buffer" label="Margen posterior (min)" type="number" required={false} />
-            <Field
-              name="commission"
-              label="Comisión propia (%)"
-              type="number"
-              step="0.01"
-              required={false}
-            />
-            <Button className="md:col-span-3">
-              <Plus size={17} />
-              Crear servicio
-            </Button>
-          </form>
-        </Card>
+        <ServiceCreator
+          onCreated={() => qc.invalidateQueries({ queryKey: ['commission-services'] })}
+        />
       )}
       <Card className="p-6">
         <h2 className="font-display text-xl font-semibold">Por estilista</h2>
@@ -134,7 +96,7 @@ export function Commissions() {
               <div className="min-w-0 flex-1">
                 <CommissionRow
                   id={x.id}
-                  name={`${x.name} · ${x.durationMinutes} min · ${x.price} ${x.currency}`}
+                  name={`${x.name} · ${x.durationMinutes} min · ${money(x.priceWithTax)}`}
                   rate={x.commissionRate}
                   resource="services"
                   queryKey="commission-services"
@@ -286,7 +248,7 @@ function SkillsManager({ stylists, services }: { stylists: Stylist[]; services: 
             <span>
               <span className="block font-medium">{service.name}</span>
               <span className="text-xs text-muted-foreground">
-                {service.durationMinutes} min · {service.price} {service.currency}
+                {service.durationMinutes} min · {money(service.priceWithTax)}
               </span>
             </span>
           </label>

@@ -24,6 +24,18 @@ describe('recuperación de contraseña', () => {
     expect(JSON.parse(init.body as string)).toEqual({ email: 'ana@example.com' });
   });
 
+  it('reenvía la IP de quien la pide para que el límite de la API sea por persona', async () => {
+    await POST(
+      new Request('http://localhost/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'x-forwarded-for': '203.0.113.7' },
+        body: JSON.stringify({ email: 'ana@example.com' }),
+      }),
+    );
+    const [, init] = upstream.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['x-forwarded-for']).toBe('203.0.113.7');
+  });
+
   it('responde igual exista o no la cuenta, para no revelar el padrón', async () => {
     const conocida = await ask('ana@example.com');
     upstream.mockResolvedValue(new Response(null, { status: 202 }));

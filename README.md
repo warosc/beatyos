@@ -9,8 +9,9 @@ Next.js, que consume la API a través de sus propias rutas de servidor.
 > implementados y la interfaz web los consume con datos reales, sin pantallas de relleno
 > —el componente `ModulePending`, que hacía de marcador de posición, se ha retirado—.
 > La fase R1 normalizó compras y cerró sus riesgos de precisión, atomicidad, concurrencia y
-> paginación. La recuperación de contraseña ya tiene puerto de envío pero **falta elegir
-> proveedor de correo**, y el **frontend está mucho menos probado que la API**. El detalle
+> paginación. La recuperación de contraseña funciona a través de la propietaria, pero **falta
+> elegir proveedor de correo** para el enlace, y el **frontend está mucho menos probado que la
+> API**. El detalle
 > exacto, con su porqué, está en
 > [Qué hay hecho y qué no](#qué-hay-hecho-y-qué-no); léalo antes de planificar.
 
@@ -430,7 +431,7 @@ decimales exactas y serializa recepción y cancelación sobre la cabecera del pe
 | ✅ Pruebas unitarias y de integración | Cubren reglas, rollback, multi-tenancy, paginación y carreras recepción/recepción y cancelación/recepción |
 | ✅ Listados paginados | `GET /purchases` y `GET /suppliers` aceptan `page`, `limit` y `sort`, y devuelven `meta` junto al arreglo `data` |
 
-**2. Recuperación de contraseña: ya tiene puerto de correo; le falta un proveedor.**
+**2. Recuperación de contraseña: funciona a través de la propietaria; el correo sigue sin proveedor.**
 
 El mecanismo estaba bien resuelto —token de un solo uso guardado como SHA-256, caducidad de
 30 minutos, marcado atómico al consumirlo, y una respuesta que no revela si el correo
@@ -443,6 +444,15 @@ el registro en lugar de enviarlo: sirve para recorrer el flujo en desarrollo sin
 producción avisa por cada envío de que no hay proveedor configurado —en vez de tragárselo en
 silencio, que es la forma en que estas cosas se descubren tarde—. Cambiarlo por SMTP, SES o
 Resend es una línea en `shared.module.ts`; la decisión es de despliegue, no de código.
+
+Mientras tanto, la vía que de verdad devuelve el acceso es la propietaria. «¿La olvidaste?»
+deja un aviso que ella ve en **Equipo**, con un contador en el menú, y lo resuelve asignando
+una contraseña nueva (`POST /users/:id/password`, permiso `users.reset-password`, que solo
+tiene la propiedad). Asignarla cierra las sesiones del usuario y no sirve para la propia
+cuenta, que se cambia desde el perfil con la contraseña actual. El enlace de un solo uso se
+sigue emitiendo para cuando haya proveedor, pero la respuesta solo lo incluye con
+`NODE_ENV=test`: la demo corre en `development` y con él cualquiera que conociera un correo
+podía cambiar esa contraseña.
 
 El flujo tiene ahora **9 tests de integración** en `auth.integration.spec.ts`: que el token se
 guarda hasheado, que es de un solo uso, que caduca, que emitir uno nuevo invalida el anterior
@@ -496,7 +506,8 @@ la traducción de errores y la aritmética monetaria.
 - **Sin proveedor de correo**: el puerto `EMAIL_SENDER` existe y el caso de uso lo usa, pero
   el adaptador registrado escribe en el registro en lugar de enviar. Antes de desplegar hay
   que sustituirlo en `shared.module.ts`; mientras tanto, la recuperación de contraseña avisa
-  por cada intento de que el mensaje no ha salido.
+  por cada intento de que el mensaje no ha salido, y el acceso se recupera mediante la
+  propietaria.
 
 ---
 

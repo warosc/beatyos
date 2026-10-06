@@ -573,6 +573,7 @@
     },
     "/api/v1/auth/forgot-password": {
       "post": {
+        "description": "Avisa a la propietaria del salón, que asigna una contraseña nueva desde Equipo, y emite además el enlace de un solo uso para el correo.",
         "operationId": "Auth_forgotPassword",
         "parameters": [],
         "requestBody": {
@@ -792,6 +793,120 @@
         "summary": "Cambiar la propia contraseña",
         "tags": [
           "Autenticación"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/password": {
+      "post": {
+        "description": "No pide la contraseña actual: es la vía para quien la olvidó. Cierra todas las sesiones del usuario y resuelve su solicitud pendiente, si la tenía.",
+        "operationId": "users_resetPassword",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminResetPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Contraseña cambiada"
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: users.reset-password"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Asignar una contraseña nueva a otro usuario del salón",
+        "tags": [
+          "Usuarios"
+        ]
+      }
+    },
+    "/api/v1/password-reset-requests": {
+      "get": {
+        "operationId": "passwordResetRequests_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetRequestListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: users.reset-password"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Solicitudes de contraseña pendientes en el salón",
+        "tags": [
+          "Usuarios"
+        ]
+      }
+    },
+    "/api/v1/password-reset-requests/{id}/dismiss": {
+      "post": {
+        "operationId": "passwordResetRequests_dismiss",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Solicitud descartada"
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: users.reset-password"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Descartar una solicitud de contraseña sin cambiar nada",
+        "tags": [
+          "Usuarios"
         ]
       }
     },
@@ -6765,6 +6880,63 @@
           "newPassword"
         ]
       },
+      "AdminResetPasswordDto": {
+        "type": "object",
+        "properties": {
+          "newPassword": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128,
+            "description": "Contraseña que la propietaria asigna y comunica en persona. Rige la misma política que para cualquier otra.",
+            "example": "TemporalSalon2026"
+          }
+        },
+        "required": [
+          "newPassword"
+        ]
+      },
+      "PasswordResetRequestResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "email",
+          "fullName",
+          "requestedAt"
+        ]
+      },
+      "PasswordResetRequestListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PasswordResetRequestResponse"
+            }
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
       "CreateClientDto": {
         "type": "object",
         "properties": {
@@ -7591,7 +7763,7 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{1,19}$",
             "example": "COR-M",
-            "description": "Código corto y único dentro del salón"
+            "description": "Código corto y único dentro del salón. Sin indicar, se genera a partir del nombre («Corte de señora» → `CORTE-SENORA`, con sufijo `-2`, `-3`… si ya está ocupado)."
           },
           "name": {
             "type": "string",
@@ -7662,7 +7834,6 @@
           }
         },
         "required": [
-          "code",
           "name",
           "durationMinutes",
           "price"

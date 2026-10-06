@@ -11,9 +11,13 @@ export default function ForgotPasswordPage() {
         </span>
         <h1 className="mt-6 text-center font-display text-3xl font-semibold">Recuperar acceso</h1>
         <p className="mt-3 text-center text-sm leading-6 text-muted-foreground">
-          Escribe el correo de tu cuenta. El enlace es de un solo uso y vence en 30 minutos.
+          Escribe el correo de tu cuenta. Avisaremos a la propietaria del salón para que te asigne
+          una contraseña nueva.
         </p>
         <ForgotPasswordForm />
+        <p className="mt-4 text-center text-xs leading-5 text-muted-foreground">
+          ¿Eres la propietaria? Pide ayuda al soporte de BeautyOS.
+        </p>
         <Link
           href="/login"
           className="mt-5 flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-primary hover:bg-muted"

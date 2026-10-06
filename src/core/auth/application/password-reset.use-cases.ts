@@ -1,23 +1,38 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  AUDIT_RECORDER,
   CLOCK,
   EMAIL_SENDER,
   ID_GENERATOR,
   PASSWORD_HASHER,
+  type AuditRecorder,
   type Clock,
   type EmailSender,
   type IdGenerator,
   type PasswordHasher,
   type UseCase,
 } from '../../../shared/application/ports';
-import { AuthenticationError } from '../../../shared/domain/errors';
+import {
+  AuthenticationError,
+  EntityNotFoundError,
+  ForbiddenActionError,
+} from '../../../shared/domain/errors';
 import { USER_REPOSITORY, type UserRepository } from '../../users/domain/user.repository';
 import { User } from '../../users/domain/user.entity';
 import {
   PASSWORD_RESET_REPOSITORY,
   type PasswordResetRepository,
 } from '../domain/password-reset.repository';
+import {
+  PASSWORD_RESET_REQUEST_REPOSITORY,
+  type PasswordResetRequestRepository,
+  type PendingPasswordResetRequest,
+} from '../domain/password-reset-request.repository';
+import {
+  REFRESH_TOKEN_REPOSITORY,
+  type RefreshTokenRepository,
+} from '../domain/refresh-token.repository';
 
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 class InvalidPasswordResetTokenError extends AuthenticationError {
@@ -35,6 +50,8 @@ export class RequestPasswordResetUseCase implements UseCase<
   constructor(
     @Inject(USER_REPOSITORY) private readonly users: UserRepository,
     @Inject(PASSWORD_RESET_REPOSITORY) private readonly resets: PasswordResetRepository,
+    @Inject(PASSWORD_RESET_REQUEST_REPOSITORY)
+    private readonly requests: PasswordResetRequestRepository,
     @Inject(ID_GENERATOR) private readonly ids: IdGenerator,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(EMAIL_SENDER) private readonly email: EmailSender,
@@ -51,6 +68,16 @@ export class RequestPasswordResetUseCase implements UseCase<
       tokenHash: digest(token),
       expiresAt: new Date(now.getTime() + 30 * 60_000),
     });
+    // Mientras no haya proveedor de correo, el aviso a la propietaria es la vía que de
+    // verdad devuelve el acceso: ella asigna una contraseña nueva desde Equipo. Las cuentas
+    // de plataforma no tienen salón ni, por tanto, propietaria a quien avisar.
+    if (user.tenantId)
+      await this.requests.open({
+        id: this.ids.generate(),
+        tenantId: user.tenantId,
+        userId: user.id,
+        now,
+      });
     // El correo es la vía por la que el token llega a su dueño. Un fallo del proveedor no
     // puede propagarse: haría que el endpoint respondiera distinto según el correo exista
     // o no, que es justo la fuga que el `return { token: null }` de arriba evita.
@@ -92,5 +119,86 @@ export class ResetPasswordUseCase implements UseCase<{ token: string; newPasswor
     const hash = await this.hasher.hash(input.newPassword);
     user.changePassword(hash, now, user.id);
     await this.users.update(user);
+  }
+}
+
+export interface AdminResetPasswordInput {
+  readonly userId: string;
+  readonly newPassword: string;
+  readonly actorId: string;
+}
+
+/**
+ * Contraseña nueva asignada por la propietaria a alguien de su equipo.
+ *
+ * Es la otra mitad de «olvidé mi contraseña»: quien la olvidó avisa, la propietaria le
+ * asigna una y se la comunica en persona. No se pide la contraseña actual —es justo la
+ * que se ha perdido—; lo que protege la operación es el permiso, que solo tiene la
+ * propiedad, y que el usuario tiene que ser del mismo salón (`findById` está acotado).
+ */
+@Injectable()
+export class AdminResetPasswordUseCase implements UseCase<AdminResetPasswordInput, void> {
+  constructor(
+    @Inject(USER_REPOSITORY) private readonly users: UserRepository,
+    @Inject(REFRESH_TOKEN_REPOSITORY) private readonly refreshTokens: RefreshTokenRepository,
+    @Inject(PASSWORD_RESET_REQUEST_REPOSITORY)
+    private readonly requests: PasswordResetRequestRepository,
+    @Inject(PASSWORD_HASHER) private readonly hasher: PasswordHasher,
+    @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(AUDIT_RECORDER) private readonly audit: AuditRecorder,
+  ) {}
+
+  async execute(input: AdminResetPasswordInput): Promise<void> {
+    // La propia se cambia desde el perfil, que exige la actual: si no, cualquiera que pase
+    // por una sesión abierta de la propietaria podría quedarse con su cuenta.
+    if (input.userId === input.actorId)
+      throw new ForbiddenActionError(
+        'users.reset-password',
+        'Para cambiar su propia contraseña use «Perfil y ajustes».',
+      );
+    const user = await this.users.findById(input.userId);
+    if (!user) throw new EntityNotFoundError('Usuario', input.userId);
+
+    User.validatePasswordStrength(input.newPassword);
+    const now = this.clock.now();
+    user.changePassword(await this.hasher.hash(input.newPassword), now, input.actorId);
+    await this.users.update(user);
+
+    // Si el cambio se pidió porque alguien más conocía la contraseña, sus sesiones caen aquí.
+    await this.refreshTokens.revokeAllForUser(user.id, 'PASSWORD_RESET_BY_ADMIN', now);
+    await this.requests.resolveForUser(user.id, input.actorId, now);
+    await this.audit.record({
+      action: 'UPDATE',
+      entityType: 'User',
+      entityId: user.id,
+      metadata: { field: 'password', resetByAdmin: true, sessionsRevoked: true },
+    });
+  }
+}
+
+/** Bandeja de avisos de «olvidé mi contraseña» que ve la propietaria. */
+@Injectable()
+export class PasswordResetRequestsUseCase {
+  constructor(
+    @Inject(PASSWORD_RESET_REQUEST_REPOSITORY)
+    private readonly requests: PasswordResetRequestRepository,
+    @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(AUDIT_RECORDER) private readonly audit: AuditRecorder,
+  ) {}
+
+  list(): Promise<PendingPasswordResetRequest[]> {
+    return this.requests.listPending();
+  }
+
+  /** Para avisos que no pidió quien dice el correo o que ya se resolvieron en persona. */
+  async dismiss(id: string, actorId: string): Promise<void> {
+    if (!(await this.requests.dismiss(id, actorId, this.clock.now())))
+      throw new EntityNotFoundError('Solicitud de contraseña', id);
+    await this.audit.record({
+      action: 'UPDATE',
+      entityType: 'PasswordResetRequest',
+      entityId: id,
+      metadata: { status: 'DISMISSED' },
+    });
   }
 }

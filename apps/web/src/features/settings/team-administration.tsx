@@ -6,6 +6,13 @@ import { sessionFetch } from '@/lib/session-fetch';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Plus, Search, ShieldCheck, UserRoundCog, UsersRound, X } from 'lucide-react';
+import {
+  fetchPasswordRequests,
+  PASSWORD_REQUESTS_KEY,
+  PasswordRequests,
+  type PasswordRequest,
+} from '@/features/settings/password-requests';
+import { temporaryPassword } from '@/lib/temporary-password';
 import { usePagedList } from '@/lib/use-paged-list';
 import { Pagination } from '@/components/ui/pagination';
 import { useMemo, useState, useSyncExternalStore } from 'react';
@@ -34,20 +41,23 @@ type User = {
 };
 type Problem = { detail?: string; message?: string; errors?: Array<{ message: string }> };
 type Notice = { kind: 'success' | 'error'; text: string };
+type PasswordTarget = { id: string; fullName: string };
 
+const passwordRule = z
+  .string()
+  .min(12, 'Usa al menos 12 caracteres.')
+  .regex(/[A-ZÁÉÍÓÚÑÜ]/, 'Incluye una mayúscula.')
+  .regex(/[a-záéíóúñü]/, 'Incluye una minúscula.')
+  .regex(/\d/, 'Incluye un número.');
 const userSchema = z.object({
   firstName: z.string().trim().min(2, 'Ingresa el nombre.'),
   lastName: z.string().trim().min(2, 'Ingresa el apellido.'),
   email: z.string().email('Ingresa un correo válido.'),
   phone: z.string().optional(),
-  password: z
-    .string()
-    .min(12, 'Usa al menos 12 caracteres.')
-    .regex(/[A-ZÁÉÍÓÚÑÜ]/, 'Incluye una mayúscula.')
-    .regex(/[a-záéíóúñü]/, 'Incluye una minúscula.')
-    .regex(/\d/, 'Incluye un número.'),
+  password: passwordRule,
   roleIds: z.array(z.string()).min(1, 'Selecciona al menos un rol.'),
 });
+const passwordSchema = z.object({ newPassword: passwordRule });
 const roleSchema = z.object({
   code: z
     .string()
@@ -58,6 +68,7 @@ const roleSchema = z.object({
   permissionCodes: z.array(z.string()).min(1, 'Selecciona al menos un permiso.'),
 });
 type UserValues = z.infer<typeof userSchema>;
+type PasswordValues = z.infer<typeof passwordSchema>;
 type RoleValues = z.infer<typeof roleSchema>;
 const problemText = (body: Problem) =>
   body.errors?.map((x) => x.message).join(' · ') ??
@@ -73,7 +84,7 @@ async function get<T>(resource: string) {
 
 export function TeamAdministration() {
   const cache = useQueryClient();
-  const { can } = useAccess();
+  const { can, user: me } = useAccess();
   const [page, setPage] = useState(1);
   const mounted = useSyncExternalStore(
     () => () => undefined,
@@ -82,6 +93,7 @@ export function TeamAdministration() {
   );
   const [tab, setTab] = useState<'users' | 'roles'>(can('users.read') ? 'users' : 'roles');
   const [dialog, setDialog] = useState<'user' | 'role' | null>(null);
+  const [passwordFor, setPasswordFor] = useState<PasswordTarget | null>(null);
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
   const users = usePagedList<User>(
@@ -98,6 +110,12 @@ export function TeamAdministration() {
     queryKey: ['admin-permissions'],
     enabled: can('roles.read'),
     queryFn: () => get<Permission[]>('permissions'),
+  });
+  // Mismo dato que el aviso del menú: al resolver uno aquí, desaparece también allí.
+  const passwordRequests = useQuery({
+    queryKey: PASSWORD_REQUESTS_KEY,
+    enabled: can('users.reset-password'),
+    queryFn: fetchPasswordRequests,
   });
   const visible = useMemo(
     () =>
@@ -127,6 +145,20 @@ export function TeamAdministration() {
     }
     setNotice({ kind: 'success', text: 'Cambios guardados correctamente.' });
     await refresh();
+  }
+  async function dismissRequest(request: PasswordRequest) {
+    if (!window.confirm(`¿Descartar la solicitud de ${request.fullName}? Su contraseña no cambia.`))
+      return;
+    await mutate(
+      `/api/admin?resource=password-reset-requests&id=${encodeURIComponent(request.id)}&action=dismiss`,
+      'POST',
+      {},
+    );
+    await cache.invalidateQueries({ queryKey: PASSWORD_REQUESTS_KEY });
+  }
+  async function passwordSaved() {
+    setNotice({ kind: 'success', text: 'Contraseña actualizada.' });
+    await cache.invalidateQueries({ queryKey: PASSWORD_REQUESTS_KEY });
   }
   const error = users.error ?? roles.error ?? permissions.error;
   return (
@@ -165,6 +197,13 @@ export function TeamAdministration() {
           {error.message}
         </p>
       )}
+      {can('users.reset-password') && (
+        <PasswordRequests
+          requests={passwordRequests.data ?? []}
+          onAssign={(request) => setPasswordFor({ id: request.userId, fullName: request.fullName })}
+          onDismiss={dismissRequest}
+        />
+      )}
       <div className="flex rounded-xl bg-muted p-1 sm:w-fit">
         {(
           [
@@ -200,7 +239,18 @@ export function TeamAdministration() {
           </label>
           <div className="grid gap-4 xl:grid-cols-2">
             {visible.map((user) => (
-              <UserCard key={user.id} user={user} roles={roles.data ?? []} mutate={mutate} />
+              <UserCard
+                key={user.id}
+                user={user}
+                roles={roles.data ?? []}
+                mutate={mutate}
+                // La propia se cambia en el perfil, que pide la actual.
+                onPassword={
+                  user.id === me?.id
+                    ? undefined
+                    : () => setPasswordFor({ id: user.id, fullName: user.fullName })
+                }
+              />
             ))}
           </div>
         </>
@@ -260,6 +310,13 @@ export function TeamAdministration() {
           setNotice={setNotice}
         />
       )}
+      {passwordFor && (
+        <PasswordDialog
+          target={passwordFor}
+          close={() => setPasswordFor(null)}
+          saved={passwordSaved}
+        />
+      )}
     </div>
   );
 }
@@ -289,6 +346,7 @@ function UserCard({
   user,
   roles,
   mutate,
+  onPassword,
 }: {
   user: User;
   roles: Role[];
@@ -297,6 +355,7 @@ function UserCard({
     method: 'PATCH' | 'PUT' | 'DELETE' | 'POST',
     body?: unknown,
   ) => Promise<void>;
+  onPassword?: () => void;
 }) {
   const [selected, setSelected] = useState(user.roles.map((role) => role.id));
   const active = !user.deletedAt && user.status === 'ACTIVE';
@@ -373,6 +432,14 @@ function UserCard({
               }
             >
               {active ? 'Desactivar' : 'Activar'}
+            </Button>
+          </Can>
+        )}
+        {onPassword && !user.deletedAt && (
+          <Can permission="users.reset-password">
+            <Button variant="ghost" onClick={onPassword}>
+              <KeyRound size={16} />
+              Cambiar contraseña
             </Button>
           </Can>
         )}
@@ -585,6 +652,96 @@ function RoleDialog({
           {isSubmitting ? 'Creando…' : 'Crear rol'}
         </Button>
       </form>
+    </Dialog>
+  );
+}
+
+function PasswordDialog({
+  target,
+  close,
+  saved,
+}: {
+  target: PasswordTarget;
+  close: () => void;
+  saved: () => Promise<void>;
+}) {
+  const [assigned, setAssigned] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<PasswordValues>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: { newPassword: '' },
+  });
+  const submit = handleSubmit(async ({ newPassword }) => {
+    setFailure(null);
+    const response = await sessionFetch(
+      `/api/admin?resource=users&id=${encodeURIComponent(target.id)}&action=password`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword }),
+      },
+    );
+    if (!response.ok) {
+      setFailure(problemText((await response.json().catch(() => ({}))) as Problem));
+      return;
+    }
+    setAssigned(newPassword);
+    await saved();
+  });
+  return (
+    <Dialog title={`Contraseña de ${target.fullName}`} close={close}>
+      {assigned ? (
+        <div className="space-y-4">
+          <p className="text-sm">
+            Listo. Comparte esta contraseña con {target.fullName} en persona o por mensaje:
+          </p>
+          <p className="select-all rounded-xl bg-secondary p-4 text-center font-mono text-xl font-semibold">
+            {assigned}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Se cerraron sus sesiones abiertas. Pídele que la cambie en «Perfil y ajustes» al entrar.
+          </p>
+          <Button className="w-full" onClick={close}>
+            Hecho
+          </Button>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            No hace falta su contraseña anterior. Al guardar se cerrarán sus sesiones abiertas.
+          </p>
+          <Field label="Contraseña nueva" error={errors.newPassword?.message}>
+            <input
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              className={`${field} font-mono`}
+              {...register('newPassword')}
+            />
+          </Field>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setValue('newPassword', temporaryPassword(), { shouldValidate: true })}
+          >
+            <KeyRound size={16} />
+            Generar una
+          </Button>
+          {failure && (
+            <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
+              {failure}
+            </p>
+          )}
+          <Button className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? 'Guardando…' : 'Guardar contraseña'}
+          </Button>
+        </form>
+      )}
     </Dialog>
   );
 }

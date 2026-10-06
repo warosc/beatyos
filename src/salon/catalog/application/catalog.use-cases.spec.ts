@@ -125,6 +125,25 @@ describe('Casos de uso de catálogo', () => {
       expect((error as ConflictError).code).toBe('SERVICE_CODE_EXISTS_DELETED');
     });
 
+    it('sin código, lo genera a partir del nombre', async () => {
+      const service = await newService({ code: undefined, name: 'Corte de señora' });
+
+      expect(service.code).toBe('CORTE-SENORA');
+    });
+
+    it('el código generado salta los ocupados, también los de servicios eliminados', async () => {
+      const first = await newService({ code: undefined });
+      await deleteService.execute({ id: first.id, actorId: 'admin' });
+      const second = await newService({ code: undefined });
+      const third = await newService({ code: undefined });
+
+      expect([first.code, second.code, third.code]).toEqual([
+        'CORTE-SENORA',
+        'CORTE-SENORA-2',
+        'CORTE-SENORA-3',
+      ]);
+    });
+
     it('rechaza una categoría de productos', async () => {
       seedCategory('cat-prod', 'PRODUCT');
 

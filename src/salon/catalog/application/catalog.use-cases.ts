@@ -32,7 +32,8 @@ import { Service } from '../domain/service.entity';
 
 export interface CreateServiceInput {
   readonly tenantId: string;
-  readonly code: string;
+  /** Sin indicar, se deriva del nombre (`Service.codeFromName`). */
+  readonly code?: string;
   readonly name: string;
   readonly durationMinutes: number;
   readonly price: string;
@@ -59,15 +60,18 @@ export class CreateServiceUseCase implements UseCase<CreateServiceInput, Service
   ) {}
 
   async execute(input: CreateServiceInput): Promise<Service> {
-    const existing = await this.services.findByCode(input.code, { includeDeleted: true });
-    if (existing) {
-      throw new ConflictError(
-        existing.isDeleted ? 'SERVICE_CODE_EXISTS_DELETED' : 'SERVICE_CODE_ALREADY_EXISTS',
-        existing.isDeleted
-          ? 'Existe un servicio eliminado con ese código. Recupérelo o use otro código.'
-          : 'Ya existe un servicio con ese código',
-        { serviceId: existing.id },
-      );
+    const code = input.code ?? (await this.availableCodeFor(input.name));
+    if (input.code !== undefined) {
+      const existing = await this.services.findByCode(input.code, { includeDeleted: true });
+      if (existing) {
+        throw new ConflictError(
+          existing.isDeleted ? 'SERVICE_CODE_EXISTS_DELETED' : 'SERVICE_CODE_ALREADY_EXISTS',
+          existing.isDeleted
+            ? 'Existe un servicio eliminado con ese código. Recupérelo o use otro código.'
+            : 'Ya existe un servicio con ese código',
+          { serviceId: existing.id },
+        );
+      }
     }
 
     if (input.categoryId) {
@@ -77,7 +81,7 @@ export class CreateServiceUseCase implements UseCase<CreateServiceInput, Service
     const service = Service.create({
       id: this.ids.generate(),
       tenantId: input.tenantId,
-      code: input.code,
+      code,
       name: input.name,
       durationMinutes: input.durationMinutes,
       price: Money.fromDecimal(input.price, input.currency),
@@ -106,6 +110,25 @@ export class CreateServiceUseCase implements UseCase<CreateServiceInput, Service
     });
 
     return saved;
+  }
+
+  /**
+   * Primer código libre derivado del nombre: `CORTE-SENORA`, `CORTE-SENORA-2`…
+   *
+   * Cuenta también los servicios eliminados, igual que el alta con código explícito: si no,
+   * recuperar uno de ellos chocaría con el nuevo.
+   */
+  private async availableCodeFor(name: string): Promise<string> {
+    const base = Service.codeFromName(name);
+    for (let n = 1; n < 100; n++) {
+      const candidate = n === 1 ? base : `${base}-${n}`;
+      if (!(await this.services.findByCode(candidate, { includeDeleted: true }))) return candidate;
+    }
+    throw new ConflictError(
+      'SERVICE_CODE_UNAVAILABLE',
+      'No quedan códigos libres para un servicio con ese nombre. Indique uno.',
+      { base },
+    );
   }
 
   /**

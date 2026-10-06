@@ -24,6 +24,10 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { LogoutButton } from '@/components/logout-button';
 import { SessionContext } from '@/components/session-access';
 import { fetchTenantProfile, TENANT_PROFILE_KEY } from '@/features/sales/types';
+import {
+  fetchPasswordRequests,
+  PASSWORD_REQUESTS_KEY,
+} from '@/features/settings/password-requests';
 import { fetchPendingCount, PENDING_COUNT_KEY } from '@/features/service-tickets/types';
 import { useIsStylist } from '@/features/stylist-day/my-stylist';
 import { useMyDay } from '@/features/stylist-day/use-my-day';
@@ -71,6 +75,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     enabled: !isPublic && canSeeCharges,
     refetchInterval: 30_000,
     queryFn: fetchPendingCount,
+  });
+  // Aviso en «Equipo» de quien olvidó su contraseña y espera que la propietaria le asigne una.
+  const canResetPasswords =
+    !!profile.data &&
+    (profile.data.permissions.includes('*') ||
+      profile.data.permissions.includes('users.reset-password'));
+  const passwordRequests = useQuery({
+    queryKey: PASSWORD_REQUESTS_KEY,
+    enabled: !isPublic && canResetPasswords,
+    refetchInterval: 60_000,
+    queryFn: fetchPasswordRequests,
+    select: (requests) => requests.length,
   });
   // «Mi día» es de quien atiende clientas: exige la ficha de profesional además del permiso.
   const stylist = useIsStylist(isPublic ? [] : (profile.data?.permissions ?? []));
@@ -129,10 +145,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     x[1] === '/' ? pathname === '/' : pathname === x[1] || pathname.startsWith(x[1] + '/'),
   );
   const permitted = !route || allowed(route[3]);
-  const badges: Partial<Record<string, number>> = {
-    '/caja': pendingCharges.data ?? 0,
+  const badges: Partial<Record<string, { count: number; label: string }>> = {
+    '/caja': { count: pendingCharges.data ?? 0, label: 'servicios por cobrar' },
     // Citas que ya tocaban y la profesional aún no ha enviado a caja.
-    [MY_DAY]: myDay.day.pendingCount,
+    [MY_DAY]: { count: myDay.day.pendingCount, label: 'citas por enviar a caja' },
+    '/configuracion': {
+      count: passwordRequests.data ?? 0,
+      label: 'solicitudes de contraseña',
+    },
   };
   const links = visible.map(([label, href, Icon]) => (
     <Link
@@ -146,7 +166,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     >
       <Icon size={19} className={pathname === href ? 'text-primary' : undefined} />
       {label}
-      <Badge count={badges[href]} />
+      <Badge {...badges[href]} />
     </Link>
   ));
   const onProfile = pathname === '/perfil';
@@ -224,7 +244,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <span className="relative">
                 <Icon size={20} />
-                <Badge count={badges[href]} floating />
+                <Badge {...badges[href]} floating />
               </span>
               {label}
             </Link>
@@ -245,11 +265,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </SessionContext.Provider>
   );
 }
-function Badge({ count, floating = false }: { count?: number; floating?: boolean }) {
+function Badge({
+  count,
+  label,
+  floating = false,
+}: {
+  count?: number;
+  label?: string;
+  floating?: boolean;
+}) {
   if (!count) return null;
   return (
     <span
-      aria-label={`${count} servicios por cobrar`}
+      aria-label={`${count} ${label}`}
       className={
         'grid min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-bold leading-5 text-primary-foreground ' +
         (floating ? 'absolute -top-2 -right-3' : 'ml-auto')

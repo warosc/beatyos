@@ -34,7 +34,13 @@ const DECIMAL = /^\d{1,10}(\.\d{1,2})?$/;
 // ===========================================================================
 
 export class CreateServiceDto {
-  @ApiProperty({ example: 'COR-M', description: 'Código corto y único dentro del salón' })
+  @ApiPropertyOptional({
+    example: 'COR-M',
+    description:
+      'Código corto y único dentro del salón. Sin indicar, se genera a partir del nombre ' +
+      '(«Corte de señora» → `CORTE-SENORA`, con sufijo `-2`, `-3`… si ya está ocupado).',
+  })
+  @IsOptional()
   @IsString()
   @Matches(/^[A-Za-z0-9][A-Za-z0-9-]{1,19}$/, {
     message: 'El código admite de 2 a 20 letras, dígitos o guiones',
@@ -42,7 +48,7 @@ export class CreateServiceDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toUpperCase() : value,
   )
-  code!: string;
+  code?: string;
 
   @ApiProperty({ example: 'Corte de señora' })
   @IsString()

@@ -285,6 +285,21 @@ describe('Profesionales y catálogo (integración)', () => {
       expect(typeof response.body.data.priceWithTax).toBe('string');
     });
 
+    it('sin código, lo genera a partir del nombre y no repite', async () => {
+      const create = () =>
+        request(app.getHttpServer())
+          .post(api('/services'))
+          .set(auth())
+          .send({ name: 'Uñas acrílicas', durationMinutes: 60, price: '89.29', taxRate: 12 })
+          .expect(201);
+
+      const first = await create();
+      const second = await create();
+
+      expect(first.body.data).toMatchObject({ code: 'UNAS-ACRILICAS', priceWithTax: '100.00' });
+      expect(second.body.data.code).toBe('UNAS-ACRILICAS-2');
+    });
+
     it('rechaza un código repetido con 409', async () => {
       const response = await request(app.getHttpServer())
         .post(api('/services'))

@@ -100,6 +100,20 @@ export class ResetPasswordDto {
   newPassword!: string;
 }
 
+export class AdminResetPasswordDto {
+  @ApiProperty({
+    description:
+      'Contraseña que la propietaria asigna y comunica en persona. Rige la misma política ' +
+      'que para cualquier otra.',
+    minLength: 12,
+    example: 'TemporalSalon2026',
+  })
+  @IsString()
+  @MinLength(12, { message: 'La contraseña debe tener al menos 12 caracteres' })
+  @MaxLength(128)
+  newPassword!: string;
+}
+
 // ---------------------------------------------------------------------------
 // Respuestas
 // ---------------------------------------------------------------------------
@@ -149,4 +163,16 @@ export class ProfileResponse extends SessionUserResponse {
   @ApiProperty({ example: 'es-GT' }) locale!: string;
   @ApiProperty({ example: 'ACTIVE' }) status!: string;
   @ApiProperty({ nullable: true, format: 'date-time' }) lastLoginAt!: string | null;
+}
+
+export class PasswordResetRequestResponse {
+  @ApiProperty() id!: string;
+  @ApiProperty() userId!: string;
+  @ApiProperty() email!: string;
+  @ApiProperty() fullName!: string;
+  @ApiProperty({ format: 'date-time' }) requestedAt!: Date;
+}
+
+export class PasswordResetRequestListResponse {
+  @ApiProperty({ type: [PasswordResetRequestResponse] }) data!: PasswordResetRequestResponse[];
 }

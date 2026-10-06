@@ -67,15 +67,23 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApplyThrottler('auth')
-  @ApiOperation({ summary: 'Solicitar recuperación sin revelar si el correo existe' })
+  @ApiOperation({
+    summary: 'Solicitar recuperación sin revelar si el correo existe',
+    description:
+      'Avisa a la propietaria del salón, que asigna una contraseña nueva desde Equipo, y ' +
+      'emite además el enlace de un solo uso para el correo.',
+  })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     const result = await this.requestPasswordReset.execute(dto);
-    const development = this.config.get('NODE_ENV', { infer: true }) !== 'production';
+    // El enlace en la respuesta solo existe para que la suite recorra el flujo sin buzón.
+    // En cualquier otro entorno entregaría la cuenta a quien conozca el correo: la demo
+    // corre en `development` y no es un entorno de pruebas.
+    const exposeLink = this.config.get('NODE_ENV', { infer: true }) === 'test';
     return {
-      message: 'Si la cuenta existe, enviaremos instrucciones para recuperar el acceso.',
-      ...(development && result.token
-        ? { resetPath: `/reset-password?token=${result.token}` }
-        : {}),
+      message:
+        'Si la cuenta existe, la propietaria del salón recibirá el aviso para asignarle una ' +
+        'contraseña nueva.',
+      ...(exposeLink && result.token ? { resetPath: `/reset-password?token=${result.token}` } : {}),
     };
   }
 
