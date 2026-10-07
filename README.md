@@ -69,7 +69,7 @@ Todas con la contraseña `SalonDemo2026`:
 | Correo | Rol | Para qué sirve |
 | ------ | --- | -------------- |
 | `propietaria@bella-vista.es` | `OWNER` | Acceso total al salón |
-| `encargada@bella-vista.es` | `MANAGER` | Gestión diaria, sin anular facturas ni tocar usuarios |
+| `encargada@bella-vista.es` | `MANAGER` | Gestión diaria, sin anular facturas, tocar usuarios ni **ver el costo de los productos** |
 | `recepcion@bella-vista.es` | `RECEPTIONIST` | Agenda y cobro, **sin ver costes ni márgenes** |
 | `estilista@bella-vista.es` | `STYLIST` | «Mi día»: su agenda y declarar lo que hizo para que caja lo cobre. **No cobra** |
 

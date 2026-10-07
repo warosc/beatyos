@@ -445,6 +445,60 @@ describe('Inventario (integración)', () => {
       expect(product).toBeDefined();
       expect(product).not.toHaveProperty('costPrice');
     });
+
+    it('la encargada da de alta sin coste, no lo ve, y la primera entrada lo fija', async () => {
+      // El coste es de la propiedad. La encargada compra y recibe, pero el coste medio y el
+      // margen del catálogo no son suyos.
+      const roles = await request(server()).get(api('/roles')).set(auth()).expect(200);
+      const managerRoleId = (roles.body.data as { id: string; code: string }[]).find(
+        (role) => role.code === 'MANAGER',
+      )!.id;
+      await request(server())
+        .post(api('/users'))
+        .set(auth())
+        .send({
+          email: 'encargada@bella-vista.test',
+          password: TEST_PASSWORD,
+          firstName: 'Elena',
+          lastName: 'Prieto',
+          roleIds: [managerRoleId],
+        })
+        .expect(201);
+      const login = await request(server())
+        .post(api('/auth/login'))
+        .send({ email: 'encargada@bella-vista.test', password: TEST_PASSWORD })
+        .expect(200);
+      expect(login.body.data.user.permissions).not.toContain('products.read-cost');
+      const asManager = { Authorization: `Bearer ${login.body.data.accessToken}` };
+
+      // Escribir una cifra que luego no podría leer, no.
+      await request(server())
+        .post(api('/products'))
+        .set(asManager)
+        .send({ sku: 'SH-ENC', name: 'Champú de la encargada', price: 120, costPrice: 50 })
+        .expect(403);
+
+      const created = await request(server())
+        .post(api('/products'))
+        .set(asManager)
+        .send({ sku: 'SH-ENC', name: 'Champú de la encargada', price: 120 })
+        .expect(201);
+      expect(created.body.data).not.toHaveProperty('costPrice');
+      expect(created.body.data).not.toHaveProperty('marginPercentage');
+      const id = created.body.data.id as string;
+
+      await request(server())
+        .post(api('/inventory/receive'))
+        .set(asManager)
+        .send({ productId: id, quantity: 6, unitCost: 55 })
+        .expect(201);
+
+      const asOwner = await request(server())
+        .get(api(`/products/${id}`))
+        .set(auth())
+        .expect(200);
+      expect(asOwner.body.data.costPrice).toBe('55.00');
+    });
   });
 
   // =========================================================================

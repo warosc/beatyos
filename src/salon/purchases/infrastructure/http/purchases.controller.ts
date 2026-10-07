@@ -3,6 +3,7 @@ import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestj
 
 import { PERMISSIONS } from '../../../../core/permissions/domain/permission-catalog';
 import type { AccessTokenClaims } from '../../../../shared/application/ports';
+import { WILDCARD_PERMISSION } from '../../../../shared/domain/authorization';
 import { CurrentUser, RequirePermissions } from '../../../../shared/infrastructure/http/decorators';
 import { PageMetaResponse } from '../../../../shared/infrastructure/http/dto/pagination.dto';
 import type {
@@ -154,13 +155,17 @@ export class PurchasesController {
   @RequirePermissions(PERMISSIONS.purchases.read)
   async search(
     @Query() query: ListPurchaseOrdersQueryDto,
+    @CurrentUser() user: AccessTokenClaims,
   ): Promise<{ data: PurchaseOrderResponse[]; meta: PageMetaResponse }> {
     const page = await this.list.execute({
       filter: { status: query.status },
       page: query.toPageRequest<PurchaseOrderSortField>(),
     });
+    const includeCosts = canSeeCosts(user);
     return {
-      data: page.data.map((view) => toPurchaseOrderResponse(view, { withMovements: false })),
+      data: page.data.map((view) =>
+        toPurchaseOrderResponse(view, { withMovements: false, includeCosts }),
+      ),
       meta: page.meta,
     };
   }
@@ -169,9 +174,13 @@ export class PurchasesController {
   @ApiOperation({ operationId: 'purchases_get', summary: 'Consultar una orden de compra' })
   @ApiOkResponse({ type: PurchaseOrderEnvelopeResponse })
   @RequirePermissions(PERMISSIONS.purchases.read)
-  async detail(@Param('id') id: string): Promise<PurchaseOrderResponse> {
+  async detail(
+    @Param('id') id: string,
+    @CurrentUser() user: AccessTokenClaims,
+  ): Promise<PurchaseOrderResponse> {
     return toPurchaseOrderResponse(await this.get.execute({ orderId: id }), {
       withMovements: true,
+      includeCosts: canSeeCosts(user),
     });
   }
 
@@ -188,7 +197,7 @@ export class PurchasesController {
       tenantId: user.tenantId!,
       actorId: user.sub,
     });
-    return toPurchaseOrderResponse(view, { withMovements: false });
+    return toPurchaseOrderResponse(view, { withMovements: false, includeCosts: canSeeCosts(user) });
   }
 
   @Post(':id/submit')
@@ -200,7 +209,7 @@ export class PurchasesController {
     @CurrentUser() user: AccessTokenClaims,
   ): Promise<PurchaseOrderResponse> {
     const view = await this.submit.execute({ orderId: id, actorId: user.sub });
-    return toPurchaseOrderResponse(view, { withMovements: true });
+    return toPurchaseOrderResponse(view, { withMovements: true, includeCosts: canSeeCosts(user) });
   }
 
   @Post(':id/receive')
@@ -218,7 +227,7 @@ export class PurchasesController {
       lines: dto.lines,
       actorId: user.sub,
     });
-    return toPurchaseOrderResponse(view, { withMovements: true });
+    return toPurchaseOrderResponse(view, { withMovements: true, includeCosts: canSeeCosts(user) });
   }
 
   @Post(':id/cancel')
@@ -235,6 +244,11 @@ export class PurchasesController {
       reason: dto.reason,
       actorId: user.sub,
     });
-    return toPurchaseOrderResponse(view, { withMovements: true });
+    return toPurchaseOrderResponse(view, { withMovements: true, includeCosts: canSeeCosts(user) });
   }
 }
+
+/** El coste medio del producto es de la propiedad (`products.read-cost`), no de compras. */
+const canSeeCosts = (user: AccessTokenClaims): boolean =>
+  user.permissions.includes(PERMISSIONS.products.readCost) ||
+  user.permissions.includes(WILDCARD_PERMISSION);

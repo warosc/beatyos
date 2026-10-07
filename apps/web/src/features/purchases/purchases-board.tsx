@@ -339,7 +339,8 @@ function CreateForm({
                   const input = e.currentTarget.form?.elements.namedItem(
                     'unitCost',
                   ) as HTMLInputElement | null;
-                  if (input && p) input.value = p.costPrice;
+                  // Sin `products.read-cost` la API no envía el coste y se teclea el de la factura.
+                  if (input && p?.costPrice) input.value = p.costPrice;
                 }}
               >
                 <option value="">Selecciona…</option>

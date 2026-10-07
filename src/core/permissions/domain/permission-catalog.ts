@@ -337,6 +337,9 @@ const withoutPlatformScope = (codes: readonly string[]) => codes;
  * - La encargada compra y gestiona inventario, pero no puede **anular facturas emitidas**
  *   (`invoices.void`) ni tocar usuarios: son las dos palancas con las que se tapa un
  *   descuadre, y quedan en manos de la propiedad.
+ * - La encargada da de alta productos, pero **no ve su coste ni su margen**
+ *   (`products.read-cost`): la rentabilidad del catálogo es de la propiedad. El coste es
+ *   opcional al dar de alta y la primera entrada de mercancía lo fija.
  * - Recepción cobra a precio de lista: descontar (`invoices.discount`) es de la encargada y
  *   de la propiedad. Un descuento es dinero que no entra, y quien lo concede debe poder
  *   responder de él.
@@ -391,7 +394,6 @@ export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
       PERMISSIONS.products.create,
       PERMISSIONS.products.update,
       PERMISSIONS.products.delete,
-      PERMISSIONS.products.readCost,
       PERMISSIONS.inventory.read,
       PERMISSIONS.inventory.adjust,
       PERMISSIONS.inventory.receive,

@@ -78,6 +78,9 @@ export const toSupplierResponse = (supplier: Supplier): SupplierResponse => ({
  * `/products/{id}`. Lleva lo que la pantalla de compras usa —nombre para el formulario de
  * recepción y `tracksBatches` para saber si hay que pedir lote y caducidad— más el coste y
  * el tipo impositivo, que son los datos con los que se compone un pedido.
+ *
+ * El coste medio se omite a quien no tiene `products.read-cost`, igual que en `/products`:
+ * comprar no da derecho a ver la rentabilidad del catálogo.
  */
 export class PurchaseProductResponse {
   id: string;
@@ -85,7 +88,7 @@ export class PurchaseProductResponse {
   name: string;
   barcode: string | null;
   unit: string;
-  costPrice: string;
+  costPrice?: string;
   price: string;
   taxRate: number;
   trackStock: boolean;
@@ -94,13 +97,13 @@ export class PurchaseProductResponse {
   stockOnHand: number;
 }
 
-const toProductResponse = (product: Product): PurchaseProductResponse => ({
+const toProductResponse = (product: Product, includeCosts: boolean): PurchaseProductResponse => ({
   id: product.id,
   sku: product.sku,
   name: product.name,
   barcode: product.barcode,
   unit: product.unit,
-  costPrice: product.costPrice.toDecimalString(),
+  ...(includeCosts ? { costPrice: product.costPrice.toDecimalString() } : {}),
   price: product.price.toDecimalString(),
   taxRate: product.taxRate.value,
   trackStock: product.trackStock,
@@ -191,6 +194,7 @@ const toLineResponse = (
   order: PurchaseOrder,
   line: PurchaseOrderLine,
   products: ReadonlyMap<string, Product>,
+  includeCosts: boolean,
 ): PurchaseOrderLineResponse => {
   const product = products.get(line.productId);
 
@@ -207,7 +211,7 @@ const toLineResponse = (
     lineTotal: line.lineTotal.toDecimalString(),
     currency: line.lineTotal.currency,
     notes: line.notes,
-    product: product ? toProductResponse(product) : null,
+    product: product ? toProductResponse(product, includeCosts) : null,
   };
 };
 
@@ -228,7 +232,7 @@ const toMovementResponse = (movement: InventoryMovement): PurchaseMovementRespon
 
 export const toPurchaseOrderResponse = (
   view: PurchaseOrderView,
-  options: { withMovements: boolean },
+  options: { withMovements: boolean; includeCosts: boolean },
 ): PurchaseOrderResponse => {
   const { order } = view;
 
@@ -251,7 +255,9 @@ export const toPurchaseOrderResponse = (
     createdAt: order.audit.createdAt,
     updatedAt: order.audit.updatedAt,
     supplier: view.supplier ? toSupplierResponse(view.supplier) : null,
-    lines: order.lines.map((line) => toLineResponse(order, line, view.products)),
+    lines: order.lines.map((line) =>
+      toLineResponse(order, line, view.products, options.includeCosts),
+    ),
     ...(options.withMovements
       ? { movements: view.movements.map((movement) => toMovementResponse(movement)) }
       : {}),

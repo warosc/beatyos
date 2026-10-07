@@ -16,7 +16,8 @@ type Product = {
   name: string;
   brand: string | null;
   price: string;
-  costPrice: string;
+  /** La API lo omite a quien no tiene `products.read-cost`: hoy, solo la propietaria lo ve. */
+  costPrice?: string;
   currency: string;
   stockOnHand: string;
   reorderPoint: string;
@@ -289,12 +290,16 @@ function InventoryForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { can } = useAccess();
+  const canSeeCosts = can('products.read-cost');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     const f = new FormData(e.currentTarget);
+    // Vacío no es «cuesta cero»: se omite y la primera entrada de mercancía fija el coste.
+    const costPrice = String(f.get('costPrice') ?? '').trim();
     const body: Record<string, unknown> =
       action === 'product'
         ? {
@@ -309,7 +314,7 @@ function InventoryForm({
             name: f.get('name'),
             brand: f.get('brand') || undefined,
             price: Number(f.get('price')),
-            costPrice: Number(f.get('costPrice')),
+            costPrice: costPrice ? Number(costPrice) : undefined,
             reorderPoint: Number(f.get('reorderPoint')),
             reorderQuantity: Number(f.get('reorderQuantity')),
           }
@@ -375,21 +380,23 @@ function InventoryForm({
             {[
               ['sku', 'SKU'],
               ['name', 'Nombre'],
-              ['brand', 'Marca'],
+              ['brand', 'Marca (opcional)'],
               ['price', 'Precio de venta'],
-              ['costPrice', 'Costo'],
+              // Quien no puede ver el coste tampoco lo escribe: la API lo rechazaría.
+              ...(canSeeCosts ? [['costPrice', 'Costo (opcional)']] : []),
               ['reorderPoint', 'Stock mínimo'],
               ['reorderQuantity', 'Cantidad a reponer'],
             ].map(([n, l]) => (
               <label key={n} className="block text-sm font-semibold">
                 {l}
                 <input
-                  required={n !== 'brand'}
+                  required={n !== 'brand' && n !== 'costPrice'}
                   type={
                     ['price', 'costPrice', 'reorderPoint', 'reorderQuantity'].includes(n)
                       ? 'number'
                       : 'text'
                   }
+                  min={n === 'costPrice' ? 0 : undefined}
                   step="0.01"
                   name={n}
                   placeholder={n === 'sku' ? 'Ej. SH-ARG-500' : undefined}
@@ -398,6 +405,12 @@ function InventoryForm({
                 {n === 'sku' && (
                   <span className="mt-1 block text-xs font-normal text-muted-foreground">
                     Código corto del producto: letras, números, puntos y guiones.
+                  </span>
+                )}
+                {n === 'costPrice' && (
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    Solo la propietaria ve este dato. Si lo dejas vacío, se toma del costo de la
+                    primera entrada de mercancía.
                   </span>
                 )}
               </label>

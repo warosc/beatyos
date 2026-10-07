@@ -147,6 +147,10 @@ export class ProductsController {
   @ApiOperation({ operationId: 'products_create', summary: 'Crear un producto' })
   @ApiCreatedResponse({ type: ProductEnvelopeResponse })
   async create(@Body() dto: CreateProductDto, @CurrentUser() user: AccessTokenClaims) {
+    // El coste es opcional: quien no puede verlo da de alta sin él y la primera entrada de
+    // mercancía lo fija. Lo que no puede es escribir una cifra que luego no podría leer.
+    requireCostPermission(dto, user);
+
     const product = await this.createProduct.execute({
       tenantId: requireTenant(user),
       sku: dto.sku,
@@ -185,12 +189,7 @@ export class ProductsController {
   ) {
     // Cambiar el coste altera la valoración del almacén, así que exige el permiso que
     // gobierna los costes y no basta con poder editar el producto.
-    if (dto.costPrice !== undefined && !canSeeCosts(user)) {
-      throw new ForbiddenActionError(
-        'products.update-cost',
-        'Modificar el coste requiere el permiso de costes y márgenes',
-      );
-    }
+    requireCostPermission(dto, user);
 
     const product = await this.updateProduct.execute({
       productId: id,
@@ -409,6 +408,15 @@ const toDecimalString = (value: number, decimals: number): string => value.toFix
 const canSeeCosts = (user: AccessTokenClaims): boolean =>
   user.permissions.includes(PERMISSIONS.products.readCost) ||
   user.permissions.includes(WILDCARD_PERMISSION);
+
+const requireCostPermission = (dto: { costPrice?: number }, user: AccessTokenClaims): void => {
+  if (dto.costPrice !== undefined && !canSeeCosts(user)) {
+    throw new ForbiddenActionError(
+      'products.update-cost',
+      'Fijar el coste requiere el permiso de costes y márgenes',
+    );
+  }
+};
 
 /**
  * El `tenantId` sale del token, nunca del cuerpo de la petición.

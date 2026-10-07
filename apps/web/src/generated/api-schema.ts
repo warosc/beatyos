@@ -3091,7 +3091,7 @@ export interface components {
             name: string;
             barcode: string | null;
             unit: string;
-            costPrice: string;
+            costPrice?: string;
             price: string;
             taxRate: number;
             trackStock: boolean;
