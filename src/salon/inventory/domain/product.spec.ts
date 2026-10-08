@@ -188,8 +188,9 @@ describe('Product', () => {
   });
 
   describe('margen', () => {
-    it('lo calcula sobre el precio de venta', () => {
-      expect(aProduct({ price: gtq('100.00'), costPrice: gtq('60.00') }).marginPercentage()).toBe(
+    it('lo calcula sobre el precio de venta sin IVA, como el coste', () => {
+      // 112 con IVA son 100 para el salón: con un coste de 60, el margen es del 40 %.
+      expect(aProduct({ price: gtq('112.00'), costPrice: gtq('60.00') }).marginPercentage()).toBe(
         40,
       );
     });

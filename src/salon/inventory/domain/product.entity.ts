@@ -256,11 +256,21 @@ export class Product extends Entity {
     return this.props.costPrice.multiply(this.props.stockOnHand);
   }
 
-  /** Margen sobre precio de venta. `null` si el producto es gratuito o solo interno. */
+  /** Precio de venta sin el IVA que lleva dentro: lo que de verdad ingresa el salón. */
+  get netPrice(): Money {
+    return this.props.price.subtract(this.props.price.includedTax(this.props.taxRate.value));
+  }
+
+  /**
+   * Margen sobre el precio de venta sin IVA. El coste de compra también va sin IVA, y el
+   * impuesto no es del salón: medir contra el precio con IVA inflaría el margen un 12 %.
+   * `null` si el producto es gratuito o solo interno.
+   */
   marginPercentage(): number | null {
-    if (this.props.price.isZero()) return null;
-    const margin = this.props.price.minorUnits - this.props.costPrice.minorUnits;
-    return round3((margin / this.props.price.minorUnits) * 100);
+    const net = this.netPrice;
+    if (net.isZero()) return null;
+    const margin = net.minorUnits - this.props.costPrice.minorUnits;
+    return round3((margin / net.minorUnits) * 100);
   }
 
   // -- Comportamiento -------------------------------------------------------

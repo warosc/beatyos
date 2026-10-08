@@ -71,7 +71,8 @@ export class CreateServiceDto {
   @ApiProperty({
     example: '25.00',
     description:
-      'Precio **sin** impuestos, como cadena decimal. Nunca como número: `JSON.parse` lo ' +
+      'Precio que paga la clienta, **con** el IVA incluido (ADR-0021), como cadena decimal. ' +
+      'Nunca como número: `JSON.parse` lo ' +
       'convertiría a coma flotante y dejaría de sumar exacto (ADR-0010).',
   })
   @IsString()
@@ -185,7 +186,7 @@ export class UpdateServiceDto {
 
   @ApiPropertyOptional({
     example: '30.00',
-    description: 'Cadena decimal. No cambia las citas ya agendadas.',
+    description: 'Con el IVA incluido, como cadena decimal. No cambia las citas ya agendadas.',
   })
   @IsOptional()
   @IsString()
@@ -312,11 +313,15 @@ export class ServiceResponse {
   })
   blockedMinutes!: number;
 
-  @ApiProperty({ example: '25.00', description: 'Precio sin impuestos, como cadena decimal' })
+  @ApiProperty({
+    example: '28.00',
+    description: 'Precio que paga la clienta, IVA incluido (ADR-0021), como cadena decimal',
+  })
   price!: string;
 
-  @ApiProperty({ example: '5.25' }) taxAmount!: string;
-  @ApiProperty({ example: '30.25', description: 'Precio final que ve la clienta' })
+  @ApiProperty({ example: '3.00', description: 'IVA que va dentro del precio' })
+  taxAmount!: string;
+  @ApiProperty({ example: '28.00', description: 'Igual que `price`: el IVA ya va dentro' })
   priceWithTax!: string;
 
   @ApiProperty({ example: 'GTQ' }) currency!: string;

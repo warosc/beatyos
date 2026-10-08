@@ -80,7 +80,14 @@ export class CreateProductDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) description?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() categoryId?: string;
 
-  @ApiProperty({ example: 120.5 }) @Type(() => Number) @IsNumber() @Min(0) price!: number;
+  @ApiProperty({
+    example: 120.5,
+    description: 'Precio que paga la clienta, con el IVA incluido (ADR-0021)',
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  price!: number;
 
   @ApiPropertyOptional({ example: 65 })
   @IsOptional()

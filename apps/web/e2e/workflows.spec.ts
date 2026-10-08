@@ -195,7 +195,7 @@ test('vende un producto en quetzales', async ({ page }) => {
     {
       id: 'product-1',
       name: 'Champú',
-      price: '10.04',
+      price: '11.24',
       taxRate: 12,
       stockOnHand: '10.000',
       trackStock: true,
@@ -203,7 +203,7 @@ test('vende un producto en quetzales', async ({ page }) => {
     {
       id: 'product-2',
       name: 'Tinte',
-      price: '10.04',
+      price: '11.24',
       taxRate: 12,
       stockOnHand: '10.000',
       trackStock: true,
@@ -612,11 +612,11 @@ test('la dueña crea un servicio escribiendo lo que cobra', async ({ page }) => 
   await page.getByRole('button', { name: 'Crear servicio' }).click();
 
   await expect(page.getByText('«Corte de señora» quedó creado')).toBeVisible();
-  // El sistema hace las cuentas: guarda la base sin IVA y el código lo pone la API.
+  // Se guarda lo que cobra, con el IVA dentro (ADR-0021); el código lo pone la API.
   expect(created).toEqual({
     name: 'Corte de señora',
     durationMinutes: 45,
-    price: '89.29',
+    price: '100.00',
     taxRate: 12,
     bufferMinutes: 10,
     commissionRate: null,
@@ -693,7 +693,7 @@ test('la encargada edita y elimina un servicio', async ({ page }) => {
     durationMinutes: 60,
     bufferMinutes: 10,
     commissionRate: null,
-    price: '133.93',
+    price: '150.00',
   });
 
   // Cambiar solo la comisión no manda el precio: no hay cambio de precio que auditar.
@@ -713,4 +713,83 @@ test('la encargada edita y elimina un servicio', async ({ page }) => {
   await page.getByRole('button', { name: 'Eliminar Corte y peinado' }).click();
   await expect(page.getByText('«Corte y peinado» se eliminó.')).toBeVisible();
   expect(deleted).toBe(true);
+});
+
+test('la dueña da de alta un producto con lo que cobra y lo corrige después', async ({ page }) => {
+  await authenticated(page);
+  const product = {
+    id: '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b',
+    sku: 'SH-ARG-500',
+    name: 'Champú de argán',
+    brand: null as string | null,
+    price: '100.00',
+    taxRate: '12.00',
+    currency: 'GTQ',
+    stockOnHand: '0.000',
+    reorderPoint: '2.000',
+    reorderQuantity: '6.000',
+    stockStatus: 'OUT',
+  };
+  let products: (typeof product)[] = [];
+  const writes: Array<{ method: string; url: string; body: Record<string, unknown> }> = [];
+  await page.route('**/api/inventory?resource=products**', (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') return route.fulfill({ json: { data: products } });
+    const body = request.postDataJSON() as Record<string, unknown>;
+    writes.push({ method: request.method(), url: request.url(), body });
+    // La API guarda lo que manda la pantalla: el precio con el IVA dentro.
+    products = [{ ...product, name: String(body.name), price: String(body.price ?? '100.00') }];
+    return route.fulfill({ status: request.method() === 'POST' ? 201 : 200, json: { data: {} } });
+  });
+
+  await page.goto('/inventario');
+  await page.getByRole('button', { name: 'Producto', exact: true }).click();
+  const alta = page.getByRole('dialog', { name: 'Nuevo producto' });
+  await alta.getByLabel('SKU').fill('sh arg 500');
+  await alta.getByLabel('Nombre').fill('Champú de argán');
+  await alta.getByLabel('Precio de venta (Q)').fill('100');
+  await expect(alta.getByRole('status')).toContainText(/Q\s?100\.00.*Q\s?10\.71 de IVA/);
+  await alta.getByLabel('Stock mínimo').fill('2');
+  await alta.getByLabel('Cantidad a reponer').fill('6');
+  await alta.getByRole('button', { name: 'Guardar' }).click();
+  await expect(alta).toBeHidden();
+
+  expect(writes[0]).toMatchObject({
+    method: 'POST',
+    body: {
+      sku: 'SH-ARG-500',
+      name: 'Champú de argán',
+      price: 100,
+      taxRate: 12,
+      reorderPoint: 2,
+      reorderQuantity: 6,
+    },
+  });
+  // En inventario se ve lo mismo que se escribió y lo mismo que se cobrará en caja.
+  await expect(page.getByText(/Q\s?100\.00/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Editar Champú de argán' }).click();
+  const edicion = page.getByRole('dialog', { name: 'Editar Champú de argán' });
+  await expect(edicion.getByLabel('Precio de venta (Q)')).toHaveValue('100');
+  await edicion.getByLabel('Precio de venta (Q)').fill('120');
+  await edicion.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(edicion).toBeHidden();
+
+  expect(writes[1].method).toBe('PATCH');
+  expect(writes[1].url).toContain(`id=${product.id}`);
+  expect(writes[1].body).toEqual({
+    name: 'Champú de argán',
+    brand: '',
+    reorderPoint: 2,
+    reorderQuantity: 6,
+    price: 120,
+  });
+
+  // Corregir solo el nombre no manda el precio: no hay cambio de precio que auditar.
+  await page.getByRole('button', { name: 'Editar Champú de argán' }).click();
+  const otra = page.getByRole('dialog', { name: 'Editar Champú de argán' });
+  await otra.getByLabel('Nombre').fill('Champú de argán 500 ml');
+  await otra.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(otra).toBeHidden();
+  expect(writes[2].body).not.toHaveProperty('price');
 });

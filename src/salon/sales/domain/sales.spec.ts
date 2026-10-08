@@ -21,7 +21,8 @@ const aLine = (overrides: Partial<Parameters<typeof buildInvoiceLine>[0]> = {}):
     kind: 'SERVICE',
     description: 'Corte de pelo',
     quantity: 1,
-    unitPrice: gtq('100.00'),
+    // Con IVA incluido (ADR-0021): 100 de base más 12 de IVA.
+    unitPrice: gtq('112.00'),
     taxRate: Percentage.create(12),
     ...overrides,
   });
@@ -42,27 +43,37 @@ beforeEach(() => {
 });
 
 describe('buildInvoiceLine', () => {
-  it('aplica el IVA sobre la base', () => {
-    const line = aLine({ unitPrice: gtq('100.00'), taxRate: Percentage.create(12) });
+  it('separa el IVA que va dentro del precio', () => {
+    const line = aLine({ unitPrice: gtq('112.00'), taxRate: Percentage.create(12) });
 
-    expect(line.lineSubtotal.toDecimalString()).toBe('100.00');
-    expect(line.taxAmount.toDecimalString()).toBe('12.00');
     expect(line.lineTotal.toDecimalString()).toBe('112.00');
+    expect(line.taxAmount.toDecimalString()).toBe('12.00');
+    expect(line.lineSubtotal.toDecimalString()).toBe('100.00');
   });
 
-  it('descuenta antes de aplicar el impuesto', () => {
-    // Aplicar el IVA antes del descuento haría pagar impuesto sobre dinero que el cliente
-    // no desembolsa: 100 − 20 = 80, y el 12 % de 80 son 9,60.
-    const line = aLine({ unitPrice: gtq('100.00'), discountAmount: gtq('20.00') });
+  it('cobra exactamente el precio aunque no exista una base de dos decimales', () => {
+    // Con el IVA sumado encima, 45,50 no se podía cobrar: 40,62 daba 45,49 y 40,63, 45,51.
+    const line = aLine({ unitPrice: gtq('45.50'), taxRate: Percentage.create(12) });
 
-    expect(line.lineSubtotal.toDecimalString()).toBe('80.00');
-    expect(line.taxAmount.toDecimalString()).toBe('9.60');
+    expect(line.lineTotal.toDecimalString()).toBe('45.50');
+    expect(line.lineSubtotal.add(line.taxAmount).toDecimalString()).toBe('45.50');
+    expect(line.taxAmount.toDecimalString()).toBe('4.87');
+  });
+
+  it('descuenta antes de separar el impuesto', () => {
+    // El IVA recae solo sobre lo que la clienta desembolsa: 112 − 22,40 = 89,60, que
+    // lleva dentro 9,60 de IVA sobre una base de 80.
+    const line = aLine({ unitPrice: gtq('112.00'), discountAmount: gtq('22.40') });
+
     expect(line.lineTotal.toDecimalString()).toBe('89.60');
+    expect(line.taxAmount.toDecimalString()).toBe('9.60');
+    expect(line.lineSubtotal.toDecimalString()).toBe('80.00');
   });
 
   it('multiplica por la cantidad antes de descontar', () => {
-    const line = aLine({ quantity: 3, unitPrice: gtq('25.00'), discountAmount: gtq('5.00') });
+    const line = aLine({ quantity: 3, unitPrice: gtq('28.00'), discountAmount: gtq('5.60') });
 
+    expect(line.lineTotal.toDecimalString()).toBe('78.40');
     expect(line.lineSubtotal.toDecimalString()).toBe('70.00');
   });
 
@@ -79,7 +90,7 @@ describe('buildInvoiceLine', () => {
   it('calcula la comisión sobre la base, no sobre el total con impuesto', () => {
     // El IVA no es ingreso del salón: es dinero recaudado para Hacienda, y pagar comisión
     // sobre él sería pagar por recaudar. El 20 % de 100 son 20, no el 20 % de 112.
-    const line = aLine({ unitPrice: gtq('100.00'), commissionRate: Percentage.create(20) });
+    const line = aLine({ unitPrice: gtq('112.00'), commissionRate: Percentage.create(20) });
 
     expect(line.commissionAmount.toDecimalString()).toBe('20.00');
   });
@@ -142,18 +153,19 @@ describe('Invoice', () => {
 
     it('acumula el descuento de todas las líneas', () => {
       const invoice = anInvoice([
-        aLine({ unitPrice: gtq('100.00'), discountAmount: gtq('10.00') }),
-        aLine({ unitPrice: gtq('50.00'), discountAmount: gtq('5.00') }),
+        aLine({ unitPrice: gtq('112.00'), discountAmount: gtq('11.20') }),
+        aLine({ unitPrice: gtq('56.00'), discountAmount: gtq('5.60') }),
       ]);
 
-      expect(invoice.discountTotal.toDecimalString()).toBe('15.00');
+      // El descuento es lo que deja de pagar la clienta; la base, lo pagado sin su IVA.
+      expect(invoice.discountTotal.toDecimalString()).toBe('16.80');
       expect(invoice.subtotal.toDecimalString()).toBe('135.00');
     });
 
     it('acumula las comisiones devengadas', () => {
       const invoice = anInvoice([
-        aLine({ unitPrice: gtq('100.00'), commissionRate: Percentage.create(20) }),
-        aLine({ unitPrice: gtq('50.00'), commissionRate: Percentage.create(10) }),
+        aLine({ unitPrice: gtq('112.00'), commissionRate: Percentage.create(20) }),
+        aLine({ unitPrice: gtq('56.00'), commissionRate: Percentage.create(10) }),
       ]);
 
       expect(invoice.commissionTotal.toDecimalString()).toBe('25.00');

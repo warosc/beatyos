@@ -289,7 +289,7 @@ describe('Casos de uso de comandas de servicio', () => {
   });
 
   describe('listar', () => {
-    it('calcula el total con impuesto con la misma regla que la factura', async () => {
+    it('calcula el total con la misma regla que la factura', async () => {
       await registerFor({ serviceIds: [CUT, COLOR] });
 
       const page = await list.execute({
@@ -299,8 +299,8 @@ describe('Casos de uso de comandas de servicio', () => {
         restrictToStylistId: null,
       });
 
-      // (100 + 250) con el 12 % de IVA.
-      expect(page.data[0].total.toDecimalString()).toBe('392.00');
+      // 100 + 250: el IVA ya va dentro de cada precio (ADR-0021).
+      expect(page.data[0].total.toDecimalString()).toBe('350.00');
       expect(page.data[0].stylistName).toBe('Sara');
     });
 

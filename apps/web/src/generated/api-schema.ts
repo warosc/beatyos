@@ -2215,7 +2215,7 @@ export interface components {
              */
             durationMinutes: number;
             /**
-             * @description Precio **sin** impuestos, como cadena decimal. Nunca como número: `JSON.parse` lo convertiría a coma flotante y dejaría de sumar exacto (ADR-0010).
+             * @description Precio que paga la clienta, **con** el IVA incluido (ADR-0021), como cadena decimal. Nunca como número: `JSON.parse` lo convertiría a coma flotante y dejaría de sumar exacto (ADR-0010).
              * @example 25.00
              */
             price: string;
@@ -2269,15 +2269,18 @@ export interface components {
              */
             blockedMinutes: number;
             /**
-             * @description Precio sin impuestos, como cadena decimal
-             * @example 25.00
+             * @description Precio que paga la clienta, IVA incluido (ADR-0021), como cadena decimal
+             * @example 28.00
              */
             price: string;
-            /** @example 5.25 */
+            /**
+             * @description IVA que va dentro del precio
+             * @example 3.00
+             */
             taxAmount: string;
             /**
-             * @description Precio final que ve la clienta
-             * @example 30.25
+             * @description Igual que `price`: el IVA ya va dentro
+             * @example 28.00
              */
             priceWithTax: string;
             /** @example GTQ */
@@ -2310,7 +2313,7 @@ export interface components {
             durationMinutes?: number;
             bufferMinutes?: number;
             /**
-             * @description Cadena decimal. No cambia las citas ya agendadas.
+             * @description Con el IVA incluido, como cadena decimal. No cambia las citas ya agendadas.
              * @example 30.00
              */
             price?: string;
@@ -2555,7 +2558,10 @@ export interface components {
             description?: string;
             /** Format: uuid */
             categoryId?: string;
-            /** @example 120.5 */
+            /**
+             * @description Precio que paga la clienta, con el IVA incluido (ADR-0021)
+             * @example 120.5
+             */
             price: number;
             /** @example 65 */
             costPrice?: number;
@@ -2590,7 +2596,10 @@ export interface components {
             description?: string;
             /** Format: uuid */
             categoryId?: string;
-            /** @example 120.5 */
+            /**
+             * @description Precio que paga la clienta, con el IVA incluido (ADR-0021)
+             * @example 120.5
+             */
             price?: number;
             /** @example 65 */
             costPrice?: number;
@@ -2926,7 +2935,7 @@ export interface components {
             quantity: number;
             stylistId?: string;
             /**
-             * @description Descuento en importe sobre la línea
+             * @description Lo que deja de pagar la clienta en la línea, con el IVA incluido
              * @example 5
              */
             discountAmount?: number;
@@ -3281,7 +3290,7 @@ export interface components {
             id: string;
             name: string;
             durationMinutes: number;
-            /** @description Precio sin impuesto */
+            /** @description Precio que paga la clienta, IVA incluido */
             price: string;
             priceWithTax: string;
             currency: string;

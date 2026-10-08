@@ -232,14 +232,17 @@ export class Service extends AggregateRoot {
     return this.props.durationMinutes + this.props.bufferMinutes;
   }
 
-  /** Impuesto correspondiente al precio. */
+  /** IVA que va dentro del precio. */
   get taxAmount(): Money {
-    return this.props.price.percentage(this.props.taxRate.value);
+    return this.props.price.includedTax(this.props.taxRate.value);
   }
 
-  /** Precio con impuestos incluidos, que es el que ve la clienta en el escaparate. */
+  /**
+   * Lo que paga la clienta. Desde ADR-0021 es el propio precio, que ya lleva el IVA dentro;
+   * se conserva porque es el nombre que usa la API.
+   */
   get priceWithTax(): Money {
-    return this.props.price.add(this.taxAmount);
+    return this.props.price;
   }
 
   /** `true` si se puede agendar. Un servicio retirado no admite citas nuevas. */

@@ -259,7 +259,7 @@ describe('Profesionales y catálogo (integración)', () => {
           name: 'Mechas balayage',
           durationMinutes: 180,
           bufferMinutes: 20,
-          price: '120.00',
+          price: '134.40',
         })
         .expect(201);
 
@@ -269,7 +269,8 @@ describe('Profesionales y catálogo (integración)', () => {
         bufferMinutes: 20,
         // Lo que la agenda bloquea de verdad.
         blockedMinutes: 200,
-        price: '120.00',
+        // El IVA va dentro del precio (ADR-0021): 120,00 de base más 14,40.
+        price: '134.40',
         taxAmount: '14.40',
         priceWithTax: '134.40',
       });
@@ -290,7 +291,7 @@ describe('Profesionales y catálogo (integración)', () => {
         request(app.getHttpServer())
           .post(api('/services'))
           .set(auth())
-          .send({ name: 'Uñas acrílicas', durationMinutes: 60, price: '89.29', taxRate: 12 })
+          .send({ name: 'Uñas acrílicas', durationMinutes: 60, price: '100.00', taxRate: 12 })
           .expect(201);
 
       const first = await create();

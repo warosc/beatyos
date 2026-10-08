@@ -186,7 +186,7 @@ export class AssignableServiceResponse {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() name!: string;
   @ApiProperty() durationMinutes!: number;
-  @ApiProperty({ description: 'Precio sin impuesto' }) price!: string;
+  @ApiProperty({ description: 'Precio que paga la clienta, IVA incluido' }) price!: string;
   @ApiProperty() priceWithTax!: string;
   @ApiProperty() currency!: string;
 }

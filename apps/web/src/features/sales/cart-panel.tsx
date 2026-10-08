@@ -130,14 +130,19 @@ export function CartPanel({
       </div>
 
       <div className="space-y-3 border-t p-4">
+        {/* Todo con IVA dentro, como lo paga la clienta; el IVA solo se desglosa debajo. */}
         <dl className="space-y-1 text-sm">
-          <Row label="Subtotal" cents={totals.subtotalCents} />
-          {totals.discountCents > 0 && <Row label="Descuentos" cents={-totals.discountCents} />}
-          <Row label="IVA" cents={totals.taxCents} />
+          {totals.discountCents > 0 && (
+            <>
+              <Row label="Subtotal" cents={totals.subtotalCents} />
+              <Row label="Descuentos" cents={-totals.discountCents} />
+            </>
+          )}
           <div className="flex items-baseline justify-between pt-1 text-xl font-bold">
             <dt>Total</dt>
             <dd className="tabular-nums">{money(totals.totalCents / 100)}</dd>
           </div>
+          <Row label="IVA incluido" cents={totals.taxCents} small />
         </dl>
         {unassigned && stylists && (
           <p className="text-xs text-warning">
@@ -169,9 +174,9 @@ export function CartPanel({
   );
 }
 
-function Row({ label, cents }: { label: string; cents: number }) {
+function Row({ label, cents, small = false }: { label: string; cents: number; small?: boolean }) {
   return (
-    <div className="flex justify-between text-muted-foreground">
+    <div className={cn('flex justify-between text-muted-foreground', small && 'text-xs')}>
       <dt>{label}</dt>
       <dd className="tabular-nums">{money(cents / 100)}</dd>
     </div>
@@ -299,6 +304,7 @@ function LineEditor({
   );
 }
 
+/** El descuento, en quetzales o en porcentaje, es siempre sobre lo que paga la clienta. */
 function DiscountEditor({
   grossCents,
   currentCents,

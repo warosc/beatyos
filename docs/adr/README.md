@@ -25,6 +25,7 @@ Un ADR nunca se edita una vez aceptado: se **supersede** con uno nuevo.
 | [0018](0018-comisiones-y-metas-de-profesional.md) | Comisiones por profesional y metas con recompensa | Aceptado |
 | [0019](0019-comandas-de-servicio.md) | Comandas de servicio: la estilista declara, caja cobra | Aceptado |
 | [0020](0020-anulacion-de-ventas-cobradas.md) | Anulación de ventas cobradas con reversa | Aceptado |
+| [0021](0021-precios-con-iva-incluido.md) | Precios con IVA incluido | Aceptado |
 
 ## Formato
 

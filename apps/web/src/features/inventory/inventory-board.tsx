@@ -3,27 +3,25 @@ import { useDialog } from '@/lib/use-dialog';
 import { Can, useAccess } from '@/components/session-access';
 import { sessionFetch } from '@/lib/session-fetch';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Boxes, PackageCheck, PackageX, Plus, Search, Truck, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Boxes,
+  PackageCheck,
+  PackageX,
+  Pencil,
+  Plus,
+  Search,
+  Truck,
+  X,
+} from 'lucide-react';
 import { usePagedList } from '@/lib/use-paged-list';
 import { loadOptions } from '@/lib/pagination';
 import { Pagination } from '@/components/ui/pagination';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-type Product = {
-  id: string;
-  sku: string;
-  name: string;
-  brand: string | null;
-  price: string;
-  /** La API lo omite a quien no tiene `products.read-cost`: hoy, solo la propietaria lo ve. */
-  costPrice?: string;
-  currency: string;
-  stockOnHand: string;
-  reorderPoint: string;
-  reorderQuantity: string;
-  stockStatus: 'AVAILABLE' | 'LOW' | 'OUT';
-};
+import { money } from '@/lib/utils';
+import { ProductDialog, type Product } from './product-form';
 type Move = {
   id: string;
   type: string;
@@ -49,6 +47,7 @@ export function InventoryBoard() {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'stock' | 'kardex' | 'batches'>('stock');
   const [action, setAction] = useState<'product' | 'receive' | 'adjust' | null>(null);
+  const [editing, setEditing] = useState<Product | null>(null);
   const products = usePagedList<Product>(
     'products',
     '/api/inventory?resource=products&limit=20&page=' +
@@ -84,6 +83,7 @@ export function InventoryBoard() {
   ] as const;
   const refresh = async () => {
     setAction(null);
+    setEditing(null);
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['products'] }),
       qc.invalidateQueries({ queryKey: ['kardex'] }),
@@ -184,11 +184,22 @@ export function InventoryBoard() {
                         </div>
                         <p className="text-xl font-bold">{Number(p.stockOnHand)}</p>
                       </div>
-                      <div className="mt-4 flex justify-between border-t pt-3 text-xs text-muted-foreground">
+                      <div className="mt-4 flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
                         <span>Mínimo {Number(p.reorderPoint)}</span>
-                        <span>
-                          {p.price} {p.currency}
+                        {/* Lo que paga la clienta: el mismo importe que sale en caja. */}
+                        <span className="ml-auto font-semibold text-foreground">
+                          {money(p.price)}
                         </span>
+                        <Can permission="products.update">
+                          <button
+                            type="button"
+                            aria-label={`Editar ${p.name}`}
+                            onClick={() => setEditing(p)}
+                            className="-my-2 -mr-2 grid size-9 place-items-center rounded-lg hover:bg-muted hover:text-foreground"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                        </Can>
                       </div>
                     </Card>
                   ))}
@@ -268,7 +279,17 @@ export function InventoryBoard() {
         </p>
       )}
       <Pagination meta={active.meta} pending={active.isFetching} onPage={setPage} />
-      {action && (
+      {(action === 'product' || editing) && (
+        <ProductDialog
+          product={editing ?? undefined}
+          onClose={() => {
+            setAction(null);
+            setEditing(null);
+          }}
+          onSaved={refresh}
+        />
+      )}
+      {(action === 'receive' || action === 'adjust') && (
         <InventoryForm
           action={action}
           products={options.data ?? []}
@@ -285,61 +306,37 @@ function InventoryForm({
   onClose,
   onSaved,
 }: {
-  action: 'product' | 'receive' | 'adjust';
+  action: 'receive' | 'adjust';
   products: Product[];
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const { can } = useAccess();
-  const canSeeCosts = can('products.read-cost');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     const f = new FormData(e.currentTarget);
-    // Vacío no es «cuesta cero»: se omite y la primera entrada de mercancía fija el coste.
-    const costPrice = String(f.get('costPrice') ?? '').trim();
     const body: Record<string, unknown> =
-      action === 'product'
+      action === 'receive'
         ? {
-            // El dominio solo admite letras, dígitos, punto, guion y guion bajo (y debe
-            // empezar por letra o dígito). Normalizamos aquí lo que teclee la persona
-            // usuaria para que un espacio o un acento no acaben en un 400 confuso.
-            sku: String(f.get('sku') ?? '')
-              .trim()
-              .toUpperCase()
-              .replace(/[^A-Z0-9._-]+/g, '-')
-              .replace(/^-+/, ''),
-            name: f.get('name'),
-            brand: f.get('brand') || undefined,
-            price: Number(f.get('price')),
-            costPrice: costPrice ? Number(costPrice) : undefined,
-            reorderPoint: Number(f.get('reorderPoint')),
-            reorderQuantity: Number(f.get('reorderQuantity')),
+            productId: f.get('productId'),
+            quantity: Number(f.get('quantity')),
+            unitCost: Number(f.get('unitCost')),
+            batchNumber: f.get('batchNumber') || undefined,
+            expiresAt: f.get('expiresAt') || undefined,
           }
-        : action === 'receive'
-          ? {
-              productId: f.get('productId'),
-              quantity: Number(f.get('quantity')),
-              unitCost: Number(f.get('unitCost')),
-              batchNumber: f.get('batchNumber') || undefined,
-              expiresAt: f.get('expiresAt') || undefined,
-            }
-          : {
-              productId: f.get('productId'),
-              quantityDelta: Number(f.get('quantityDelta')),
-              reason: f.get('reason'),
-              type: Number(f.get('quantityDelta')) < 0 ? 'WASTE_OUT' : 'ADJUSTMENT',
-            };
-    const r = await sessionFetch(
-      `/api/inventory?resource=${action === 'product' ? 'products' : action}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      },
-    );
+        : {
+            productId: f.get('productId'),
+            quantityDelta: Number(f.get('quantityDelta')),
+            reason: f.get('reason'),
+            type: Number(f.get('quantityDelta')) < 0 ? 'WASTE_OUT' : 'ADJUSTMENT',
+          };
+    const r = await sessionFetch(`/api/inventory?resource=${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
     setBusy(false);
     if (!r.ok) {
       const p = (await r.json()) as { detail?: string };
@@ -365,102 +362,53 @@ function InventoryForm({
       >
         <div className="flex justify-between">
           <h2 className="font-display text-2xl font-semibold">
-            {action === 'product'
-              ? 'Nuevo producto'
-              : action === 'receive'
-                ? 'Recibir mercancía'
-                : 'Ajustar stock'}
+            {action === 'receive' ? 'Recibir mercancía' : 'Ajustar stock'}
           </h2>
           <button type="button" onClick={onClose}>
             <X />
           </button>
         </div>
-        {action === 'product' ? (
-          <>
-            {[
-              ['sku', 'SKU'],
-              ['name', 'Nombre'],
-              ['brand', 'Marca (opcional)'],
-              ['price', 'Precio de venta'],
-              // Quien no puede ver el coste tampoco lo escribe: la API lo rechazaría.
-              ...(canSeeCosts ? [['costPrice', 'Costo (opcional)']] : []),
-              ['reorderPoint', 'Stock mínimo'],
-              ['reorderQuantity', 'Cantidad a reponer'],
-            ].map(([n, l]) => (
-              <label key={n} className="block text-sm font-semibold">
-                {l}
-                <input
-                  required={n !== 'brand' && n !== 'costPrice'}
-                  type={
-                    ['price', 'costPrice', 'reorderPoint', 'reorderQuantity'].includes(n)
-                      ? 'number'
-                      : 'text'
-                  }
-                  min={n === 'costPrice' ? 0 : undefined}
-                  step="0.01"
-                  name={n}
-                  placeholder={n === 'sku' ? 'Ej. SH-ARG-500' : undefined}
-                  className={input}
-                />
-                {n === 'sku' && (
-                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                    Código corto del producto: letras, números, puntos y guiones.
-                  </span>
-                )}
-                {n === 'costPrice' && (
-                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                    Solo la propietaria ve este dato. Si lo dejas vacío, se toma del costo de la
-                    primera entrada de mercancía.
-                  </span>
-                )}
-              </label>
+        <label className="block text-sm font-semibold">
+          Producto
+          <select required name="productId" className={input}>
+            <option value="">Selecciona…</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({Number(p.stockOnHand)})
+              </option>
             ))}
+          </select>
+        </label>
+        <label className="block text-sm font-semibold">
+          {action === 'receive' ? 'Cantidad recibida' : 'Variación (+/-)'}
+          <input
+            required
+            name={action === 'receive' ? 'quantity' : 'quantityDelta'}
+            type="number"
+            step="0.001"
+            className={input}
+          />
+        </label>
+        {action === 'receive' ? (
+          <>
+            <label className="block text-sm font-semibold">
+              Costo unitario
+              <input required name="unitCost" type="number" step="0.01" className={input} />
+            </label>
+            <label className="block text-sm font-semibold">
+              Número de lote
+              <input name="batchNumber" className={input} />
+            </label>
+            <label className="block text-sm font-semibold">
+              Vencimiento
+              <input name="expiresAt" type="date" className={input} />
+            </label>
           </>
         ) : (
-          <>
-            <label className="block text-sm font-semibold">
-              Producto
-              <select required name="productId" className={input}>
-                <option value="">Selecciona…</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({Number(p.stockOnHand)})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm font-semibold">
-              {action === 'receive' ? 'Cantidad recibida' : 'Variación (+/-)'}
-              <input
-                required
-                name={action === 'receive' ? 'quantity' : 'quantityDelta'}
-                type="number"
-                step="0.001"
-                className={input}
-              />
-            </label>
-            {action === 'receive' ? (
-              <>
-                <label className="block text-sm font-semibold">
-                  Costo unitario
-                  <input required name="unitCost" type="number" step="0.01" className={input} />
-                </label>
-                <label className="block text-sm font-semibold">
-                  Número de lote
-                  <input name="batchNumber" className={input} />
-                </label>
-                <label className="block text-sm font-semibold">
-                  Vencimiento
-                  <input name="expiresAt" type="date" className={input} />
-                </label>
-              </>
-            ) : (
-              <label className="block text-sm font-semibold">
-                Motivo
-                <input required name="reason" className={input} />
-              </label>
-            )}
-          </>
+          <label className="block text-sm font-semibold">
+            Motivo
+            <input required name="reason" className={input} />
+          </label>
         )}
         {error && <p className="rounded-xl bg-danger/10 p-3 text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-2">

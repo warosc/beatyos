@@ -82,15 +82,19 @@ export function Receipt({
       </table>
 
       <dl className="mt-1 space-y-0.5 border-t border-dashed border-black pt-1">
-        <Pair label="Subtotal" value={money(sale.subtotal)} />
+        {/* Precios y descuentos con IVA incluido (ADR-0021): el impuesto se desglosa, no se
+            suma. El subtotal es lo que se habría pagado sin descuentos. */}
         {Number(sale.discountTotal) > 0 && (
-          <Pair label="Descuentos" value={`−${money(sale.discountTotal)}`} />
+          <>
+            <Pair label="Subtotal" value={money(Number(sale.total) + Number(sale.discountTotal))} />
+            <Pair label="Descuentos" value={`−${money(sale.discountTotal)}`} />
+          </>
         )}
-        <Pair label="IVA" value={money(sale.taxTotal)} />
         <div className="flex justify-between text-sm font-bold">
           <dt>TOTAL</dt>
           <dd>{money(sale.total)}</dd>
         </div>
+        <Pair label="IVA incluido" value={money(sale.taxTotal)} />
       </dl>
 
       {!!sale.payments?.length && (

@@ -9,7 +9,8 @@ type SaleBody = {
 const corte = {
   id: 'service-1',
   name: 'Corte de dama',
-  price: '25.00',
+  // Con el IVA dentro (ADR-0021): 25,00 de base más el 12 %.
+  price: '28.00',
   taxRate: 12,
   color: '#db2777',
   durationMinutes: 45,
@@ -70,7 +71,7 @@ async function openPos(
         kind: 'SERVICE',
         description: 'Corte de dama',
         quantity: '2.000',
-        unitPrice: '25.00',
+        unitPrice: '28.00',
         discountAmount: '0.00',
         taxAmount: '6.00',
         lineTotal: '56.00',
@@ -163,7 +164,9 @@ test('recepción cobra a precio de lista: no ve descuentos', async ({ page }) =>
   await expect(page.getByRole('button', { name: 'Descuento' })).toHaveCount(0);
 });
 
-test('la propietaria aplica un descuento en porcentaje antes del IVA', async ({ page }) => {
+test('la propietaria aplica un descuento en porcentaje sobre lo que paga la clienta', async ({
+  page,
+}) => {
   const sales = await openPos(page);
   await addCorte(page);
   await page.getByRole('button', { name: 'Descuento' }).click();
@@ -171,11 +174,11 @@ test('la propietaria aplica un descuento en porcentaje antes del IVA', async ({ 
   await page.getByRole('button', { name: '%', exact: true }).click();
   await page.getByRole('button', { name: 'Aplicar' }).click();
 
-  // (25,00 − 2,50) × 1,12 = 25,20
+  // 28,00 − 10 % = 25,20: el descuento es sobre el precio con IVA.
   await expect(page.getByRole('button', { name: /Cobrar Q\s*25\.20/ })).toBeVisible();
   await page.keyboard.press('F2');
   await page.getByRole('button', { name: /Confirmar/ }).click();
-  await expect.poll(() => sales[0]?.lines[0].discountAmount).toBe(2.5);
+  await expect.poll(() => sales[0]?.lines[0].discountAmount).toBe(2.8);
 });
 
 test('divide el pago entre efectivo y tarjeta', async ({ page }) => {
@@ -262,7 +265,7 @@ test('cobra en Caja un servicio de estilista y muestra el vuelto', async ({ page
       {
         serviceId: 'service-1',
         name: 'Corte de dama',
-        unitPrice: '25.00',
+        unitPrice: '28.00',
         taxRate: 12,
         lineTotal: '28.00',
         available: true,

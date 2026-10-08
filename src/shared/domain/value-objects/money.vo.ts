@@ -148,6 +148,21 @@ export class Money extends ValueObject<MoneyProps> {
     );
   }
 
+  /**
+   * Impuesto que ya va **dentro** del importe (12 → el IVA de un precio con IVA incluido).
+   *
+   * Es `importe − importe / 1,12`, redondeado como el resto: la base se redondea half-up y
+   * el impuesto es lo que falta hasta el importe, así base + impuesto da siempre el importe
+   * exacto y no aparece ni desaparece un céntimo.
+   */
+  public includedTax(percent: number): Money {
+    if (!Number.isFinite(percent) || percent <= -100) {
+      throw new DomainValidationError('El porcentaje debe ser finito', 'percent');
+    }
+    const base = Money.roundHalfUp((this.minorUnits * 100) / (100 + percent));
+    return Money.fromMinorUnits(this.minorUnits - base, this.currency);
+  }
+
   public negate(): Money {
     return Money.fromMinorUnits(-this.minorUnits, this.currency);
   }
