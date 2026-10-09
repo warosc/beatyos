@@ -140,11 +140,47 @@ export const envSchema = z
       .positive()
       .max(50 * 1024 * 1024)
       .default(10 * 1024 * 1024),
+
+    // -- Recordatorios de cita --------------------------------------------
+    //
+    // `log` escribe el mensaje en el registro y no envia nada: es el valor por defecto
+    // mientras no se contrate un proveedor. `whatsapp` y `sms` salen por Twilio y exigen
+    // sus tres credenciales.
+    REMINDERS_ENABLED: z
+      .string()
+      .default('true')
+      .transform((v) => v === 'true'),
+    REMINDER_CHANNEL: z.enum(['log', 'whatsapp', 'sms']).default('log'),
+    REMINDER_LEAD_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+    REMINDER_MIN_LEAD_MINUTES: z.coerce.number().int().min(0).max(1440).default(120),
+    TWILIO_ACCOUNT_SID: z.string().optional(),
+    TWILIO_AUTH_TOKEN: z.string().optional(),
+    /** `whatsapp:+14155238886` para WhatsApp; un numero de Twilio para SMS. */
+    TWILIO_FROM: z.string().optional(),
+    /** Direccion publica de la interfaz web: de ella cuelga el enlace de confirmacion. */
+    PUBLIC_WEB_URL: z.string().url().default('http://localhost:3001'),
+    /** Prefijo de pais para los telefonos guardados sin el. */
+    DEFAULT_PHONE_COUNTRY_CODE: z
+      .string()
+      .regex(/^\d{1,4}$/)
+      .default('502'),
   })
   .superRefine((env, ctx) => {
     // Que ambos secretos coincidan anularía la separación entre access y refresh: un
     // refresh token podría presentarse como access y saltarse la caducidad de 15 minutos
     // que es toda la defensa del modelo (ADR-0005).
+    if (env.REMINDER_CHANNEL !== 'log') {
+      for (const key of ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM'] as const) {
+        if (!env[key]) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [key],
+            message: `${key} es obligatorio con REMINDER_CHANNEL=${env.REMINDER_CHANNEL}`,
+          });
+        }
+      }
+    }
+
     if (env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

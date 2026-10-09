@@ -86,6 +86,8 @@ const SOFT_DELETABLE_EXCLUSIONS: ReadonlySet<string> = new Set([
   'RefreshToken',
   'PasswordResetToken',
   'PasswordResetRequest',
+  'AppointmentChangeRequest',
+  'AppointmentReminder',
   'AuditLog',
   'InventoryMovement',
   'DocumentSequence',

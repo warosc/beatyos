@@ -18,6 +18,7 @@ import {
 } from 'class-validator';
 
 import { PaginationQueryDto } from '../../../../shared/infrastructure/http/dto/pagination.dto';
+import type { AgendaLabels } from '../../domain/agenda.ports';
 import type { Appointment } from '../../domain/appointment.entity';
 
 const STATUSES = [
@@ -182,9 +183,21 @@ export class AppointmentQueryDto extends PaginationQueryDto {
 }
 
 export class AvailabilityQueryDto {
-  @ApiProperty({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Sin indicar, huecos con cualquier profesional que haga los servicios',
+  })
+  @IsOptional()
   @IsUUID()
-  stylistId!: string;
+  stylistId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Cita que se está moviendo: su propio hueco cuenta como libre',
+  })
+  @IsOptional()
+  @IsUUID()
+  excludeAppointmentId?: string;
 
   @ApiProperty({ example: '2026-09-10', description: 'Día en la zona horaria del salón' })
   @IsString()
@@ -267,10 +280,27 @@ export class CalendarQueryDto {
 export class AppointmentLineResponse {
   @ApiProperty() id!: string;
   @ApiProperty({ format: 'uuid' }) serviceId!: string;
+  @ApiProperty({ nullable: true, type: String }) name!: string | null;
+  @ApiProperty({ nullable: true, type: String, description: 'Color del servicio en la agenda' })
+  color!: string | null;
   @ApiProperty({ description: 'Duración congelada al reservar, margen incluido' })
   durationMinutes!: number;
   @ApiProperty({ example: '25.00', description: 'Precio congelado al reservar' }) price!: string;
   @ApiProperty() sortOrder!: number;
+}
+
+export class PendingChangeResponse {
+  @ApiProperty() id!: string;
+  @ApiProperty({ format: 'date-time' }) proposedStartsAt!: string;
+  @ApiProperty({ nullable: true, type: String }) reason!: string | null;
+  @ApiProperty({ format: 'date-time' }) requestedAt!: string;
+}
+
+export class LastReminderResponse {
+  @ApiProperty({ enum: ['WHATSAPP', 'SMS', 'LOG', 'MANUAL'] }) channel!: string;
+  @ApiProperty({ enum: ['SENT', 'FAILED', 'SKIPPED'] }) status!: string;
+  @ApiProperty({ format: 'date-time' }) at!: string;
+  @ApiProperty({ nullable: true, type: String }) error!: string | null;
 }
 
 export class AppointmentResponse {
@@ -278,7 +308,12 @@ export class AppointmentResponse {
   @ApiProperty({ format: 'uuid' }) clientId!: string;
   @ApiProperty({ nullable: true, type: String, description: 'Nombre de la clienta' })
   clientName!: string | null;
+  @ApiProperty({ nullable: true, type: String, description: 'Teléfono de la clienta' })
+  clientPhone!: string | null;
   @ApiProperty({ format: 'uuid' }) stylistId!: string;
+  @ApiProperty({ nullable: true, type: String }) stylistName!: string | null;
+  @ApiProperty({ nullable: true, type: String, description: 'Color de la profesional' })
+  stylistColor!: string | null;
   @ApiProperty({ format: 'date-time' }) startsAt!: string;
   @ApiProperty({ format: 'date-time' }) endsAt!: string;
   @ApiProperty({ example: 55 }) durationMinutes!: number;
@@ -311,15 +346,38 @@ export class AppointmentResponse {
   @ApiProperty({ nullable: true, format: 'date-time' }) cancelledAt!: string | null;
   @ApiProperty({ nullable: true }) cancellationReason!: string | null;
   @ApiProperty({ nullable: true, format: 'date-time' }) noShowAt!: string | null;
+  @ApiProperty({ nullable: true, format: 'date-time' }) reminderSentAt!: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: LastReminderResponse,
+    description: 'Último intento de recordatorio a la clienta',
+  })
+  lastReminder!: LastReminderResponse | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: PendingChangeResponse,
+    description: 'Cambio de hora que pidió la profesional y espera aprobación',
+  })
+  pendingChange!: PendingChangeResponse | null;
+
   @ApiProperty({ format: 'date-time' }) createdAt!: string;
   @ApiProperty({ format: 'date-time' }) updatedAt!: string;
 
-  static from(appointment: Appointment, clientName: string | null = null): AppointmentResponse {
+  static from(appointment: Appointment, labels?: AgendaLabels): AppointmentResponse {
+    const client = labels?.clients.get(appointment.clientId);
+    const stylist = labels?.stylists.get(appointment.stylistId);
+    const pending = labels?.pendingChanges.get(appointment.id);
+    const reminder = labels?.lastReminders.get(appointment.id);
     return {
       id: appointment.id,
       clientId: appointment.clientId,
-      clientName,
+      clientName: client?.name ?? null,
+      clientPhone: client?.phone ?? null,
       stylistId: appointment.stylistId,
+      stylistName: stylist?.name ?? null,
+      stylistColor: stylist?.color ?? null,
       startsAt: appointment.period.startsAt.toISOString(),
       endsAt: appointment.period.endsAt.toISOString(),
       durationMinutes: appointment.durationMinutes,
@@ -332,6 +390,8 @@ export class AppointmentResponse {
       services: appointment.lines.map((line) => ({
         id: line.id,
         serviceId: line.serviceId,
+        name: labels?.services.get(line.serviceId)?.name ?? null,
+        color: labels?.services.get(line.serviceId)?.color ?? null,
         durationMinutes: line.durationMinutes,
         price: line.price.toDecimalString(),
         sortOrder: line.sortOrder,
@@ -344,6 +404,23 @@ export class AppointmentResponse {
       cancelledAt: appointment.cancelledAt?.toISOString() ?? null,
       cancellationReason: appointment.cancellationReason,
       noShowAt: appointment.noShowAt?.toISOString() ?? null,
+      reminderSentAt: appointment.reminderSentAt?.toISOString() ?? null,
+      lastReminder: reminder
+        ? {
+            channel: reminder.channel,
+            status: reminder.status,
+            at: reminder.at.toISOString(),
+            error: reminder.error,
+          }
+        : null,
+      pendingChange: pending
+        ? {
+            id: pending.id,
+            proposedStartsAt: pending.proposedStartsAt.toISOString(),
+            reason: pending.reason,
+            requestedAt: pending.requestedAt.toISOString(),
+          }
+        : null,
       createdAt: appointment.audit.createdAt.toISOString(),
       updatedAt: appointment.audit.updatedAt.toISOString(),
     };
@@ -354,4 +431,6 @@ export class AvailableSlotResponse {
   @ApiProperty({ format: 'date-time' }) startsAt!: string;
   @ApiProperty({ format: 'date-time' }) endsAt!: string;
   @ApiProperty() durationMinutes!: number;
+  @ApiProperty({ format: 'uuid', description: 'Profesional con la que es el hueco' })
+  stylistId!: string;
 }

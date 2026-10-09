@@ -63,6 +63,8 @@ const appointmentEnd = new Date(appointmentStart.getTime() + 45 * 60_000);
 const appointment = {
   id: '01900000-0000-7000-8000-000000000020',
   clientId: client.id,
+  // La API resuelve el nombre: la agenda ya no descarga el fichero de clientas.
+  clientName: client.fullName,
   stylistId: stylists[0].id,
   startsAt: appointmentStart.toISOString(),
   endsAt: appointmentEnd.toISOString(),
@@ -91,6 +93,30 @@ async function mockAgenda(page: Page, onWrite?: (url: string, body: unknown) => 
       });
     }
     const resource = url.searchParams.get('resource');
+    // Jornada de 9 a 19 para cada profesional, el día que se pida.
+    const from = url.searchParams.get('from') ?? '';
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : new Date().toLocaleDateString('en-CA');
+    const shifts = stylists.map((stylist) => ({
+      stylistId: stylist.id,
+      name: stylist.displayName,
+      color: stylist.color,
+      isBookable: true,
+      serviceIds: [],
+      days: [
+        {
+          date: day,
+          intervals: [
+            {
+              startsAt: new Date(`${day}T09:00:00`).toISOString(),
+              endsAt: new Date(`${day}T19:00:00`).toISOString(),
+            },
+          ],
+        },
+      ],
+      blocks: [],
+    }));
+    const slotStart = new Date(Date.now() + 86_400_000);
+    slotStart.setHours(11, 0, 0, 0);
     const data =
       resource === 'calendar'
         ? [appointment]
@@ -100,7 +126,18 @@ async function mockAgenda(page: Page, onWrite?: (url: string, body: unknown) => 
             ? [service]
             : resource === 'clients'
               ? [client]
-              : [];
+              : resource === 'shifts'
+                ? shifts
+                : resource === 'availability'
+                  ? [
+                      {
+                        startsAt: slotStart.toISOString(),
+                        endsAt: new Date(slotStart.getTime() + 45 * 60_000).toISOString(),
+                        durationMinutes: 45,
+                        stylistId: stylists[0].id,
+                      },
+                    ]
+                  : [];
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -161,11 +198,18 @@ test('reserva una cita desde el acceso rápido del Home', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('link', { name: 'Nueva cita' }).click();
   await expect(page.getByRole('heading', { name: 'Nueva cita' })).toBeVisible();
-  await page.getByLabel('Clienta').selectOption(client.id);
-  await page.getByLabel('Estilista').selectOption(stylists[0].id);
-  await page.getByLabel('Fecha y hora').fill('2026-09-03T10:00');
-  await page.locator('input[name="serviceIds"]').check();
-  await page.getByRole('button', { name: 'Reservar cita' }).click();
+  const wizard = page.getByRole('dialog');
+  // Clienta → servicios → profesional → hora → confirmar: solo se ofrecen horas libres.
+  await wizard.getByLabel('Clienta de la cita').click();
+  await wizard.getByRole('option', { name: /Ana Prueba/ }).dispatchEvent('mousedown');
+  await wizard.getByRole('button', { name: /Corte/ }).click();
+  await wizard.getByRole('button', { name: 'Siguiente' }).click();
+  await wizard.getByRole('button', { name: /Cualquiera disponible/ }).click();
+  await wizard.getByRole('option').nth(1).click();
+  await wizard.getByRole('button', { name: /11:00/ }).click();
+  await wizard.getByRole('button', { name: 'Siguiente' }).click();
+  await expect(wizard.getByText('Ana Prueba')).toBeVisible();
+  await wizard.getByRole('button', { name: 'Reservar cita' }).click();
   await expect(page.getByRole('heading', { name: 'Nueva cita' })).not.toBeVisible();
 });
 
@@ -174,18 +218,31 @@ test('cancela una cita y cambia de estilista', async ({ page }) => {
   await authenticated(page);
   await mockAgenda(page, (url, body) => writes.push({ url, body }));
   await page.goto('/agenda');
-  // La tarjeta de la cita, no el título del diálogo, que ahora también lleva el nombre.
-  const cita = page.getByRole('button', { name: /Ana Prueba/ });
+  await page.getByRole('tab', { name: 'Día' }).click();
+  // El bloque de la cita en la parrilla, no el título de la ficha, que también lleva el nombre.
+  const cita = page.getByRole('button', { name: /Ana Prueba/ }).first();
   await cita.click();
-  await page.getByLabel('Cambiar estilista').selectOption(stylists[1].id);
-  await page.getByRole('button', { name: 'Guardar estilista' }).click();
+  const sheet = page.getByRole('dialog');
+  // Mover a otra profesional: se elige con quién y una hora libre de su agenda.
+  await sheet.getByRole('button', { name: 'Mover a otra hora o profesional' }).click();
+  await sheet.getByRole('button', { name: 'Andrea' }).click();
+  await sheet.getByRole('option').nth(1).click();
+  await sheet.getByRole('button', { name: /11:00/ }).click();
+  await sheet.getByRole('button', { name: 'Mover aquí' }).click();
+  await expect.poll(() => writes.some((x) => x.url.includes('action=reschedule'))).toBeTruthy();
+  await cita.click();
+  await sheet.getByRole('button', { name: 'Cancelar cita' }).click();
+  await sheet.getByRole('button', { name: 'La clienta se enfermó' }).click();
+  await sheet.getByRole('button', { name: 'Cancelar cita' }).last().click();
   await expect
-    .poll(() => writes.some((x) => (x.body as { stylistId?: string }).stylistId === stylists[1].id))
+    .poll(() =>
+      writes.some(
+        (x) =>
+          x.url.includes('action=cancel') &&
+          (x.body as { reason?: string }).reason === 'La clienta se enfermó',
+      ),
+    )
     .toBeTruthy();
-  await cita.click();
-  await page.getByLabel('Motivo de cancelación').fill('Solicitud de la clienta');
-  await page.getByRole('button', { name: 'Cancelar cita' }).click();
-  await expect.poll(() => writes.some((x) => x.url.includes('action=cancel'))).toBeTruthy();
 });
 
 test('vende un producto en quetzales', async ({ page }) => {

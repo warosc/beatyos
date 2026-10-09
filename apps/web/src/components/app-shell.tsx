@@ -23,6 +23,8 @@ import {
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LogoutButton } from '@/components/logout-button';
 import { SessionContext } from '@/components/session-access';
+import { useAgendaLive } from '@/features/agenda/live';
+import { usePendingChanges } from '@/features/agenda/use-agenda';
 import { fetchTenantProfile, TENANT_PROFILE_KEY } from '@/features/sales/types';
 import {
   fetchPasswordRequests,
@@ -52,7 +54,10 @@ const nav = [
 ] as const;
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isPublic = ['/login', '/forgot-password', '/reset-password', '/session'].includes(pathname);
+  const isPublic =
+    ['/login', '/forgot-password', '/reset-password', '/session'].includes(pathname) ||
+    // El enlace del recordatorio lo abre la clienta, sin cuenta.
+    pathname.startsWith('/cita/');
   const profile = useQuery({
     queryKey: ['session-user'],
     enabled: !isPublic,
@@ -91,6 +96,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // «Mi día» es de quien atiende clientas: exige la ficha de profesional además del permiso.
   const stylist = useIsStylist(isPublic ? [] : (profile.data?.permissions ?? []));
   const myDay = useMyDay(!isPublic && stylist.isStylist);
+  // Aviso en «Agenda» de los cambios de hora que piden las profesionales.
+  const has = (permission: string) =>
+    !!profile.data &&
+    (profile.data.permissions.includes('*') || profile.data.permissions.includes(permission));
+  const canApproveChanges = has('appointments.approve-changes');
+  const pendingChanges = usePendingChanges(!isPublic && canApproveChanges);
+  // Un solo canal en vivo para toda la app: la agenda, «Mi día» y los avisos lo comparten.
+  useAgendaLive({
+    enabled: !isPublic && (has('appointments.read') || has('appointments.read.own')),
+    approver: canApproveChanges,
+    stylist: stylist.isStylist,
+  });
   const router = useRouter();
   const canSeeDashboard =
     !!profile.data &&
@@ -149,6 +166,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     '/caja': { count: pendingCharges.data ?? 0, label: 'servicios por cobrar' },
     // Citas que ya tocaban y la profesional aún no ha enviado a caja.
     [MY_DAY]: { count: myDay.day.pendingCount, label: 'citas por enviar a caja' },
+    '/agenda': { count: pendingChanges.data ?? 0, label: 'cambios de cita por aprobar' },
     '/configuracion': {
       count: passwordRequests.data ?? 0,
       label: 'solicitudes de contraseña',

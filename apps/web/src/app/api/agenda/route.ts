@@ -9,6 +9,10 @@ const resources = {
   clients: 'clients',
   categories: 'categories',
   availability: 'appointments/availability',
+  shifts: 'agenda/shifts',
+  'change-requests': 'agenda/change-requests',
+  'pending-changes': 'agenda/change-requests/pending-count',
+  'reminder-settings': 'agenda/reminders/settings',
 } as const;
 
 async function auth() {

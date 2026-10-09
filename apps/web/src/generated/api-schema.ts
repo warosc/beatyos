@@ -856,7 +856,7 @@ export interface paths {
         put?: never;
         /**
          * Agendar una cita
-         * @description La duración se calcula sumando los servicios, con la duración propia del profesional y el margen de limpieza de cada uno. Precio y duración quedan **congelados**: subir la tarifa mañana no altera esta cita. Con `appointments.create.own`, solo puede agendarse a sí misma.
+         * @description La duración se calcula sumando los servicios, con la duración propia del profesional y el margen de limpieza de cada uno. Precio y duración quedan **congelados**: subir la tarifa mañana no altera esta cita. Con `appointments.create.own`, solo puede agendarse a sí misma. `force` exige `appointments.override-schedule`.
          */
         post: operations["Appointments_create"];
         delete?: never;
@@ -874,7 +874,7 @@ export interface paths {
         };
         /**
          * Huecos libres para reservar
-         * @description Devuelve **momentos de inicio posibles**, no bloques libres: es lo que necesita la parrilla de horas de la interfaz. Tiene en cuenta el horario del profesional, sus ausencias, las citas ya reservadas y el margen de limpieza de cada servicio.
+         * @description Devuelve **momentos de inicio posibles**, no bloques libres: es lo que necesita la parrilla de horas de la interfaz. Tiene en cuenta el horario del profesional, sus ausencias, las citas ya reservadas, el margen de limpieza y si sabe hacer cada servicio. Sin `stylistId`, busca en todo el equipo. Con ámbito propio, solo en la agenda de quien consulta.
          */
         get: operations["Appointments_availability"];
         put?: never;
@@ -937,7 +937,7 @@ export interface paths {
         head?: never;
         /**
          * Mover o reasignar una cita
-         * @description Cambiar la hora conserva la duración y **devuelve la cita a pendiente** si estaba confirmada: la clienta confirmó aquella hora, no ésta.
+         * @description Cambiar la hora conserva la duración y **devuelve la cita a pendiente** si estaba confirmada: la clienta confirmó aquella hora, no ésta. Reasignar comprueba que la nueva profesional hace los servicios. Una profesional no mueve sus citas: pide el cambio en `POST /appointments/:id/change-requests`.
          */
         patch: operations["Appointments_reschedule"];
         trace?: never;
@@ -1037,6 +1037,319 @@ export interface paths {
          * @description Solo una vez pasada la hora de inicio: antes sería prejuzgar.
          */
         patch: operations["Appointments_noShow"];
+        trace?: never;
+    };
+    "/api/v1/appointments/{id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Editar las notas de la cita
+         * @description Editables incluso con la cita terminada: es donde se apunta la fórmula de color que se usó. Con ámbito propio, solo en las citas de quien edita.
+         */
+        patch: operations["Appointments_notes"];
+        trace?: never;
+    };
+    "/api/v1/appointments/{id}/change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pedir un cambio de hora
+         * @description La profesional no mueve sus citas: propone otra hora y la encargada decide. La propuesta se comprueba ya contra su jornada y sus otras citas, para no hacer perder el tiempo a nadie con un imposible. Como mucho una pendiente por cita.
+         */
+        post: operations["Appointments_requestChangeOf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointments/{id}/reminder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preparar el recordatorio para enviarlo por WhatsApp
+         * @description Devuelve el mensaje ya redactado, con el enlace para que la clienta confirme o cancele, y un enlace `wa.me` que abre la conversación. Funciona sin proveedor de mensajería contratado. Queda anotado como enviado.
+         */
+        post: operations["Appointments_reminder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agenda/shifts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Jornada y bloqueos por profesional
+         * @description Lo que la parrilla pinta de fondo: la jornada de cada profesional ya descontadas sus ausencias, y los bloqueos del rango. Con ámbito propio, solo la ficha de quien consulta.
+         */
+        get: operations["Agenda_getShifts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agenda/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bloquear un tramo de agenda
+         * @description Comida, formación, un recado. No se permite tapar citas ya reservadas: primero se mueven, después se bloquea.
+         */
+        post: operations["Agenda_addBlock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agenda/blocks/{stylistId}/{blockId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Quitar un bloqueo de agenda */
+        delete: operations["Agenda_deleteBlock"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agenda/change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cambios de hora pedidos por las profesionales
+         * @description Quien aprueba ve los de todo el equipo; la profesional, solo los suyos —con la respuesta que recibió—.
+         */
+        get: operations["Agenda_changeRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agenda/change-requests/pending-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cuántos cambios esperan respuesta. Alimenta el aviso del menú. */
+        get: operations["Agenda_pendingCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agenda/change-requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Aprobar un cambio y mover la cita
+         * @description Mueve la cita con las mismas comprobaciones que recepción. Si la hora ya no cabe, falla y la solicitud sigue pendiente.
+         */
+        patch: operations["Agenda_approve"];
+        trace?: never;
+    };
+    "/api/v1/agenda/change-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Rechazar un cambio. La cita se queda como estaba. */
+        patch: operations["Agenda_reject"];
+        trace?: never;
+    };
+    "/api/v1/agenda/change-requests/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Retirar un cambio que pidió una misma */
+        patch: operations["Agenda_withdraw"];
+        trace?: never;
+    };
+    "/api/v1/agenda/reminders/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cómo salen los recordatorios automáticos */
+        get: operations["Agenda_reminderSettingsInfo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agenda/reminders/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enviar ahora los recordatorios pendientes del salón
+         * @description Lo mismo que hace el planificador cada cinco minutos, a demanda. Una cita ya recordada no se recuerda dos veces.
+         */
+        post: operations["Agenda_runReminders"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agenda/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Avisos en vivo de cambios en la agenda (text/event-stream) */
+        get: operations["Agenda_stream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/appointment-links/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ver la cita del enlace */
+        get: operations["PublicAppointmentLink_view"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/appointment-links/{token}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirmar la cita */
+        post: operations["PublicAppointmentLink_confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/appointment-links/{token}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancelar la cita */
+        post: operations["PublicAppointmentLink_cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/products": {
@@ -2421,6 +2734,9 @@ export interface components {
             id: string;
             /** Format: uuid */
             serviceId: string;
+            name: string | null;
+            /** @description Color del servicio en la agenda */
+            color: string | null;
             /** @description Duración congelada al reservar, margen incluido */
             durationMinutes: number;
             /**
@@ -2430,14 +2746,36 @@ export interface components {
             price: string;
             sortOrder: number;
         };
+        LastReminderResponse: {
+            /** @enum {string} */
+            channel: "WHATSAPP" | "SMS" | "LOG" | "MANUAL";
+            /** @enum {string} */
+            status: "SENT" | "FAILED" | "SKIPPED";
+            /** Format: date-time */
+            at: string;
+            error: string | null;
+        };
+        PendingChangeResponse: {
+            id: string;
+            /** Format: date-time */
+            proposedStartsAt: string;
+            reason: string | null;
+            /** Format: date-time */
+            requestedAt: string;
+        };
         AppointmentResponse: {
             id: string;
             /** Format: uuid */
             clientId: string;
             /** @description Nombre de la clienta */
             clientName: string | null;
+            /** @description Teléfono de la clienta */
+            clientPhone: string | null;
             /** Format: uuid */
             stylistId: string;
+            stylistName: string | null;
+            /** @description Color de la profesional */
+            stylistColor: string | null;
             /** Format: date-time */
             startsAt: string;
             /** Format: date-time */
@@ -2474,6 +2812,12 @@ export interface components {
             /** Format: date-time */
             noShowAt: string | null;
             /** Format: date-time */
+            reminderSentAt: string | null;
+            /** @description Último intento de recordatorio a la clienta */
+            lastReminder: components["schemas"]["LastReminderResponse"] | null;
+            /** @description Cambio de hora que pidió la profesional y espera aprobación */
+            pendingChange: components["schemas"]["PendingChangeResponse"] | null;
+            /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
@@ -2484,6 +2828,11 @@ export interface components {
             /** Format: date-time */
             endsAt: string;
             durationMinutes: number;
+            /**
+             * Format: uuid
+             * @description Profesional con la que es el hueco
+             */
+            stylistId: string;
         };
         RescheduleAppointmentDto: {
             /**
@@ -2504,6 +2853,130 @@ export interface components {
              * @description Motivo de la cancelación. Se guarda en la ficha y en la auditoría.
              * @example La clienta ha avisado de que está enferma
              */
+            reason?: string;
+        };
+        UpdateAppointmentNotesDto: {
+            notes?: string | null;
+            /** @description Editable incluso en citas terminadas: es donde se apunta la fórmula usada. */
+            internalNotes?: string | null;
+        };
+        RequestChangeDto: {
+            /**
+             * Format: date-time
+             * @description Hora a la que se propone mover la cita
+             */
+            startsAt: string;
+            /** @example La clienta pidió venir más tarde */
+            reason?: string;
+        };
+        ChangeRequestResponse: {
+            id: string;
+            /** Format: uuid */
+            appointmentId: string;
+            /** Format: uuid */
+            stylistId: string;
+            stylistName: string | null;
+            stylistColor: string | null;
+            clientName: string | null;
+            serviceNames: string[];
+            /** @description Duración de la cita, en minutos */
+            durationMinutes: number;
+            /** @description Estado actual de la cita */
+            appointmentStatus: string | null;
+            /**
+             * Format: date-time
+             * @description Hora de la cita al pedir el cambio
+             */
+            currentStartsAt: string;
+            /** Format: date-time */
+            proposedStartsAt: string;
+            reason: string | null;
+            /** @enum {string} */
+            status: "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: date-time */
+            decidedAt: string | null;
+            decisionNote: string | null;
+        };
+        ManualReminderResponse: {
+            /** @description Mensaje ya redactado, con el enlace de confirmación */
+            message: string;
+            /** @example +50255551234 */
+            phone: string | null;
+            /** @description Enlace wa.me que abre la conversación con el mensaje escrito */
+            whatsappUrl: string | null;
+        };
+        IntervalResponse: {
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+        };
+        ShiftDayResponse: {
+            /** @example 2026-10-08 */
+            date: string;
+            intervals: components["schemas"]["IntervalResponse"][];
+        };
+        BlockResponse: {
+            id: string;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            reason: string | null;
+        };
+        StylistShiftsResponse: {
+            /** Format: uuid */
+            stylistId: string;
+            name: string;
+            /** @example #EC4899 */
+            color: string;
+            isBookable: boolean;
+            /** @description Servicios que hace. Vacío: todos. */
+            serviceIds: string[];
+            days: components["schemas"]["ShiftDayResponse"][];
+            blocks: components["schemas"]["BlockResponse"][];
+        };
+        BlockTimeDto: {
+            /** Format: uuid */
+            stylistId: string;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            /** @example Comida */
+            reason?: string;
+        };
+        DecideChangeDto: {
+            /** @example Ese hueco ya lo tiene otra clienta */
+            note?: string;
+        };
+        ReminderSettingsResponse: {
+            enabled: boolean;
+            /** @enum {string} */
+            channel: "LOG" | "WHATSAPP" | "SMS";
+            leadHours: number;
+        };
+        ReminderRunResponse: {
+            sent: number;
+            failed: number;
+            skipped: number;
+        };
+        PublicAppointmentResponse: {
+            salonName: string;
+            clientFirstName: string;
+            stylistName: string;
+            serviceNames: string[];
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            status: string;
+            canConfirm: boolean;
+            canCancel: boolean;
+        };
+        PublicCancelDto: {
             reason?: string;
         };
         ProductResponse: {
@@ -5728,7 +6201,7 @@ export interface operations {
                 content?: never;
             };
             /**
-             * @description Con ámbito propio, el profesional de la cita no puede ser otra persona
+             * @description Con ámbito propio, el profesional de la cita no puede ser otra persona; o se pidió `force` sin permiso
              *
              *     Requiere alguno de: appointments.create | appointments.create.own
              */
@@ -5757,7 +6230,10 @@ export interface operations {
     Appointments_availability: {
         parameters: {
             query: {
-                stylistId: string;
+                /** @description Sin indicar, huecos con cualquier profesional que haga los servicios */
+                stylistId?: string;
+                /** @description Cita que se está moviendo: su propio hueco cuenta como libre */
+                excludeAppointmentId?: string;
                 /** @description Día en la zona horaria del salón */
                 date: string;
                 /** @description Servicios que se quieren reservar. Determinan cuánto tiene que durar el hueco. */
@@ -6125,6 +6601,611 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    Appointments_notes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAppointmentNotesDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: appointments.update | appointments.update.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Appointments_requestChangeOf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestChangeDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequestResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: appointments.update.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Ya hay una pendiente, o la hora choca con otra cita */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Appointments_reminder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualReminderResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: appointments.update */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Agenda_getShifts: {
+        parameters: {
+            query: {
+                /** @description Primer día, en la zona del salón */
+                from: string;
+                /** @description Último día, incluido. Máximo 42 días. */
+                to: string;
+                stylistIds?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StylistShiftsResponse"][];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: appointments.read | appointments.read.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Agenda_addBlock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockTimeDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id?: string;
+                    };
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: stylists.manage-schedule */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Hay citas en ese tramo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Agenda_deleteBlock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stylistId: string;
+                blockId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: stylists.manage-schedule */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Agenda_changeRequests: {
+        parameters: {
+            query?: {
+                status?: "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+                /** @description Solo las decididas desde este instante */
+                decidedSince?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequestResponse"][];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: appointments.approve-changes | appointments.update.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Agenda_pendingCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        count?: number;
+                    };
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: appointments.approve-changes */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Agenda_approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideChangeDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequestResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: appointments.approve-changes */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description La hora propuesta ya no está libre */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Agenda_reject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideChangeDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequestResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: appointments.approve-changes */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Agenda_withdraw: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeRequestResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: appointments.update.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Agenda_reminderSettingsInfo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderSettingsResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: appointments.read | appointments.read.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Agenda_runReminders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderRunResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: appointments.update */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Agenda_stream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: appointments.read | appointments.read.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PublicAppointmentLink_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicAppointmentResponse"];
+                };
+            };
+            /** @description El enlace no existe o fue sustituido por otro */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PublicAppointmentLink_confirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicAppointmentResponse"];
+                };
+            };
+        };
+    };
+    PublicAppointmentLink_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicCancelDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicAppointmentResponse"];
+                };
             };
         };
     };

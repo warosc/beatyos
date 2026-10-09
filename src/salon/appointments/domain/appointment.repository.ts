@@ -57,16 +57,3 @@ export interface AppointmentRepository extends SearchableRepository<
 }
 
 export const APPOINTMENT_REPOSITORY = Symbol('AppointmentRepository');
-
-/**
- * Nombres de clientas para pintar la agenda.
- *
- * La cita guarda el identificador; el nombre es presentación. Se resuelve en el servidor
- * para que la agenda —y «Mi día» de la profesional, que se abre en un móvil— no tenga que
- * descargar el fichero entero de clientas solo para poner un nombre a cada cita.
- */
-export interface ClientNameDirectory {
-  clientNames(clientIds: readonly string[]): Promise<ReadonlyMap<string, string>>;
-}
-
-export const CLIENT_NAME_DIRECTORY = Symbol('ClientNameDirectory');

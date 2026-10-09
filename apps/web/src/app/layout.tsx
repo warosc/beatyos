@@ -8,6 +8,9 @@ import './globals.css';
 export const metadata: Metadata = {
   title: { default: 'BeautyOS', template: '%s · BeautyOS' },
   description: 'Gestión inteligente para salones de belleza.',
+  // En iPhone, «Añadir a pantalla de inicio» abre la app sin barra del navegador.
+  appleWebApp: { capable: true, title: 'BeautyOS', statusBarStyle: 'default' },
+  icons: { apple: '/icons/apple-touch-icon.png' },
 };
 export const viewport: Viewport = {
   width: 'device-width',

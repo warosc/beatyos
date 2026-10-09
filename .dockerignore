@@ -15,3 +15,5 @@ docs
 **/.next
 **/playwright-report
 **/test-results
+**/next-e2e*
+**/next-*-e2e

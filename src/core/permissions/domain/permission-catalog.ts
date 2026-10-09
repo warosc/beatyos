@@ -93,6 +93,12 @@ export const PERMISSION_DEFINITIONS: readonly PermissionDefinition[] = [
   define('appointments', 'update', 'Modificar citas'),
   define('appointments', 'update.own', 'Modificar únicamente las citas propias'),
   define('appointments', 'cancel', 'Cancelar citas'),
+  define(
+    'appointments',
+    'approve-changes',
+    'Aprobar o rechazar los cambios de hora que piden las profesionales',
+  ),
+  define('appointments', 'override-schedule', 'Agendar fuera del horario del profesional'),
   define('appointments', 'delete', 'Eliminar citas'),
   define('appointments', 'restore', 'Recuperar citas eliminadas'),
 
@@ -225,6 +231,8 @@ export const PERMISSIONS = {
     update: 'appointments.update',
     updateOwn: 'appointments.update.own',
     cancel: 'appointments.cancel',
+    approveChanges: 'appointments.approve-changes',
+    overrideSchedule: 'appointments.override-schedule',
     delete: 'appointments.delete',
     restore: 'appointments.restore',
   },
@@ -343,6 +351,13 @@ const withoutPlatformScope = (codes: readonly string[]) => codes;
  * - Recepción cobra a precio de lista: descontar (`invoices.discount`) es de la encargada y
  *   de la propiedad. Un descuento es dinero que no entra, y quien lo concede debe poder
  *   responder de él.
+ * - La profesional **no mueve** sus citas: pide el cambio de hora y la encargada lo aprueba
+ *   (`appointments.approve-changes`). Mover una cita es tocar la agenda de la clienta y la
+ *   ocupación del salón, y esa decisión es de quien organiza el día. Recepción mueve citas
+ *   cuando la clienta llama, pero no decide sobre lo que pide el equipo.
+ * - Agendar fuera del horario de una profesional (`appointments.override-schedule`) es de
+ *   recepción y encargada, nunca de la propia profesional: alargarse la jornada a sí misma
+ *   no es una decisión que le corresponda tomar sola.
  */
 export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
   {
@@ -390,6 +405,8 @@ export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
       PERMISSIONS.appointments.create,
       PERMISSIONS.appointments.update,
       PERMISSIONS.appointments.cancel,
+      PERMISSIONS.appointments.approveChanges,
+      PERMISSIONS.appointments.overrideSchedule,
       PERMISSIONS.products.read,
       PERMISSIONS.products.create,
       PERMISSIONS.products.update,
@@ -446,6 +463,7 @@ export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
       PERMISSIONS.appointments.create,
       PERMISSIONS.appointments.update,
       PERMISSIONS.appointments.cancel,
+      PERMISSIONS.appointments.overrideSchedule,
       PERMISSIONS.products.read,
       PERMISSIONS.inventory.read,
       PERMISSIONS.invoices.read,

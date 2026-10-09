@@ -81,6 +81,9 @@ model Tenant {
 
   passwordResetRequests PasswordResetRequest[]
 
+  appointmentChangeRequests AppointmentChangeRequest[]
+  appointmentReminders      AppointmentReminder[]
+
   @@index([status, deletedAt])
   @@map("tenants")
 }
@@ -719,6 +722,9 @@ model Appointment {
   cancellationReason String?
   noShowAt           DateTime? @db.Timestamptz(3)
   reminderSentAt     DateTime? @db.Timestamptz(3)
+  /// SHA-256 del enlace que recibe la clienta para confirmar o cancelar. Se guarda el
+  /// hash, nunca el token: quien lea la base no puede confirmar citas ajenas.
+  confirmationTokenHash String? @unique
   /// Total previsto al agendar. El importe real de la visita vive en la factura.
   estimatedTotal     Decimal   @default(0) @db.Decimal(12, 2)
   currency           String    @default("GTQ") @db.Char(3)
@@ -737,6 +743,8 @@ model Appointment {
   invoice        Invoice?
   clientPhotos   ClientPhoto[]
   serviceTickets ServiceTicket[]
+  changeRequests AppointmentChangeRequest[]
+  reminders      AppointmentReminder[]
 
   @@index([tenantId, startsAt])
   @@index([tenantId, stylistId, startsAt])
@@ -766,6 +774,57 @@ model AppointmentService {
   @@index([appointmentId])
   @@index([serviceId])
   @@map("appointment_services")
+}
+
+/// Cambio de hora que pide una profesional sobre una cita suya. No mueve nada: la cita
+/// solo cambia cuando la encargada lo aprueba. Como mucho una pendiente por cita (indice
+/// unico parcial en la migracion appointment_change_requests_and_reminders).
+model AppointmentChangeRequest {
+  id               String              @id @default(uuid(7))
+  tenantId         String
+  appointmentId    String
+  /// Profesional de la cita cuando se pidio: es a quien se le contesta.
+  stylistId        String
+  requestedBy      String
+  currentStartsAt  DateTime            @db.Timestamptz(3)
+  proposedStartsAt DateTime            @db.Timestamptz(3)
+  reason           String?
+  status           ChangeRequestStatus @default(PENDING)
+  decidedBy        String?
+  decidedAt        DateTime?           @db.Timestamptz(3)
+  decisionNote     String?
+  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime            @updatedAt @db.Timestamptz(3)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, stylistId, createdAt])
+  @@index([appointmentId])
+  @@map("appointment_change_requests")
+}
+
+/// Registro de cada intento de recordatorio. Append-only en la practica: es lo que
+/// permite decir «se envio por WhatsApp a las 10:02» o «no tiene telefono».
+model AppointmentReminder {
+  id            String                 @id @default(uuid(7))
+  tenantId      String
+  appointmentId String
+  channel       ReminderChannel
+  recipient     String?
+  status        ReminderDeliveryStatus
+  error         String?
+  providerId    String?
+  createdAt     DateTime               @default(now()) @db.Timestamptz(3)
+  createdBy     String?
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([appointmentId, createdAt])
+  @@map("appointment_reminders")
 }
 
 // ===========================================================================
@@ -1372,6 +1431,26 @@ enum AppointmentSource {
   PHONE
   ONLINE
   STAFF
+}
+
+enum ChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ReminderChannel {
+  WHATSAPP
+  SMS
+  LOG
+  MANUAL
+}
+
+enum ReminderDeliveryStatus {
+  SENT
+  FAILED
+  SKIPPED
 }
 
 enum SupplierStatus {

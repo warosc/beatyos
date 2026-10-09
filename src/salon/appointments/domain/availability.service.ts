@@ -29,6 +29,14 @@ export interface SlotSearchOptions {
   readonly notBefore?: Date;
   /** Antelación mínima para reservar. Da margen a preparar el material. */
   readonly minimumNoticeMinutes?: number;
+  /**
+   * Desfase de la zona del salón respecto a UTC, en milisegundos.
+   *
+   * La rejilla tiene que caer en las horas en punto **del salón**. Alineada en UTC sale bien
+   * en Guatemala por casualidad —su desfase es de horas enteras—, pero en una zona de media
+   * hora, como la India, ofrecería las 9:30 en lugar de las 9:00.
+   */
+  readonly gridOffsetMs?: number;
 }
 
 export const AvailabilityService = {
@@ -129,14 +137,16 @@ export const AvailabilityService = {
     const durationMs = durationMinutes * 60_000;
     const stepMs = granularity * 60_000;
 
+    const offsetMs = options.gridOffsetMs ?? 0;
+
     for (const window of free) {
       // Los huecos se alinean a la rejilla horaria del salón —en punto, y cuarto, y
       // media…—, no al final arbitrario de la cita anterior. Una parrilla con horas del
       // tipo «11:07» es inservible para quien atiende el teléfono.
-      let cursor = AvailabilityService.alignToGrid(window.startsAt, stepMs);
+      let cursor = AvailabilityService.alignToGrid(window.startsAt, stepMs, offsetMs);
 
       if (earliest && cursor.getTime() < earliest.getTime()) {
-        cursor = AvailabilityService.alignToGrid(earliest, stepMs);
+        cursor = AvailabilityService.alignToGrid(earliest, stepMs, offsetMs);
       }
 
       while (cursor.getTime() + durationMs <= window.endsAt.getTime()) {
@@ -184,11 +194,18 @@ export const AvailabilityService = {
     return Math.round(((capacity - free) / capacity) * 10_000) / 100;
   },
 
-  /** Redondea hacia arriba al siguiente múltiplo de la rejilla. */
-  alignToGrid(instant: Date, stepMs: number): Date {
-    const time = instant.getTime();
-    const remainder = time % stepMs;
-    return remainder === 0 ? new Date(time) : new Date(time + (stepMs - remainder));
+  /**
+   * Redondea hacia arriba al siguiente múltiplo de la rejilla, medida en la hora local que
+   * indica `offsetMs`. Sin desfase, la rejilla es la de UTC.
+   */
+  alignToGrid(instant: Date, stepMs: number, offsetMs = 0): Date {
+    const local = instant.getTime() + offsetMs;
+    // El módulo de JavaScript conserva el signo: con instantes anteriores a 1970 o desfases
+    // negativos, `% stepMs` daría un resto negativo y redondearía hacia abajo.
+    const remainder = ((local % stepMs) + stepMs) % stepMs;
+    return remainder === 0
+      ? new Date(instant.getTime())
+      : new Date(instant.getTime() + (stepMs - remainder));
   },
 
   earliestBookableInstant(options: SlotSearchOptions): Date | null {

@@ -10,7 +10,14 @@ export default defineConfig({
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
   reporter: 'html',
-  use: { baseURL, trace: 'on-first-retry' },
+  use: {
+    baseURL,
+    trace: 'on-first-retry',
+    // Las pruebas simulan la API con `page.route`, y las peticiones que atiende un service
+    // worker se saltan esa simulación: en WebKit llegaban al servidor real con un token de
+    // prueba y la app acababa en el login. La app instalable no es lo que se prueba aquí.
+    serviceWorkers: 'block',
+  },
   webServer: {
     command: `npm exec -- next dev -p ${port}`,
     env: { NEXT_DIST_DIR: distDir },

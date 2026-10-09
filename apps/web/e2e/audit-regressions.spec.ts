@@ -73,14 +73,18 @@ test('el mes se consulta en tramos válidos y la agenda móvil permite desplazam
     return r.fulfill({ json: { data: [] } });
   });
   await page.goto('/agenda');
-  await page.getByRole('button', { name: 'Mes', exact: true }).click();
+  await page.getByRole('tab', { name: 'Mes', exact: true }).click();
   await expect
     .poll(() => ranges.filter((x) => (x.to - x.from) / 86400000 >= 12).length)
     .toBeGreaterThanOrEqual(2);
   expect(ranges.every((x) => x.to - x.from <= 31 * 86400000)).toBeTruthy();
+  // En el teléfono la página no se desplaza de lado: lo ancho —las columnas por
+  // profesional— se desplaza dentro de su propio contenedor.
   await page.setViewportSize({ width: 390, height: 844 });
-  const grid = page.locator('div.min-w-\\[760px\\]');
-  expect(await grid.evaluate((el) => getComputedStyle(el.parentElement!).overflowX)).toBe('auto');
+  await page.getByRole('tab', { name: 'Día', exact: true }).click();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+  ).toBeTruthy();
 });
 
 test('compras conserva el impuesto del producto y recibe fracciones y lotes', async ({ page }) => {

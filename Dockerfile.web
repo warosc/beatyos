@@ -14,6 +14,9 @@ ENV NODE_ENV=production PORT=3001 HOSTNAME=0.0.0.0
 WORKDIR /app
 COPY --chown=node:node --from=builder /app/apps/web/.next/standalone ./
 COPY --chown=node:node --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+# `output: standalone` no incluye `public/`: sin esta línea faltan los iconos de la app
+# instalable, el service worker y las ilustraciones de la ayuda.
+COPY --chown=node:node --from=builder /app/apps/web/public ./apps/web/public
 USER node
 EXPOSE 3001
 ENTRYPOINT ["dumb-init", "--"]

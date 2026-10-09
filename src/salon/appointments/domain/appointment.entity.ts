@@ -441,6 +441,16 @@ export class Appointment extends AggregateRoot {
     this.props = { ...this.props, reminderSentAt: now };
   }
 
+  /**
+   * Comprueba que la cita todavía se puede mover, sin moverla.
+   *
+   * Lo usa la solicitud de cambio de una profesional: no tiene sentido pedir que se mueva
+   * una cita que ya empezó o terminó, y es mejor decirlo al pedir que al aprobar.
+   */
+  assertReschedulable(): void {
+    this.assertModifiable('reprogramar');
+  }
+
   // -- Reglas de acceso -----------------------------------------------------
 
   /**

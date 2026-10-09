@@ -24,6 +24,7 @@ import {
 import { PERMISSIONS } from '../../../../core/permissions/domain/permission-catalog';
 import type { AccessTokenClaims } from '../../../../shared/application/ports';
 import { WILDCARD_PERMISSION } from '../../../../shared/domain/authorization';
+import { BusinessRuleViolationError, ForbiddenActionError } from '../../../../shared/domain/errors';
 import {
   CurrentUser,
   RequireAnyPermission,
@@ -42,13 +43,14 @@ import {
   RescheduleAppointmentUseCase,
   ScheduleAppointmentUseCase,
   SearchAppointmentsUseCase,
+  UpdateAppointmentNotesUseCase,
 } from '../../application/appointment.use-cases';
+import { RequestAppointmentChangeUseCase } from '../../application/change-request.use-cases';
+import { PrepareManualReminderUseCase } from '../../application/reminder.use-cases';
+import { AGENDA_DIRECTORY, type AgendaDirectory } from '../../domain/agenda.ports';
 import type { Appointment } from '../../domain/appointment.entity';
-import {
-  CLIENT_NAME_DIRECTORY,
-  type AppointmentSortField,
-  type ClientNameDirectory,
-} from '../../domain/appointment.repository';
+import type { AppointmentSortField } from '../../domain/appointment.repository';
+import { ChangeRequestResponse, ManualReminderResponse, RequestChangeDto } from './agenda.dto';
 import {
   AppointmentQueryDto,
   AppointmentResponse,
@@ -58,6 +60,7 @@ import {
   CancelAppointmentDto,
   RescheduleAppointmentDto,
   ScheduleAppointmentDto,
+  UpdateAppointmentNotesDto,
 } from './appointment.dto';
 
 /**
@@ -80,14 +83,24 @@ export class AppointmentsController {
     private readonly getAppointment: GetAppointmentUseCase,
     private readonly getAvailability: GetAvailabilityUseCase,
     private readonly getCalendar: GetCalendarUseCase,
+    private readonly updateNotes: UpdateAppointmentNotesUseCase,
+    private readonly requestChange: RequestAppointmentChangeUseCase,
+    private readonly prepareReminder: PrepareManualReminderUseCase,
     @Inject(STYLIST_REPOSITORY) private readonly stylists: StylistRepository,
-    @Inject(CLIENT_NAME_DIRECTORY) private readonly directory: ClientNameDirectory,
+    @Inject(AGENDA_DIRECTORY) private readonly directory: AgendaDirectory,
   ) {}
 
-  /** Presenta citas con el nombre de su clienta, resuelto en una sola consulta. */
+  /** Presenta citas con nombres, colores y avisos, resueltos en una consulta por tipo. */
   private async present(appointments: readonly Appointment[]): Promise<AppointmentResponse[]> {
-    const names = await this.directory.clientNames(appointments.map((a) => a.clientId));
-    return appointments.map((a) => AppointmentResponse.from(a, names.get(a.clientId) ?? null));
+    const labels = await this.directory.describe(
+      appointments.map((a) => ({
+        id: a.id,
+        clientId: a.clientId,
+        stylistId: a.stylistId,
+        serviceIds: a.lines.map((line) => line.serviceId),
+      })),
+    );
+    return appointments.map((a) => AppointmentResponse.from(a, labels));
   }
 
   private async presentOne(appointment: Appointment): Promise<AppointmentResponse> {
@@ -103,14 +116,24 @@ export class AppointmentsController {
    * de modo que no vea nada en lugar de verlo todo.
    */
   private async ownScopeFor(user: AccessTokenClaims): Promise<string | null> {
-    const permissions = new Set(user.permissions);
-
-    if (permissions.has(WILDCARD_PERMISSION) || permissions.has(PERMISSIONS.appointments.read)) {
-      return null;
-    }
+    if (hasPermission(user, PERMISSIONS.appointments.read)) return null;
 
     const stylist = await this.stylists.findByUserId(user.sub);
     return stylist?.id ?? '__sin_ficha_profesional__';
+  }
+
+  /**
+   * Saltarse el horario de la profesional exige permiso propio. Antes bastaba con mandar
+   * `force: true`: cualquiera que pudiera agendar —incluida la propia profesional— podía
+   * alargarse la jornada sin que nadie lo decidiera.
+   */
+  private assertMayForce(user: AccessTokenClaims, force: boolean | undefined): void {
+    if (force && !hasPermission(user, PERMISSIONS.appointments.overrideSchedule)) {
+      throw new ForbiddenActionError(
+        'agendar fuera del horario',
+        'Agendar fuera del horario de la profesional lo autoriza recepción o la encargada',
+      );
+    }
   }
 
   @Post()
@@ -121,7 +144,7 @@ export class AppointmentsController {
       'La duración se calcula sumando los servicios, con la duración propia del profesional ' +
       'y el margen de limpieza de cada uno. Precio y duración quedan **congelados**: subir ' +
       'la tarifa mañana no altera esta cita. Con `appointments.create.own`, solo puede ' +
-      'agendarse a sí misma.',
+      'agendarse a sí misma. `force` exige `appointments.override-schedule`.',
   })
   @ApiCreatedResponse({ type: AppointmentResponse })
   @ApiConflictResponse({
@@ -133,12 +156,15 @@ export class AppointmentsController {
     description: 'Fuera del horario, servicio retirado o profesional que no realiza el servicio',
   })
   @ApiForbiddenResponse({
-    description: 'Con ámbito propio, el profesional de la cita no puede ser otra persona',
+    description:
+      'Con ámbito propio, el profesional de la cita no puede ser otra persona; o se pidió ' +
+      '`force` sin permiso',
   })
   async create(
     @Body() dto: ScheduleAppointmentDto,
     @CurrentUser() user: AccessTokenClaims,
   ): Promise<AppointmentResponse> {
+    this.assertMayForce(user, dto.force);
     const appointment = await this.scheduleAppointment.execute({
       tenantId: user.tenantId!,
       clientId: dto.clientId,
@@ -200,16 +226,23 @@ export class AppointmentsController {
     description:
       'Devuelve **momentos de inicio posibles**, no bloques libres: es lo que necesita la ' +
       'parrilla de horas de la interfaz. Tiene en cuenta el horario del profesional, sus ' +
-      'ausencias, las citas ya reservadas y el margen de limpieza de cada servicio.',
+      'ausencias, las citas ya reservadas, el margen de limpieza y si sabe hacer cada ' +
+      'servicio. Sin `stylistId`, busca en todo el equipo. Con ámbito propio, solo en la ' +
+      'agenda de quien consulta.',
   })
   @ApiOkResponse({ type: [AvailableSlotResponse] })
-  async availability(@Query() query: AvailabilityQueryDto): Promise<AvailableSlotResponse[]> {
+  async availability(
+    @Query() query: AvailabilityQueryDto,
+    @CurrentUser() user: AccessTokenClaims,
+  ): Promise<AvailableSlotResponse[]> {
     return this.getAvailability.execute({
       stylistId: query.stylistId,
       date: query.date,
       serviceIds: query.serviceIds,
       granularityMinutes: query.granularityMinutes,
       minimumNoticeMinutes: query.minimumNoticeMinutes,
+      excludeAppointmentId: query.excludeAppointmentId,
+      restrictToStylistId: await this.ownScopeFor(user),
     });
   }
 
@@ -263,7 +296,9 @@ export class AppointmentsController {
     summary: 'Mover o reasignar una cita',
     description:
       'Cambiar la hora conserva la duración y **devuelve la cita a pendiente** si estaba ' +
-      'confirmada: la clienta confirmó aquella hora, no ésta.',
+      'confirmada: la clienta confirmó aquella hora, no ésta. Reasignar comprueba que la ' +
+      'nueva profesional hace los servicios. Una profesional no mueve sus citas: pide el ' +
+      'cambio en `POST /appointments/:id/change-requests`.',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: AppointmentResponse })
@@ -273,6 +308,7 @@ export class AppointmentsController {
     @Body() dto: RescheduleAppointmentDto,
     @CurrentUser() user: AccessTokenClaims,
   ): Promise<AppointmentResponse> {
+    this.assertMayForce(user, dto.force);
     const appointment = await this.rescheduleAppointment.execute({
       id,
       startsAt: dto.startsAt,
@@ -369,6 +405,89 @@ export class AppointmentsController {
     return this.transition(id, 'no-show', user);
   }
 
+  @Patch(':id/notes')
+  @RequireAnyPermission(PERMISSIONS.appointments.update, PERMISSIONS.appointments.updateOwn)
+  @ApiOperation({
+    summary: 'Editar las notas de la cita',
+    description:
+      'Editables incluso con la cita terminada: es donde se apunta la fórmula de color que ' +
+      'se usó. Con ámbito propio, solo en las citas de quien edita.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: AppointmentResponse })
+  async notes(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateAppointmentNotesDto,
+    @CurrentUser() user: AccessTokenClaims,
+  ): Promise<AppointmentResponse> {
+    const scope = hasPermission(user, PERMISSIONS.appointments.update)
+      ? null
+      : await this.ownScopeFor(user);
+    const appointment = await this.updateNotes.execute({
+      id,
+      notes: dto.notes,
+      internalNotes: dto.internalNotes,
+      actorId: user.sub,
+      restrictToStylistId: scope,
+    });
+    return this.presentOne(appointment);
+  }
+
+  @Post(':id/change-requests')
+  @RequirePermissions(PERMISSIONS.appointments.updateOwn)
+  @ApiOperation({
+    summary: 'Pedir un cambio de hora',
+    description:
+      'La profesional no mueve sus citas: propone otra hora y la encargada decide. La ' +
+      'propuesta se comprueba ya contra su jornada y sus otras citas, para no hacer perder ' +
+      'el tiempo a nadie con un imposible. Como mucho una pendiente por cita.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiCreatedResponse({ type: ChangeRequestResponse })
+  @ApiConflictResponse({ description: 'Ya hay una pendiente, o la hora choca con otra cita' })
+  async requestChangeOf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RequestChangeDto,
+    @CurrentUser() user: AccessTokenClaims,
+  ): Promise<ChangeRequestResponse> {
+    const stylist = await this.stylists.findByUserId(user.sub);
+    if (!stylist) {
+      throw new BusinessRuleViolationError(
+        'STYLIST_PROFILE_REQUIRED',
+        'Tu cuenta no tiene una ficha de profesional vinculada',
+      );
+    }
+    const request = await this.requestChange.execute({
+      appointmentId: id,
+      proposedStartsAt: dto.startsAt,
+      reason: dto.reason,
+      actorId: user.sub,
+      stylistId: stylist.id,
+    });
+    const summaries = await this.directory.summarize([request.appointmentId]);
+    return ChangeRequestResponse.from(request, summaries.get(request.appointmentId));
+  }
+
+  @Post(':id/reminder')
+  @RequirePermissions(PERMISSIONS.appointments.update)
+  @ApiOperation({
+    summary: 'Preparar el recordatorio para enviarlo por WhatsApp',
+    description:
+      'Devuelve el mensaje ya redactado, con el enlace para que la clienta confirme o ' +
+      'cancele, y un enlace `wa.me` que abre la conversación. Funciona sin proveedor de ' +
+      'mensajería contratado. Queda anotado como enviado.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiCreatedResponse({ type: ManualReminderResponse })
+  async reminder(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AccessTokenClaims,
+  ): Promise<ManualReminderResponse> {
+    return ManualReminderResponse.from(
+      await this.prepareReminder.execute({ appointmentId: id, actorId: user.sub }),
+    );
+  }
+
   private async transition(
     id: string,
     transition: 'confirm' | 'start' | 'complete' | 'no-show',
@@ -382,4 +501,8 @@ export class AppointmentsController {
     });
     return this.presentOne(appointment);
   }
+}
+
+export function hasPermission(user: AccessTokenClaims, permission: string): boolean {
+  return user.permissions.includes(WILDCARD_PERMISSION) || user.permissions.includes(permission);
 }

@@ -71,7 +71,10 @@ Todas con la contraseña `SalonDemo2026`:
 | `propietaria@bella-vista.es` | `OWNER` | Acceso total al salón |
 | `encargada@bella-vista.es` | `MANAGER` | Gestión diaria, sin anular facturas, tocar usuarios ni **ver el costo de los productos** |
 | `recepcion@bella-vista.es` | `RECEPTIONIST` | Agenda y cobro, **sin ver costes ni márgenes** |
-| `estilista@bella-vista.es` | `STYLIST` | «Mi día»: su agenda y declarar lo que hizo para que caja lo cobre. **No cobra** |
+| `estilista@bella-vista.es` | `STYLIST` | «Mi día»: su agenda y declarar lo que hizo para que caja lo cobre. **No cobra**, y para mover una cita **pide el cambio** a la encargada |
+
+El seed crea además dos profesionales sin cuenta (Valeria y Andrea, que no hace mechas), citas
+de ejemplo para hoy y mañana y una petición de cambio de Sara esperando a la encargada.
 
 Existe un segundo salón (`estilo-urbano.es`, mismas cuentas y contraseña) para comprobar
 a mano que el aislamiento entre inquilinos funciona.
@@ -392,7 +395,7 @@ CORS abierto o Swagger activo abortan el proceso con un mensaje explícito.
 | **Clientas** | Ficha, alergias, consentimiento RGPD con sello de fecha, puntos, métricas, y **anonimización** por derecho de supresión —operación distinta del borrado, con permiso propio e irreversible. |
 | **Profesionales** | Horario semanal recurrente, ausencias que **recortan** la jornada, habilidades con duración y comisión propias, y cálculo de horario trabajable en instantes absolutos. |
 | **Catálogo** | Servicios con la distinción entre tiempo facturable y margen de limpieza, impuestos, escandallo de consumo; categorías en árbol con detección de ciclos. |
-| **Agenda** | Reserva con precios y duraciones **congeladas**, máquina de estados completa, reprogramación, cálculo de huecos libres alineados a la rejilla horaria, y ámbito `.own` para que cada profesional vea solo su agenda. |
+| **Agenda** | Reserva con precios y duraciones **congeladas**, máquina de estados completa, reprogramación, huecos libres con cualquier profesional que haga los servicios, y ámbito `.own` para que cada profesional vea solo su agenda. Parrilla con una columna por profesional, asistente de reserva para el móvil que solo ofrece horas libres, bloqueos de agenda, avisos en vivo (SSE), **cambios de hora que la profesional pide y la encargada aprueba**, y recordatorios con enlace para que la clienta confirme o cancele (ADR-0021). |
 
 ### Implementado y probado
 

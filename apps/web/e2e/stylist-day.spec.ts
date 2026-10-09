@@ -112,7 +112,19 @@ async function mockDay(
             ? [{ id: 'sara', displayName: 'Sara Molina', color: '#db2777', isBookable: true }]
             : resource === 'services'
               ? services.map((s) => ({ ...s, blockedMinutes: 45, isBookable: true }))
-              : [];
+              : resource === 'shifts'
+                ? [
+                    {
+                      stylistId: 'sara',
+                      name: 'Sara Molina',
+                      color: '#db2777',
+                      isBookable: true,
+                      serviceIds: [],
+                      days: [],
+                      blocks: [],
+                    },
+                  ]
+                : [];
     return route.fulfill({ json: { data } });
   });
   await page.route('**/api/service-tickets/assignable**', (route) => {

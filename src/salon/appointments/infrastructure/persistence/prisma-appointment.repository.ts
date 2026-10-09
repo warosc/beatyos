@@ -17,12 +17,12 @@ import {
   type OrderByClause,
 } from '../../../../shared/infrastructure/persistence/prisma/prisma-repository.base';
 import { PrismaService } from '../../../../shared/infrastructure/persistence/prisma/prisma.service';
+import { AGENDA_EVENTS, type AgendaEvents } from '../../domain/agenda.ports';
 import { Appointment, BLOCKING_STATUSES } from '../../domain/appointment.entity';
 import type {
   AppointmentFilter,
   AppointmentRepository,
   AppointmentSortField,
-  ClientNameDirectory,
 } from '../../domain/appointment.repository';
 
 const APPOINTMENT_INCLUDE = {
@@ -45,8 +45,26 @@ export class PrismaAppointmentRepository
   extends PrismaRepositoryBase<Appointment, AppointmentRow, AppointmentFilter, AppointmentSortField>
   implements AppointmentRepository
 {
-  constructor(prisma: PrismaService, @Inject(CLOCK) clock: Clock) {
+  constructor(
+    prisma: PrismaService,
+    @Inject(CLOCK) clock: Clock,
+    @Inject(AGENDA_EVENTS) private readonly events: AgendaEvents,
+  ) {
     super(prisma, clock);
+  }
+
+  /**
+   * Avisa a quien tiene la agenda abierta. Se hace aquí, al guardar, y no en cada caso de
+   * uso: así llega también cuando la cita cambia desde otro módulo —registrar lo realizado
+   * la completa— sin que ese módulo tenga que saber que la agenda escucha.
+   */
+  private announce(appointment: Appointment): void {
+    this.events.publish({
+      tenantId: appointment.tenantId,
+      kind: 'appointment',
+      stylistIds: [appointment.stylistId],
+      at: appointment.audit.updatedAt,
+    });
   }
 
   protected readonly delegateName = 'appointment';
@@ -182,10 +200,18 @@ export class PrismaAppointmentRepository
       }),
     );
 
-    return this.toDomain(row);
+    const saved = this.toDomain(row);
+    this.announce(saved);
+    return saved;
   }
 
   async update(appointment: Appointment): Promise<Appointment> {
+    const saved = await this.persistUpdate(appointment);
+    this.announce(saved);
+    return saved;
+  }
+
+  private persistUpdate(appointment: Appointment): Promise<Appointment> {
     return this.prisma.transaction(async () => {
       const result = await withMappedErrors(this.entityName, () =>
         this.prisma.client.appointment.updateMany({
@@ -310,22 +336,5 @@ export class PrismaAppointmentRepository
         deletedBy: row.deletedBy,
       },
     });
-  }
-}
-
-@Injectable()
-export class PrismaClientNameDirectory implements ClientNameDirectory {
-  constructor(private readonly prisma: PrismaService) {}
-
-  async clientNames(clientIds: readonly string[]): Promise<ReadonlyMap<string, string>> {
-    const ids = [...new Set(clientIds)];
-    if (!ids.length) return new Map();
-    const rows = await withMappedErrors('Clienta', () =>
-      this.prisma.client.client.findMany({
-        where: { id: { in: ids } },
-        select: { id: true, firstName: true, lastName: true },
-      }),
-    );
-    return new Map(rows.map((row) => [row.id, `${row.firstName} ${row.lastName}`.trim()]));
   }
 }

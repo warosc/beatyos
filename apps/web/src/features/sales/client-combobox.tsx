@@ -27,10 +27,12 @@ export function ClientCombobox({
   value,
   onChange,
   placeholder = 'Cliente ocasional · buscar por nombre o teléfono',
+  label = 'Cliente de la venta',
 }: {
   value: PosClient | null;
   onChange: (client: PosClient | null) => void;
   placeholder?: string;
+  label?: string;
 }) {
   const listId = useId();
   const [text, setText] = useState('');
@@ -122,7 +124,7 @@ export function ClientCombobox({
         aria-expanded={open && options.length > 0}
         aria-controls={listId}
         aria-activedescendant={open && options[active] ? `${listId}-${active}` : undefined}
-        aria-label="Cliente de la venta"
+        aria-label={label}
         placeholder={placeholder}
         className="h-11 w-full rounded-xl border bg-background px-3 text-sm"
       />

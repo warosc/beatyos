@@ -40,7 +40,15 @@ async function bootstrap(): Promise<void> {
       hsts: isProduction ? { maxAge: 31_536_000, includeSubDomains: true, preload: true } : false,
     }),
   );
-  app.use(compression());
+  app.use(
+    compression({
+      // El canal de avisos de la agenda no se comprime: `compression` retiene la salida
+      // hasta llenar su búfer, y un aviso que espera a otros nueve llega tarde.
+      filter: (request, response) =>
+        !String(request.headers.accept ?? '').includes('text/event-stream') &&
+        compression.filter(request, response),
+    }),
+  );
 
   // Detrás de un proxy inverso, sin esto `request.ip` sería siempre la IP del proxy y el
   // rate limiting por IP dejaría de distinguir clientes: todos compartirían cupo.

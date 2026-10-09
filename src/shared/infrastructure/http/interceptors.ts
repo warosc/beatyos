@@ -112,6 +112,16 @@ export class HttpLoggingInterceptor implements NestInterceptor {
     const startedAt = Date.now();
     const { correlationId, userId, tenantId } = RequestContextStore.get();
 
+    // Un canal de avisos en vivo emite durante horas: registrar cada latido llenaría el log
+    // de líneas idénticas. Se registra al abrirlo, una vez.
+    if (request.headers.accept?.includes('text/event-stream')) {
+      this.logger.log(
+        `${request.method} ${request.originalUrl} stream abierto ` +
+          `[cid=${correlationId}${tenantId ? ` tenant=${tenantId}` : ''}${userId ? ` user=${userId}` : ''}]`,
+      );
+      return next.handle();
+    }
+
     return next.handle().pipe(
       tap({
         next: () => {

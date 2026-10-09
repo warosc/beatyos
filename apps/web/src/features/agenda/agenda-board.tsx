@@ -1,42 +1,90 @@
 'use client';
-import { useDialog } from '@/lib/use-dialog';
-import { Can, useAccess } from '@/components/session-access';
-import { sessionFetch } from '@/lib/session-fetch';
-
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Bell,
+  BellRing,
+  CalendarClock,
+  CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  EyeOff,
+  List,
   Plus,
-  Scissors,
+  Send,
   TriangleAlert,
-  UserCheck,
-  X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useAccess } from '@/components/session-access';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Sheet } from '@/components/ui/sheet';
 import { RegisterServiceDialog } from '@/features/service-tickets/register-service-dialog';
-import { STATUS_LABEL, type ServiceTicket } from '@/features/service-tickets/types';
 import { PendingRegisterBanner } from '@/features/stylist-day/pending-register-banner';
 import { MY_DAY_KEY } from '@/features/stylist-day/use-my-day';
-import { loadOptions, loadPage } from '@/lib/pagination';
-import type { AgendaClient, Appointment, Service, Stylist } from './types';
+import { cn, money } from '@/lib/utils';
+import { agendaGet, agendaSend } from './api';
+import { AppointmentSheet } from './appointment-sheet';
+import { BlockDetail, SlotChoice } from './block-dialogs';
+import { BookingWizard } from './booking-wizard';
+import { ChangeRequestsInbox } from './change-requests';
+import { isActive, statusMeta } from './status';
+import {
+  addDays,
+  dayLabel,
+  isoDay,
+  minutesInDay,
+  parseIsoDay,
+  plural,
+  sameDay,
+  startOfDay,
+  startOfWeek,
+  time,
+  visibleHours,
+} from './time';
+import { TimeGrid, type GridColumn } from './time-grid';
+import type { Appointment, StylistShifts } from './types';
+import {
+  AGENDA_KEY,
+  PENDING_CHANGES_KEY,
+  usePendingChanges,
+  useAgendaRange,
+  useServiceCatalog,
+} from './use-agenda';
 
-type View = 'day' | 'week' | 'month';
-const dayMs = 86_400_000;
-const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
-const isoDay = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-async function get<T>(resource: string, params = '') {
-  const response = await sessionFetch(`/api/agenda?resource=${resource}${params}`);
-  if (!response.ok) throw new Error('No pudimos cargar la agenda.');
-  const body = (await response.json()) as { data: T };
-  return body.data;
-}
+type View = 'day' | 'week' | 'month' | 'list';
 
+const VIEWS: { value: View; label: string }[] = [
+  { value: 'day', label: 'Día' },
+  { value: 'week', label: 'Semana' },
+  { value: 'month', label: 'Mes' },
+  { value: 'list', label: 'Lista' },
+];
+
+const VIEW_STORAGE = 'beautyos-agenda-view';
+
+const readView = (): View => {
+  try {
+    const saved = localStorage.getItem(VIEW_STORAGE);
+    if (saved && VIEWS.some((view) => view.value === saved)) return saved as View;
+  } catch {
+    /* Sin almacenamiento: vista por defecto. */
+  }
+  return 'day';
+};
+
+/**
+ * La agenda del salón.
+ *
+ * Una sola pantalla para dos maneras de mirar el día: la encargada y recepción ven a todo
+ * el equipo en columnas —quién está libre, qué falta confirmar, qué pidió mover alguien—, y
+ * la profesional ve la suya con las mismas herramientas. Lo que cambia según quién mira lo
+ * deciden los permisos, no pantallas distintas.
+ *
+ * Se mantiene al día sola: un canal en vivo avisa de cada cambio y, por si se pierde, la
+ * agenda vuelve a pedirse cada minuto.
+ */
 export function AgendaBoard({
   initialCreating = false,
   initialClientId,
@@ -45,286 +93,545 @@ export function AgendaBoard({
   initialClientId?: string;
 }) {
   const { can } = useAccess();
+  const queryClient = useQueryClient();
   const canBookAny = can('appointments.create');
   const canBookOwn = can('appointments.create.own');
-  const [view, setView] = useState<View>('week');
-  const [anchor, setAnchor] = useState(startOfDay(new Date()));
-  const [creating, setCreating] = useState(initialCreating);
-  const [selected, setSelected] = useState<Appointment | null>(null);
-  const [registering, setRegistering] = useState<Appointment | null>(null);
-  const [error, setError] = useState('');
+  const canApprove = can('appointments.approve-changes');
+  const canManageSchedule = can('stylists.manage-schedule');
+  const canUpdate = can('appointments.update');
+  const ownOnly = !can('appointments.read') && can('appointments.read.own');
+
+  // La agenda solo se pinta en el cliente —el menú espera a comprobar la sesión—, así que
+  // se puede leer la vista guardada en el estado inicial sin desajuste de hidratación.
+  const [view, setViewState] = useState<View>(readView);
+  const setView = (next: View) => {
+    setViewState(next);
+    try {
+      localStorage.setItem(VIEW_STORAGE, next);
+    } catch {
+      /* Recordarla es una comodidad, no un requisito. */
+    }
+  };
+
+  const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [showCancelled, setShowCancelled] = useState(false);
   const [notice, setNotice] = useState('');
-  const queryClient = useQueryClient();
-  const days = useMemo(() => {
-    if (view === 'day') return [anchor];
+  const [error, setError] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // La clienta de la ficha solo vale para la cita con la que se llegó, no para las siguientes.
+  const [booking, setBooking] = useState<{
+    day?: Date;
+    stylistId?: string;
+    startsAt?: string;
+    clientId?: string;
+  } | null>(initialCreating ? { clientId: initialClientId } : null);
+  const [choice, setChoice] = useState<{ column: GridColumn; startsAt: Date } | null>(null);
+  const [block, setBlock] = useState<{
+    id: string;
+    stylistId: string;
+    startsAt: Date;
+    endsAt: Date;
+    reason: string | null;
+  } | null>(null);
+  const [registering, setRegistering] = useState<Appointment | null>(null);
+  const [inbox, setInbox] = useState(false);
+  const [reminders, setReminders] = useState(false);
+
+  // Rango que se pide a la API según la vista.
+  const { from, days } = useMemo(() => {
+    if (view === 'week') return { from: startOfWeek(anchor), days: 7 };
     if (view === 'month') {
       const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-      const grid = new Date(first);
-      grid.setDate(1 - first.getDay());
-      return Array.from(
-        { length: 42 },
-        (_, i) => new Date(grid.getFullYear(), grid.getMonth(), grid.getDate() + i),
-      );
+      return { from: startOfWeek(first), days: 42 };
     }
-    const monday = new Date(anchor);
-    monday.setDate(anchor.getDate() - ((anchor.getDay() + 6) % 7));
-    return Array.from(
-      { length: 7 },
-      (_, i) => new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i),
-    );
+    return { from: anchor, days: 1 };
   }, [anchor, view]);
-  const from = days[0];
-  const last = days.at(-1)!;
-  const to = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1);
-  const appointments = useQuery({
-    queryKey: ['agenda', from.toISOString(), to.toISOString()],
-    queryFn: async () => {
-      const ranges: Promise<Appointment[]>[] = [];
-      for (let start = from.getTime(); start < to.getTime(); start += 30 * dayMs) {
-        const end = Math.min(start + 30 * dayMs, to.getTime());
-        ranges.push(
-          get<Appointment[]>(
-            'calendar',
-            '&from=' +
-              encodeURIComponent(new Date(start).toISOString()) +
-              '&to=' +
-              encodeURIComponent(new Date(end).toISOString()),
-          ),
-        );
-      }
-      return Array.from(new Map((await Promise.all(ranges)).flat().map((a) => [a.id, a])).values());
-    },
-  });
-  const stylists = useQuery({
-    queryKey: ['stylists'],
-    enabled: can('stylists.read'),
-    queryFn: ({ signal }) => loadOptions<Stylist>('/api/agenda?resource=stylists', signal),
-  });
-  const services = useQuery({
-    queryKey: ['services'],
-    enabled: can('services.read'),
-    queryFn: ({ signal }) => loadOptions<Service>('/api/agenda?resource=services', signal),
-  });
-  const clients = useQuery({
-    queryKey: ['agenda-clients'],
-    enabled: can('clients.read'),
-    queryFn: ({ signal }) =>
-      loadOptions<AgendaClient>('/api/agenda?resource=clients&sort=name:asc', signal),
-  });
-  // Con ámbito propio no hay `stylists.read`: la ficha propia se resuelve aparte, sin traer
-  // el equipo entero.
-  const myStylist = useQuery({
-    queryKey: ['my-stylist'],
-    enabled: canBookOwn && !canBookAny,
-    queryFn: async () => {
-      const response = await sessionFetch('/api/stylists/me');
-      const body = (await response.json()) as { data: Stylist | null };
-      return body.data;
-    },
-  });
-  const clientMap = new Map(clients.data?.map((item) => [item.id, item.fullName]));
-  const stylistMap = new Map(stylists.data?.map((item) => [item.id, item]));
+
+  const { calendar, shifts } = useAgendaRange(from, days);
+  const services = useServiceCatalog(canBookAny || canBookOwn);
+  const pending = usePendingChanges(canApprove);
+  const team = useMemo(() => shifts.data ?? [], [shifts.data]);
+  const visibleTeam = team.filter((member) => !hidden.has(member.stylistId));
+
+  const appointments = useMemo(
+    () =>
+      (calendar.data ?? [])
+        .filter((item) => !hidden.has(item.stylistId))
+        .filter((item) => showCancelled || item.status !== 'CANCELLED'),
+    [calendar.data, hidden, showCancelled],
+  );
+  const selected = calendar.data?.find((item) => item.id === selectedId) ?? null;
+
   const shift = (direction: number) =>
-    setAnchor(
-      (date) =>
-        new Date(
-          date.getFullYear(),
-          date.getMonth() + (view === 'month' ? direction : 0),
-          view === 'month' ? 1 : date.getDate() + direction * (view === 'week' ? 7 : 1),
-        ),
+    setAnchor((date) =>
+      view === 'month'
+        ? new Date(date.getFullYear(), date.getMonth() + direction, 1)
+        : addDays(date, direction * (view === 'week' ? 7 : 1)),
     );
-  async function drop(appointment: Appointment, day: Date) {
+
+  const flash = (message: string) => {
+    setNotice(message);
     setError('');
-    const old = new Date(appointment.startsAt);
-    const startsAt = new Date(day);
-    startsAt.setHours(old.getHours(), old.getMinutes());
-    const response = await sessionFetch(`/api/agenda/${appointment.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ startsAt: startsAt.toISOString() }),
-    });
-    if (!response.ok) {
-      const body = (await response.json()) as { detail?: string };
-      setError(body.detail ?? 'El horario entra en conflicto con otra cita.');
-      return;
-    }
-    await queryClient.invalidateQueries({ queryKey: ['agenda'] });
+    window.setTimeout(() => setNotice((current) => (current === message ? '' : current)), 6000);
+  };
+
+  async function move(appointment: Appointment, column: GridColumn, startsAt: Date) {
+    setError('');
+    const sameTime = startsAt.getTime() === new Date(appointment.startsAt).getTime();
+    const stylistChanged = column.stylistId && column.stylistId !== appointment.stylistId;
+    if (sameTime && !stylistChanged) return;
+    const result = await agendaSend(
+      `/api/agenda/${appointment.id}?action=reschedule`,
+      'PATCH',
+      {
+        startsAt: startsAt.toISOString(),
+        ...(stylistChanged ? { stylistId: column.stylistId } : {}),
+      },
+      'No pudimos mover la cita.',
+    );
+    if (!result.ok) return setError(result.error);
+    await queryClient.invalidateQueries({ queryKey: AGENDA_KEY });
+    flash(`Cita de ${appointment.clientName ?? 'la clienta'} movida a las ${time(startsAt)}.`);
   }
+
+  const columnsFor = (day: Date, members: StylistShifts[]): GridColumn[] =>
+    members.map((member) => ({
+      key: `${member.stylistId}-${isoDay(day)}`,
+      day,
+      stylistId: member.stylistId,
+      header: (
+        <span className="flex flex-col items-center gap-0.5">
+          <span className="flex items-center gap-1.5 text-sm font-semibold">
+            <span className="size-2.5 rounded-full" style={{ background: member.color }} />
+            <span className="truncate">{member.name}</span>
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {plural(
+              appointments.filter(
+                (item) =>
+                  item.stylistId === member.stylistId &&
+                  isActive(item.status) &&
+                  sameDay(new Date(item.startsAt), day),
+              ).length,
+              'cita',
+              'citas',
+            )}
+          </span>
+        </span>
+      ),
+      working: workingOn(member, day),
+      blocks: blocksOn(member, day),
+      appointments: appointments.filter(
+        (item) => item.stylistId === member.stylistId && sameDay(new Date(item.startsAt), day),
+      ),
+    }));
+
+  const dayColumns = columnsFor(anchor, visibleTeam);
+  const weekColumns: GridColumn[] = Array.from({ length: 7 }, (_, index) => {
+    const day = addDays(from, index);
+    return {
+      key: isoDay(day),
+      day,
+      stylistId: visibleTeam.length === 1 ? visibleTeam[0].stylistId : null,
+      header: (
+        <button
+          type="button"
+          onClick={() => {
+            setAnchor(day);
+            setView('day');
+          }}
+          className={cn(
+            'w-full rounded-lg text-xs',
+            sameDay(day, new Date()) ? 'font-bold text-primary' : 'text-muted-foreground',
+          )}
+        >
+          <span className="block uppercase">
+            {day.toLocaleDateString('es-GT', { weekday: 'short' })}
+          </span>
+          <span className="text-lg text-foreground">{day.getDate()}</span>
+        </button>
+      ),
+      working: mergeRanges(visibleTeam.flatMap((member) => workingOn(member, day))),
+      blocks: visibleTeam.length === 1 ? blocksOn(visibleTeam[0], day) : [],
+      appointments: appointments.filter((item) => sameDay(new Date(item.startsAt), day)),
+    };
+  });
+
+  const gridColumns = view === 'week' ? weekColumns : dayColumns;
+  const range = visibleHours(
+    gridColumns.flatMap((column) => [
+      ...column.working,
+      ...column.appointments.map((item) => ({
+        start: minutesInDay(item.startsAt, column.day),
+        end: minutesInDay(item.endsAt, column.day),
+      })),
+    ]),
+  );
+
+  const dayAppointments = appointments.filter((item) => sameDay(new Date(item.startsAt), anchor));
+  const summary = {
+    total: dayAppointments.filter((item) => isActive(item.status) || item.status === 'COMPLETED')
+      .length,
+    confirmed: dayAppointments.filter((item) => item.status === 'CONFIRMED').length,
+    toConfirm: dayAppointments.filter(
+      (item) => item.status === 'SCHEDULED' && new Date(item.startsAt) > new Date(),
+    ).length,
+    revenue: dayAppointments
+      .filter((item) => item.status !== 'CANCELLED' && item.status !== 'NO_SHOW')
+      .reduce((sum, item) => sum + Number(item.estimatedTotal), 0),
+  };
+
+  const title =
+    view === 'month'
+      ? anchor.toLocaleDateString('es-GT', { month: 'long', year: 'numeric' })
+      : view === 'week'
+        ? `${from.getDate()} – ${addDays(from, 6).toLocaleDateString('es-GT', { day: 'numeric', month: 'long' })}`
+        : sameDay(anchor, new Date())
+          ? `Hoy, ${anchor.toLocaleDateString('es-GT', { day: 'numeric', month: 'long' })}`
+          : dayLabel(anchor);
+
+  const stylistNames = new Map(team.map((member) => [member.stylistId, member]));
+  const ownStylistId = canBookOwn && !canBookAny ? (team[0]?.stylistId ?? null) : undefined;
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
+    <div className="space-y-4 pb-20 lg:pb-0">
+      <header className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <p className="text-sm font-medium text-primary">Planificación</p>
-          <h1 className="mt-1 font-display text-4xl font-semibold">Agenda</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Arrastra una cita a otro día para reprogramarla.
+          <p className="text-sm font-medium text-primary">
+            {ownOnly ? 'Tu agenda' : 'Agenda del salón'}
           </p>
+          <h1 className="mt-1 font-display text-3xl font-semibold first-letter:uppercase sm:text-4xl">
+            {title}
+          </h1>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <div className="flex rounded-xl bg-muted p-1">
-            {(['day', 'week', 'month'] as View[]).map((item) => (
-              <button
-                key={item}
-                onClick={() => setView(item)}
-                className={`min-h-10 rounded-lg px-4 text-sm font-semibold ${view === item ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}
-              >
-                {item === 'day' ? 'Día' : item === 'week' ? 'Semana' : 'Mes'}
-              </button>
-            ))}
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {canApprove && (
+            <Button variant="outline" onClick={() => setInbox(true)} className="relative">
+              <CalendarClock size={18} />
+              Cambios pedidos
+              {(pending.data ?? 0) > 0 && (
+                <span className="grid min-w-5 place-items-center rounded-full bg-warning px-1.5 text-[11px] font-bold text-white">
+                  {pending.data}
+                </span>
+              )}
+            </Button>
+          )}
+          {canUpdate && (
+            <Button variant="outline" onClick={() => setReminders(true)} aria-label="Recordatorios">
+              <BellRing size={18} />
+              <span className="hidden sm:inline">Recordatorios</span>
+            </Button>
+          )}
+          <NotificationsToggle />
           {(canBookAny || canBookOwn) && (
-            <Button onClick={() => setCreating(true)}>
+            <Button className="hidden lg:inline-flex" onClick={() => setBooking({ day: anchor })}>
               <Plus size={18} />
               Nueva cita
             </Button>
           )}
         </div>
-      </div>
+      </header>
+
       <PendingRegisterBanner />
+
       {notice && (
-        <p role="status" className="rounded-xl bg-success/10 p-3 text-sm text-success">
+        <p
+          role="status"
+          className="flex items-center gap-2 rounded-xl bg-success/10 p-3 text-sm text-success"
+        >
+          <CheckCircle2 size={16} className="shrink-0" />
           {notice}
         </p>
       )}
-      {appointments.isPending && <p role="status">Cargando agenda…</p>}
-      {(appointments.error || clients.error || services.error || stylists.error) && (
-        <p role="alert">
-          No se pudo cargar la agenda completa.{' '}
-          <button onClick={() => queryClient.invalidateQueries()}>Reintentar</button>
+      {error && (
+        <p
+          role="alert"
+          className="flex items-center gap-2 rounded-xl bg-danger/10 p-3 text-sm text-danger"
+        >
+          <TriangleAlert size={16} className="shrink-0" />
+          {error}
         </p>
       )}
-      <Card className="overflow-x-auto">
-        <div className="flex items-center justify-between border-b p-3">
+      {(calendar.error || shifts.error) && (
+        <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
+          No se pudo cargar la agenda completa.{' '}
           <button
-            onClick={() => shift(-1)}
-            aria-label="Anterior"
-            className="grid size-11 place-items-center rounded-xl hover:bg-muted"
+            className="font-semibold underline"
+            onClick={() => queryClient.invalidateQueries({ queryKey: AGENDA_KEY })}
           >
-            <ChevronLeft />
+            Reintentar
           </button>
-          <div className="text-center">
+        </p>
+      )}
+
+      <Card className="overflow-hidden">
+        {/* Navegación y vista. */}
+        <div className="flex flex-wrap items-center gap-2 border-b p-2 sm:p-3">
+          <div className="flex items-center">
+            <button
+              onClick={() => shift(-1)}
+              aria-label="Anterior"
+              className="grid size-11 place-items-center rounded-xl hover:bg-muted"
+            >
+              <ChevronLeft />
+            </button>
             <button
               onClick={() => setAnchor(startOfDay(new Date()))}
-              className="text-sm font-semibold text-primary"
+              className="min-h-11 rounded-xl px-3 text-sm font-semibold text-primary hover:bg-muted"
             >
               Hoy
             </button>
-            <p className="font-display text-lg font-semibold">
-              {anchor.toLocaleDateString('es-GT', { month: 'long', year: 'numeric' })}
-            </p>
+            <button
+              onClick={() => shift(1)}
+              aria-label="Siguiente"
+              className="grid size-11 place-items-center rounded-xl hover:bg-muted"
+            >
+              <ChevronRight />
+            </button>
+            <label className="relative grid size-11 cursor-pointer place-items-center rounded-xl hover:bg-muted">
+              <CalendarDays size={18} />
+              <span className="sr-only">Ir a una fecha</span>
+              <input
+                type="date"
+                value={isoDay(anchor)}
+                onChange={(event) =>
+                  event.target.value && setAnchor(parseIsoDay(event.target.value))
+                }
+                className="absolute inset-0 cursor-pointer opacity-0"
+              />
+            </label>
           </div>
-          <button
-            onClick={() => shift(1)}
-            aria-label="Siguiente"
-            className="grid size-11 place-items-center rounded-xl hover:bg-muted"
-          >
-            <ChevronRight />
-          </button>
+          <div role="tablist" aria-label="Vista" className="ml-auto flex rounded-xl bg-muted p-1">
+            {VIEWS.map((item) => (
+              <button
+                key={item.value}
+                role="tab"
+                aria-selected={view === item.value}
+                onClick={() => setView(item.value)}
+                className={cn(
+                  'min-h-9 rounded-lg px-3 text-sm font-semibold',
+                  view === item.value ? 'bg-card shadow-sm' : 'text-muted-foreground',
+                )}
+              >
+                {item.value === 'list' ? <List size={16} aria-label="Lista" /> : item.label}
+              </button>
+            ))}
+          </div>
         </div>
-        {error && (
-          <div
-            role="alert"
-            className="flex items-center gap-2 border-b bg-danger/10 p-3 text-sm text-danger"
-          >
-            <TriangleAlert size={17} />
-            {error}
+
+        {/* Filtro por profesional: un toque oculta o muestra su columna. */}
+        {team.length > 1 && (
+          <div className="flex items-center gap-2 overflow-x-auto border-b px-3 py-2">
+            {team.map((member) => {
+              const on = !hidden.has(member.stylistId);
+              return (
+                <button
+                  key={member.stylistId}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() =>
+                    setHidden((current) => {
+                      const next = new Set(current);
+                      if (next.has(member.stylistId)) next.delete(member.stylistId);
+                      else next.add(member.stylistId);
+                      return next;
+                    })
+                  }
+                  className={cn(
+                    'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm',
+                    on ? 'bg-card font-medium' : 'bg-muted text-muted-foreground line-through',
+                  )}
+                >
+                  <span className="size-2.5 rounded-full" style={{ background: member.color }} />
+                  {member.name}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setShowCancelled((value) => !value)}
+              aria-pressed={showCancelled}
+              className="ml-auto inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs text-muted-foreground hover:bg-muted"
+            >
+              {showCancelled ? <Eye size={14} /> : <EyeOff size={14} />}
+              Canceladas
+            </button>
           </div>
         )}
-        <div
-          className={`grid min-w-[760px] ${view === 'day' ? 'grid-cols-1' : view === 'month' ? 'grid-cols-7' : 'grid-cols-7'}`}
-        >
-          {days.map((day) => (
-            <div
-              key={day.toISOString()}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                const item = appointments.data?.find(
-                  (a) => a.id === event.dataTransfer.getData('text/plain'),
-                );
-                if (item && can('appointments.update')) void drop(item, day);
-              }}
-              className={`border-r border-b p-2 ${view === 'month' ? 'min-h-32' : 'min-h-[560px]'}`}
-            >
-              <div
-                className={`mb-3 text-center text-xs ${isoDay(day) === isoDay(new Date()) ? 'font-bold text-primary' : 'text-muted-foreground'}`}
-              >
-                <span className="block uppercase">
-                  {day.toLocaleDateString('es-GT', { weekday: 'short' })}
-                </span>
-                <span className="text-lg">{day.getDate()}</span>
-              </div>
-              <div className="space-y-2">
-                {appointments.data
-                  ?.filter((a) => isoDay(new Date(a.startsAt)) === isoDay(day))
-                  .map((a) => {
-                    const stylist = stylistMap.get(a.stylistId);
-                    return (
-                      <article
-                        draggable={can('appointments.update')}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelected(a)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            setSelected(a);
-                          }
-                        }}
-                        onDragStart={(event) => event.dataTransfer.setData('text/plain', a.id)}
-                        key={a.id}
-                        className="cursor-grab rounded-xl border-l-4 bg-muted p-2 text-xs shadow-sm"
-                        style={{ borderLeftColor: stylist?.color ?? 'var(--primary)' }}
-                      >
-                        <p className="font-bold">
-                          {new Date(a.startsAt).toLocaleTimeString('es-GT', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </p>
-                        <p className="mt-1 truncate font-semibold">
-                          {a.clientName ?? clientMap.get(a.clientId) ?? 'Clienta'}
-                        </p>
-                        <p className="truncate text-muted-foreground">
-                          {stylist?.displayName ?? 'Estilista'}
-                        </p>
-                      </article>
-                    );
-                  })}
-              </div>
-            </div>
-          ))}
-        </div>
+
+        {(view === 'day' || view === 'list') && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 border-b px-4 py-2 text-xs text-muted-foreground">
+            <span>
+              <strong className="text-foreground">{summary.total}</strong> citas
+            </span>
+            <span>
+              <strong className="text-success">{summary.confirmed}</strong> confirmadas
+            </span>
+            {summary.toConfirm > 0 && (
+              <span>
+                <strong className="text-warning">{summary.toConfirm}</strong> sin confirmar
+              </span>
+            )}
+            {!ownOnly && <span>Previsto {money(summary.revenue)}</span>}
+          </div>
+        )}
+
+        {calendar.isPending || shifts.isPending ? (
+          <div className="space-y-2 p-4" aria-busy="true">
+            <p role="status" className="sr-only">
+              Cargando agenda…
+            </p>
+            {Array.from({ length: 5 }, (_, index) => (
+              <div key={index} className="h-12 animate-pulse rounded-xl bg-muted" />
+            ))}
+          </div>
+        ) : view === 'month' ? (
+          <MonthGrid
+            from={from}
+            month={anchor.getMonth()}
+            appointments={appointments}
+            onPick={(day) => {
+              setAnchor(day);
+              setView('day');
+            }}
+          />
+        ) : view === 'list' ? (
+          <DayList appointments={dayAppointments} onSelect={(item) => setSelectedId(item.id)} />
+        ) : gridColumns.length === 0 ? (
+          <p className="p-8 text-center text-sm text-muted-foreground">
+            No hay profesionales para mostrar. Activa alguna en el filtro.
+          </p>
+        ) : (
+          <TimeGrid
+            columns={gridColumns}
+            range={range}
+            canDrag={canUpdate}
+            minColumnWidth={view === 'week' ? 110 : 150}
+            onSelect={(item) => setSelectedId(item.id)}
+            onMove={canUpdate ? move : undefined}
+            onEmpty={
+              canBookAny || canBookOwn || canManageSchedule
+                ? (column, startsAt) => {
+                    if (canManageSchedule && column.stylistId) setChoice({ column, startsAt });
+                    else if (canBookAny || canBookOwn)
+                      setBooking({
+                        day: startsAt,
+                        stylistId: column.stylistId ?? undefined,
+                        startsAt: startsAt.toISOString(),
+                      });
+                  }
+                : undefined
+            }
+            onBlock={(item) => {
+              const source = team
+                .find((member) => member.stylistId === item.stylistId)
+                ?.blocks.find((candidate) => candidate.id === item.id);
+              if (source)
+                setBlock({
+                  id: source.id,
+                  stylistId: item.stylistId,
+                  startsAt: new Date(source.startsAt),
+                  endsAt: new Date(source.endsAt),
+                  reason: source.reason,
+                });
+            }}
+          />
+        )}
       </Card>
-      {creating && (canBookAny || canBookOwn) && (
-        <BookingForm
-          initialClientId={initialClientId}
-          clients={clients.data ?? []}
-          stylists={stylists.data ?? []}
+
+      {(view === 'day' || view === 'week') && (
+        <p className="hidden text-xs text-muted-foreground lg:block">
+          Toca un hueco para agendar.{' '}
+          {canUpdate && 'Arrastra una cita para moverla de hora o de profesional.'}
+        </p>
+      )}
+
+      {/* Botón flotante en el móvil, al alcance del pulgar. */}
+      {(canBookAny || canBookOwn) && (
+        <button
+          type="button"
+          onClick={() => setBooking({ day: anchor })}
+          aria-label="Nueva cita"
+          className="fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-30 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg lg:hidden"
+        >
+          <Plus size={26} />
+        </button>
+      )}
+
+      {booking && (
+        <BookingWizard
+          initialClientId={booking.clientId}
+          initial={booking}
+          team={team}
           services={services.data ?? []}
-          ownStylist={canBookOwn && !canBookAny ? myStylist.data : undefined}
-          onClose={() => setCreating(false)}
-          onSaved={async () => {
-            setCreating(false);
-            await queryClient.invalidateQueries({ queryKey: ['agenda'] });
+          ownStylistId={ownStylistId}
+          onClose={() => setBooking(null)}
+          onSaved={async (appointment) => {
+            setBooking(null);
+            setAnchor(startOfDay(new Date(appointment.startsAt)));
+            await queryClient.invalidateQueries({ queryKey: AGENDA_KEY });
+            flash(
+              `Cita reservada: ${appointment.clientName ?? 'clienta'} el ${dayLabel(new Date(appointment.startsAt), { weekday: 'long', month: 'short' })} a las ${time(appointment.startsAt)}`,
+            );
           }}
         />
       )}
+
+      {choice && (
+        <SlotChoice
+          stylist={{
+            id: choice.column.stylistId!,
+            name: stylistNames.get(choice.column.stylistId!)?.name ?? 'Profesional',
+            color: stylistNames.get(choice.column.stylistId!)?.color ?? 'var(--primary)',
+          }}
+          startsAt={choice.startsAt}
+          onClose={() => setChoice(null)}
+          onBook={() => {
+            setBooking({
+              day: choice.startsAt,
+              stylistId: choice.column.stylistId ?? undefined,
+              startsAt: choice.startsAt.toISOString(),
+            });
+            setChoice(null);
+          }}
+          onDone={(message) => {
+            setChoice(null);
+            flash(message);
+          }}
+        />
+      )}
+
+      {block && (
+        <BlockDetail
+          block={block}
+          stylistName={stylistNames.get(block.stylistId)?.name ?? 'la profesional'}
+          canRemove={canManageSchedule}
+          onClose={() => setBlock(null)}
+          onDone={(message) => {
+            setBlock(null);
+            flash(message);
+          }}
+        />
+      )}
+
       {selected && (
-        <AppointmentActions
+        <AppointmentSheet
+          key={selected.id + selected.status + selected.startsAt}
           appointment={selected}
-          clientName={selected.clientName ?? clientMap.get(selected.clientId) ?? 'Clienta'}
-          stylists={stylists.data ?? []}
-          onClose={() => setSelected(null)}
+          team={team}
+          onClose={() => setSelectedId(null)}
           onRegister={() => {
             setRegistering(selected);
-            setSelected(null);
+            setSelectedId(null);
           }}
-          onSaved={async () => {
-            setSelected(null);
-            await queryClient.invalidateQueries({ queryKey: ['agenda'] });
+          onDone={(message) => {
+            setSelectedId(null);
+            flash(message);
           }}
         />
       )}
+
       {registering && (
         <RegisterServiceDialog
           appointment={registering}
@@ -334,388 +641,306 @@ export function AgendaBoard({
             can('service-tickets.create')
               ? {
                   stylistId: registering.stylistId,
-                  name: stylistMap.get(registering.stylistId)?.displayName ?? 'la profesional',
+                  name: stylistNames.get(registering.stylistId)?.name ?? 'la profesional',
                 }
               : undefined
           }
           onClose={() => setRegistering(null)}
           onDone={async (ticket) => {
             setRegistering(null);
-            setNotice(`Enviado a caja: ${ticket.clientName}. La cita queda completada.`);
+            flash(`Enviado a caja: ${ticket.clientName}. La cita queda completada.`);
             await Promise.all(
-              [['agenda'], ['agenda-tickets'], MY_DAY_KEY, ['service-tickets-pending-count']].map(
+              [AGENDA_KEY, ['agenda-tickets'], MY_DAY_KEY, ['service-tickets-pending-count']].map(
                 (queryKey) => queryClient.invalidateQueries({ queryKey }),
               ),
             );
           }}
         />
       )}
+
+      {inbox && (
+        <Sheet
+          title="Cambios pedidos"
+          description="Aprobar mueve la cita al momento."
+          onClose={() => setInbox(false)}
+        >
+          <div className="-mx-5 -my-4">
+            <ChangeRequestsInbox
+              onDone={(message) => {
+                flash(message);
+                void queryClient.invalidateQueries({ queryKey: PENDING_CHANGES_KEY });
+              }}
+            />
+          </div>
+        </Sheet>
+      )}
+
+      {reminders && <RemindersSheet onClose={() => setReminders(false)} onDone={flash} />}
     </div>
   );
 }
 
-const dayBounds = (iso: string) => {
-  const date = new Date(iso);
-  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return `from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(end.toISOString())}`;
-};
+/** Tramos de jornada de una profesional un día, en minutos desde medianoche. */
+function workingOn(member: StylistShifts, day: Date) {
+  const entry = member.days.find((item) => item.date === isoDay(day));
+  return (entry?.intervals ?? []).map((interval) => ({
+    start: minutesInDay(interval.startsAt, day),
+    end: minutesInDay(interval.endsAt, day),
+  }));
+}
 
-function AppointmentActions({
-  appointment,
-  clientName,
-  stylists,
-  onClose,
-  onRegister,
-  onSaved,
+function blocksOn(member: StylistShifts, day: Date) {
+  return member.blocks
+    .filter((block) => {
+      const start = minutesInDay(block.startsAt, day);
+      const end = minutesInDay(block.endsAt, day);
+      return end > 0 && start < 24 * 60;
+    })
+    .map((block) => ({
+      id: block.id,
+      stylistId: member.stylistId,
+      start: Math.max(0, minutesInDay(block.startsAt, day)),
+      end: Math.min(24 * 60, minutesInDay(block.endsAt, day)),
+      reason: block.reason,
+    }));
+}
+
+/** Une tramos que se solapan: la jornada del salón un día es la de todo su equipo. */
+function mergeRanges(ranges: { start: number; end: number }[]) {
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
+  const merged: { start: number; end: number }[] = [];
+  for (const range of sorted) {
+    const last = merged.at(-1);
+    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
+    else merged.push({ ...range });
+  }
+  return merged;
+}
+
+function MonthGrid({
+  from,
+  month,
+  appointments,
+  onPick,
 }: {
-  appointment: Appointment;
-  clientName: string;
-  stylists: Stylist[];
-  onClose: () => void;
-  onRegister: () => void;
-  onSaved: () => void;
+  from: Date;
+  month: number;
+  appointments: Appointment[];
+  onPick: (day: Date) => void;
 }) {
-  const { can } = useAccess();
-  const [stylistId, setStylistId] = useState(appointment.stylistId);
-  const [reason, setReason] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const isCancelled = appointment.status === 'CANCELLED';
-  const canRegister = can('service-tickets.create') || can('service-tickets.create.own');
-  const canStart = can('appointments.update') || can('appointments.update.own');
-  // ¿Ya se envió a caja? Se mira en las comandas del día de la cita.
-  const tickets = useQuery({
-    queryKey: ['agenda-tickets', dayBounds(appointment.startsAt)],
-    enabled: can('service-tickets.read') || can('service-tickets.read.own'),
-    queryFn: ({ signal }) =>
-      loadPage<ServiceTicket>(
-        `/api/service-tickets?limit=100&${dayBounds(appointment.startsAt)}`,
-        signal,
-      ).then((page) => page.data),
-  });
-  const ticket = tickets.data?.find(
-    (item) => item.appointmentId === appointment.id && item.status !== 'CANCELLED',
+  const today = new Date();
+  return (
+    <div className="grid grid-cols-7">
+      {['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'].map((label) => (
+        <div
+          key={label}
+          className="border-b p-2 text-center text-xs text-muted-foreground uppercase"
+        >
+          {label}
+        </div>
+      ))}
+      {Array.from({ length: 42 }, (_, index) => {
+        const day = addDays(from, index);
+        const items = appointments.filter(
+          (item) => sameDay(new Date(item.startsAt), day) && item.status !== 'CANCELLED',
+        );
+        return (
+          <button
+            key={isoDay(day)}
+            type="button"
+            onClick={() => onPick(day)}
+            aria-label={`${dayLabel(day)}: ${items.length} citas`}
+            className={cn(
+              'flex min-h-20 flex-col items-stretch gap-1 border-r border-b p-1.5 text-left hover:bg-muted sm:min-h-28',
+              day.getMonth() !== month && 'bg-muted/40 text-muted-foreground',
+            )}
+          >
+            <span
+              className={cn(
+                'grid size-7 place-items-center rounded-full text-sm',
+                sameDay(day, today) && 'bg-primary font-bold text-primary-foreground',
+              )}
+            >
+              {day.getDate()}
+            </span>
+            {/* En el móvil, puntos de color; en pantalla grande, las primeras citas. */}
+            <span className="flex flex-wrap gap-0.5 sm:hidden">
+              {items.slice(0, 6).map((item) => (
+                <span
+                  key={item.id}
+                  className="size-1.5 rounded-full"
+                  style={{ background: item.stylistColor ?? 'var(--primary)' }}
+                />
+              ))}
+            </span>
+            <span className="hidden space-y-0.5 sm:block">
+              {items.slice(0, 3).map((item) => (
+                <span
+                  key={item.id}
+                  className="block truncate rounded border-l-2 bg-muted px-1 text-[11px]"
+                  style={{ borderLeftColor: item.stylistColor ?? 'var(--primary)' }}
+                >
+                  {time(item.startsAt)} {item.clientName}
+                </span>
+              ))}
+              {items.length > 3 && (
+                <span className="block text-[11px] text-muted-foreground">
+                  +{items.length - 3} más
+                </span>
+              )}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
-  const attendable = !isCancelled && appointment.status !== 'NO_SHOW';
-  async function act(action: 'reschedule' | 'cancel' | 'start') {
+}
+
+/** El día como lista: lo más cómodo en un teléfono para repasar quién viene. */
+function DayList({
+  appointments,
+  onSelect,
+}: {
+  appointments: Appointment[];
+  onSelect: (appointment: Appointment) => void;
+}) {
+  const sorted = [...appointments].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  if (!sorted.length) {
+    return <p className="p-8 text-center text-sm text-muted-foreground">No hay citas este día.</p>;
+  }
+  return (
+    <ul className="divide-y">
+      {sorted.map((item) => {
+        const meta = statusMeta(item.status);
+        return (
+          <li key={item.id}>
+            <button
+              type="button"
+              onClick={() => onSelect(item)}
+              className="flex w-full items-center gap-3 p-3 text-left hover:bg-muted sm:p-4"
+            >
+              <span
+                className="h-12 w-1.5 shrink-0 rounded-full"
+                style={{ background: item.stylistColor ?? 'var(--primary)' }}
+              />
+              <span className="w-[4.75rem] shrink-0 text-sm font-bold whitespace-nowrap tabular-nums">
+                {time(item.startsAt)}
+                <span className="block text-xs font-normal text-muted-foreground">
+                  {item.durationMinutes} min
+                </span>
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={cn('block truncate font-semibold', meta.block)}>
+                  {item.clientName ?? 'Clienta'}
+                </span>
+                <span className="block truncate text-sm text-muted-foreground">
+                  {item.stylistName} ·{' '}
+                  {item.services
+                    .map((line) => line.name)
+                    .filter(Boolean)
+                    .join(', ')}
+                </span>
+              </span>
+              <span className="flex shrink-0 flex-col items-end gap-1">
+                <span
+                  className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', meta.badge)}
+                >
+                  {meta.label}
+                </span>
+                {item.pendingChange && (
+                  <CalendarClock size={14} className="text-warning" aria-label="Cambio pedido" />
+                )}
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Pedir permiso para avisos del sistema. Nunca se pide solo: es un botón que se pulsa. */
+function NotificationsToggle() {
+  const [state, setState] = useState<NotificationPermission | 'unsupported'>(() =>
+    typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
+  );
+  if (state !== 'default') return null;
+  return (
+    <Button
+      variant="ghost"
+      onClick={async () => setState(await Notification.requestPermission())}
+      title="Recibir un aviso cuando alguien pide un cambio o agenda"
+    >
+      <Bell size={18} />
+      <span className="hidden sm:inline">Activar avisos</span>
+    </Button>
+  );
+}
+
+function RemindersSheet({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone: (message: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const settings = useQuery({
+    queryKey: ['agenda-reminder-settings'],
+    queryFn: () =>
+      agendaGet<{ enabled: boolean; channel: string; leadHours: number }>('reminder-settings'),
+  });
+
+  async function run() {
     setBusy(true);
     setError('');
-    const response = await sessionFetch(
-      `/api/agenda/${appointment.id}${action === 'reschedule' ? '' : `?action=${action}`}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          action === 'cancel'
-            ? { reason: reason || undefined }
-            : action === 'start'
-              ? {}
-              : { stylistId },
-        ),
-      },
+    const result = await agendaSend<{ sent: number; failed: number; skipped: number }>(
+      '/api/agenda/reminders/run',
+      'POST',
     );
     setBusy(false);
-    if (!response.ok) {
-      const body = (await response.json()) as { detail?: string; message?: string };
-      setError(body.detail ?? body.message ?? 'No pudimos actualizar la cita.');
-      return;
-    }
-    onSaved();
+    if (!result.ok) return setError(result.error);
+    await queryClient.invalidateQueries({ queryKey: AGENDA_KEY });
+    const { sent, failed, skipped } = result.data;
+    onClose();
+    onDone(
+      sent + failed + skipped === 0
+        ? 'No había recordatorios pendientes.'
+        : `Recordatorios: ${sent} enviados${failed ? `, ${failed} fallidos` : ''}${skipped ? `, ${skipped} sin teléfono` : ''}.`,
+    );
   }
-  const dialogRef = useDialog(onClose);
-  return (
-    <div
-      ref={dialogRef}
-      tabIndex={-1}
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="appointment-actions-title"
-    >
-      <div className="w-full max-w-md space-y-5 rounded-2xl bg-card p-6">
-        <div className="flex items-center justify-between">
-          <div className="min-w-0">
-            <h2 id="appointment-actions-title" className="font-display text-2xl font-semibold">
-              {clientName}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {new Date(appointment.startsAt).toLocaleString('es-GT', {
-                weekday: 'short',
-                day: 'numeric',
-                month: 'short',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </p>
-          </div>
-          <button onClick={onClose} aria-label="Cerrar">
-            <X />
-          </button>
-        </div>
-        {attendable && canRegister && (
-          <div className="space-y-2">
-            {ticket ? (
-              <p className="flex items-center gap-2 rounded-xl bg-success/10 p-3 text-sm font-medium text-success">
-                <CheckCircle2 size={16} />
-                Enviado a caja · {STATUS_LABEL[ticket.status]}
-              </p>
-            ) : (
-              <Button className="h-12 w-full" disabled={busy} onClick={onRegister}>
-                <Scissors size={17} />
-                Registrar lo realizado
-              </Button>
-            )}
-            {!ticket &&
-              canStart &&
-              (appointment.status === 'SCHEDULED' || appointment.status === 'CONFIRMED') && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  disabled={busy}
-                  onClick={() => act('start')}
-                >
-                  <UserCheck size={17} />
-                  Llegó: iniciar atención
-                </Button>
-              )}
-          </div>
-        )}
-        {/* Cada bloque entero va tras su permiso: un selector sin botón no sirve a nadie. */}
-        <Can permission="appointments.update">
-          <label className="block text-sm font-semibold">
-            Cambiar estilista
-            <select
-              aria-label="Cambiar estilista"
-              value={stylistId}
-              onChange={(e) => setStylistId(e.target.value)}
-              className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
-            >
-              {stylists
-                .filter((x) => x.isBookable)
-                .map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.displayName}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <Button
-            className="w-full"
-            disabled={busy || stylistId === appointment.stylistId}
-            onClick={() => act('reschedule')}
-          >
-            Guardar estilista
-          </Button>
-        </Can>
-        <Can permission="appointments.cancel">
-          <div className="border-t pt-5">
-            <label className="block text-sm font-semibold">
-              Motivo de cancelación
-              <input
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
-              />
-            </label>
-            <Button
-              variant="outline"
-              className="mt-3 w-full text-danger"
-              disabled={busy || isCancelled}
-              onClick={() => act('cancel')}
-            >
-              {isCancelled ? 'Cita ya cancelada' : 'Cancelar cita'}
-            </Button>
-          </div>
-        </Can>
-        {error && (
-          <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
-            {error}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
 
-function BookingForm({
-  initialClientId,
-  clients,
-  stylists,
-  services,
-  ownStylist,
-  onClose,
-  onSaved,
-}: {
-  initialClientId?: string;
-  clients: AgendaClient[];
-  stylists: Stylist[];
-  services: Service[];
-  /** Con ámbito propio: la ficha a bloquear, `null` si no tiene una vinculada, `undefined` si no aplica. */
-  ownStylist?: Stylist | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    const data = new FormData(event.currentTarget);
-    const clientId = String(data.get('clientId') ?? '');
-    const stylistId = String(data.get('stylistId') ?? '');
-    const serviceIds = data.getAll('serviceIds');
-    if (!uuidPattern.test(clientId) || !uuidPattern.test(stylistId)) {
-      setBusy(false);
-      setError(
-        'Selecciona una clienta y una estilista válidas. Recarga la página si el problema continúa.',
-      );
-      return;
-    }
-    if (serviceIds.length === 0) {
-      setBusy(false);
-      setError('Selecciona al menos un servicio.');
-      return;
-    }
-    const response = await sessionFetch('/api/agenda', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clientId,
-        stylistId,
-        startsAt: new Date(String(data.get('startsAt'))).toISOString(),
-        serviceIds,
-        source: 'STAFF',
-      }),
-    });
-    setBusy(false);
-    if (!response.ok) {
-      const body = (await response.json()) as {
-        detail?: string;
-        message?: string;
-        errors?: { message: string }[];
-      };
-      setError(
-        body.errors?.map((item) => item.message).join('. ') ??
-          body.detail ??
-          body.message ??
-          'No pudimos reservar la cita.',
-      );
-      return;
-    }
-    onSaved();
-  }
-  const field = 'h-11 w-full rounded-xl border bg-background px-3 text-sm';
-  const dialogRef = useDialog(onClose);
+  const channel = settings.data?.channel;
   return (
-    <div
-      ref={dialogRef}
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Nueva cita"
-      className="fixed inset-0 z-50 grid place-items-end bg-black/40 sm:place-items-center sm:p-6"
-    >
-      <form
-        onSubmit={submit}
-        onChange={() => error && setError('')}
-        className="w-full max-w-xl space-y-4 rounded-t-3xl bg-card p-6 sm:rounded-2xl"
-      >
-        <div className="flex justify-between">
-          <h2 className="font-display text-2xl font-semibold">Nueva cita</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar">
-            <X />
-          </button>
-        </div>
-        <label className="block text-sm font-semibold">
-          Clienta
-          <select
-            // Las opciones llegan de una consulta aparte y no están listas en el primer
-            // render: sin la `key`, React aplica `defaultValue` contra una lista vacía y no
-            // vuelve a intentarlo cuando las clientas llegan, dejando el selector en
-            // "Selecciona…" pese a venir de la ficha de una clienta concreta.
-            key={clients.length}
-            required
-            defaultValue={initialClientId ?? ''}
-            name="clientId"
-            className={`${field} mt-1.5`}
-          >
-            <option value="">Selecciona…</option>
-            {clients.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.fullName}
-              </option>
-            ))}
-          </select>
-        </label>
-        {ownStylist !== undefined ? (
-          <label className="block text-sm font-semibold">
-            Estilista
-            {ownStylist ? (
-              <>
-                <p className={`${field} mt-1.5 flex items-center bg-muted text-muted-foreground`}>
-                  {ownStylist.displayName} (tú)
-                </p>
-                <input type="hidden" name="stylistId" value={ownStylist.id} />
-              </>
-            ) : (
-              <p role="alert" className="mt-1.5 text-sm text-danger">
-                Tu cuenta no tiene una ficha de profesional vinculada. Pide a la propietaria que la
-                enlace antes de agendar.
-              </p>
-            )}
-          </label>
-        ) : (
-          <label className="block text-sm font-semibold">
-            Estilista
-            <select required name="stylistId" className={`${field} mt-1.5`}>
-              <option value="">Selecciona…</option>
-              {stylists
-                .filter((x) => x.isBookable)
-                .map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.displayName}
-                  </option>
-                ))}
-            </select>
-          </label>
+    <Sheet title="Recordatorios" onClose={onClose}>
+      <div className="space-y-4 text-sm">
+        <p>
+          Cada clienta recibe un mensaje{' '}
+          <strong>{settings.data?.leadHours ?? 24} horas antes</strong> de su cita con un enlace
+          para confirmarla o cancelarla. Si cancela, el hueco aparece libre en la agenda al momento.
+        </p>
+        {channel === 'LOG' && (
+          <p className="rounded-xl bg-warning/15 p-3 text-warning">
+            Todavía no hay proveedor de WhatsApp contratado: los envíos automáticos se registran
+            pero no salen. Mientras tanto, abre la cita y usa «Recordar por WhatsApp» para mandarlo
+            desde el teléfono del salón.
+          </p>
         )}
-        <label className="block text-sm font-semibold">
-          Fecha y hora
-          <input required name="startsAt" type="datetime-local" className={`${field} mt-1.5`} />
-        </label>
-        <fieldset>
-          <legend className="text-sm font-semibold">Servicios</legend>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {services
-              .filter((x) => x.isBookable)
-              .map((x) => (
-                <label key={x.id} className="flex gap-2 rounded-xl border p-3 text-sm">
-                  <input type="checkbox" name="serviceIds" value={x.id} />
-                  <span>
-                    {x.name}
-                    <small className="block text-muted-foreground">
-                      {x.blockedMinutes} min · {x.priceWithTax} {x.currency}
-                    </small>
-                  </span>
-                </label>
-              ))}
-          </div>
-        </fieldset>
+        {settings.data && !settings.data.enabled && (
+          <p className="rounded-xl bg-muted p-3">Los envíos automáticos están desactivados.</p>
+        )}
         {error && (
-          <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
+          <p role="alert" className="rounded-xl bg-danger/10 p-3 text-danger">
             {error}
           </p>
         )}
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button disabled={busy}>{busy ? 'Reservando…' : 'Reservar cita'}</Button>
-        </div>
-      </form>
-    </div>
+        <Button className="w-full" disabled={busy} onClick={run}>
+          <Send size={16} />
+          {busy ? 'Enviando…' : 'Enviar ahora los pendientes'}
+        </Button>
+      </div>
+    </Sheet>
   );
 }

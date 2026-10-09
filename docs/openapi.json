@@ -3086,7 +3086,7 @@
     },
     "/api/v1/appointments": {
       "post": {
-        "description": "La duración se calcula sumando los servicios, con la duración propia del profesional y el margen de limpieza de cada uno. Precio y duración quedan **congelados**: subir la tarifa mañana no altera esta cita. Con `appointments.create.own`, solo puede agendarse a sí misma.",
+        "description": "La duración se calcula sumando los servicios, con la duración propia del profesional y el margen de limpieza de cada uno. Precio y duración quedan **congelados**: subir la tarifa mañana no altera esta cita. Con `appointments.create.own`, solo puede agendarse a sí misma. `force` exige `appointments.override-schedule`.",
         "operationId": "Appointments_create",
         "parameters": [],
         "requestBody": {
@@ -3114,7 +3114,7 @@
             "description": "Token ausente, inválido o caducado"
           },
           "403": {
-            "description": "Con ámbito propio, el profesional de la cita no puede ser otra persona\n\nRequiere alguno de: appointments.create | appointments.create.own"
+            "description": "Con ámbito propio, el profesional de la cita no puede ser otra persona; o se pidió `force` sin permiso\n\nRequiere alguno de: appointments.create | appointments.create.own"
           },
           "409": {
             "description": "El profesional ya tiene otra cita en esa franja. Lo garantiza una restricción `EXCLUDE` de PostgreSQL, así que es imposible saltárselo ni con peticiones simultáneas."
@@ -3286,13 +3286,24 @@
     },
     "/api/v1/appointments/availability": {
       "get": {
-        "description": "Devuelve **momentos de inicio posibles**, no bloques libres: es lo que necesita la parrilla de horas de la interfaz. Tiene en cuenta el horario del profesional, sus ausencias, las citas ya reservadas y el margen de limpieza de cada servicio.",
+        "description": "Devuelve **momentos de inicio posibles**, no bloques libres: es lo que necesita la parrilla de horas de la interfaz. Tiene en cuenta el horario del profesional, sus ausencias, las citas ya reservadas, el margen de limpieza y si sabe hacer cada servicio. Sin `stylistId`, busca en todo el equipo. Con ámbito propio, solo en la agenda de quien consulta.",
         "operationId": "Appointments_availability",
         "parameters": [
           {
             "name": "stylistId",
-            "required": true,
+            "required": false,
             "in": "query",
+            "description": "Sin indicar, huecos con cualquier profesional que haga los servicios",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "excludeAppointmentId",
+            "required": false,
+            "in": "query",
+            "description": "Cita que se está moviendo: su propio hueco cuenta como libre",
             "schema": {
               "format": "uuid",
               "type": "string"
@@ -3503,7 +3514,7 @@
     },
     "/api/v1/appointments/{id}/reschedule": {
       "patch": {
-        "description": "Cambiar la hora conserva la duración y **devuelve la cita a pendiente** si estaba confirmada: la clienta confirmó aquella hora, no ésta.",
+        "description": "Cambiar la hora conserva la duración y **devuelve la cita a pendiente** si estaba confirmada: la clienta confirmó aquella hora, no ésta. Reasignar comprueba que la nueva profesional hace los servicios. Una profesional no mueve sus citas: pide el cambio en `POST /appointments/:id/change-requests`.",
         "operationId": "Appointments_reschedule",
         "parameters": [
           {
@@ -3790,6 +3801,793 @@
         "summary": "Marcar que la clienta no se presentó",
         "tags": [
           "Agenda"
+        ]
+      }
+    },
+    "/api/v1/appointments/{id}/notes": {
+      "patch": {
+        "description": "Editables incluso con la cita terminada: es donde se apunta la fórmula de color que se usó. Con ámbito propio, solo en las citas de quien edita.",
+        "operationId": "Appointments_notes",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAppointmentNotesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: appointments.update | appointments.update.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Editar las notas de la cita",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/appointments/{id}/change-requests": {
+      "post": {
+        "description": "La profesional no mueve sus citas: propone otra hora y la encargada decide. La propuesta se comprueba ya contra su jornada y sus otras citas, para no hacer perder el tiempo a nadie con un imposible. Como mucho una pendiente por cita.",
+        "operationId": "Appointments_requestChangeOf",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestChangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeRequestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: appointments.update.own"
+          },
+          "409": {
+            "description": "Ya hay una pendiente, o la hora choca con otra cita"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Pedir un cambio de hora",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/appointments/{id}/reminder": {
+      "post": {
+        "description": "Devuelve el mensaje ya redactado, con el enlace para que la clienta confirme o cancele, y un enlace `wa.me` que abre la conversación. Funciona sin proveedor de mensajería contratado. Queda anotado como enviado.",
+        "operationId": "Appointments_reminder",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualReminderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: appointments.update"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Preparar el recordatorio para enviarlo por WhatsApp",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/agenda/shifts": {
+      "get": {
+        "description": "Lo que la parrilla pinta de fondo: la jornada de cada profesional ya descontadas sus ausencias, y los bloqueos del rango. Con ámbito propio, solo la ficha de quien consulta.",
+        "operationId": "Agenda_getShifts",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "description": "Primer día, en la zona del salón",
+            "schema": {
+              "example": "2026-10-08",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "description": "Último día, incluido. Máximo 42 días.",
+            "schema": {
+              "example": "2026-10-14",
+              "type": "string"
+            }
+          },
+          {
+            "name": "stylistIds",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StylistShiftsResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: appointments.read | appointments.read.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Jornada y bloqueos por profesional",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/agenda/blocks": {
+      "post": {
+        "description": "Comida, formación, un recado. No se permite tapar citas ya reservadas: primero se mueven, después se bloquea.",
+        "operationId": "Agenda_addBlock",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockTimeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: stylists.manage-schedule"
+          },
+          "409": {
+            "description": "Hay citas en ese tramo"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bloquear un tramo de agenda",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/agenda/blocks/{stylistId}/{blockId}": {
+      "delete": {
+        "operationId": "Agenda_deleteBlock",
+        "parameters": [
+          {
+            "name": "stylistId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "blockId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: stylists.manage-schedule"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Quitar un bloqueo de agenda",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/agenda/change-requests": {
+      "get": {
+        "description": "Quien aprueba ve los de todo el equipo; la profesional, solo los suyos —con la respuesta que recibió—.",
+        "operationId": "Agenda_changeRequests",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "APPROVED",
+                "REJECTED",
+                "WITHDRAWN"
+              ]
+            }
+          },
+          {
+            "name": "decidedSince",
+            "required": false,
+            "in": "query",
+            "description": "Solo las decididas desde este instante",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChangeRequestResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: appointments.approve-changes | appointments.update.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cambios de hora pedidos por las profesionales",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/agenda/change-requests/pending-count": {
+      "get": {
+        "operationId": "Agenda_pendingCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: appointments.approve-changes"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cuántos cambios esperan respuesta. Alimenta el aviso del menú.",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/agenda/change-requests/{id}/approve": {
+      "patch": {
+        "description": "Mueve la cita con las mismas comprobaciones que recepción. Si la hora ya no cabe, falla y la solicitud sigue pendiente.",
+        "operationId": "Agenda_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideChangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeRequestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: appointments.approve-changes"
+          },
+          "409": {
+            "description": "La hora propuesta ya no está libre"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Aprobar un cambio y mover la cita",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/agenda/change-requests/{id}/reject": {
+      "patch": {
+        "operationId": "Agenda_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideChangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeRequestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: appointments.approve-changes"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rechazar un cambio. La cita se queda como estaba.",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/agenda/change-requests/{id}/withdraw": {
+      "patch": {
+        "operationId": "Agenda_withdraw",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeRequestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: appointments.update.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retirar un cambio que pidió una misma",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/agenda/reminders/settings": {
+      "get": {
+        "operationId": "Agenda_reminderSettingsInfo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: appointments.read | appointments.read.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cómo salen los recordatorios automáticos",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/agenda/reminders/run": {
+      "post": {
+        "description": "Lo mismo que hace el planificador cada cinco minutos, a demanda. Una cita ya recordada no se recuerda dos veces.",
+        "operationId": "Agenda_runReminders",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderRunResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: appointments.update"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enviar ahora los recordatorios pendientes del salón",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/agenda/stream": {
+      "get": {
+        "operationId": "Agenda_stream",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: appointments.read | appointments.read.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Avisos en vivo de cambios en la agenda (text/event-stream)",
+        "tags": [
+          "Agenda"
+        ]
+      }
+    },
+    "/api/v1/public/appointment-links/{token}": {
+      "get": {
+        "operationId": "PublicAppointmentLink_view",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicAppointmentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El enlace no existe o fue sustituido por otro"
+          }
+        },
+        "summary": "Ver la cita del enlace",
+        "tags": [
+          "Enlace de la clienta"
+        ]
+      }
+    },
+    "/api/v1/public/appointment-links/{token}/confirm": {
+      "post": {
+        "operationId": "PublicAppointmentLink_confirm",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicAppointmentResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Confirmar la cita",
+        "tags": [
+          "Enlace de la clienta"
+        ]
+      }
+    },
+    "/api/v1/public/appointment-links/{token}/cancel": {
+      "post": {
+        "operationId": "PublicAppointmentLink_cancel",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicCancelDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicAppointmentResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Cancelar la cita",
+        "tags": [
+          "Enlace de la clienta"
         ]
       }
     },
@@ -8294,6 +9092,15 @@
             "type": "string",
             "format": "uuid"
           },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "type": "string",
+            "nullable": true,
+            "description": "Color del servicio en la agenda"
+          },
           "durationMinutes": {
             "type": "number",
             "description": "Duración congelada al reservar, margen incluido"
@@ -8310,9 +9117,73 @@
         "required": [
           "id",
           "serviceId",
+          "name",
+          "color",
           "durationMinutes",
           "price",
           "sortOrder"
+        ]
+      },
+      "LastReminderResponse": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "WHATSAPP",
+              "SMS",
+              "LOG",
+              "MANUAL"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SENT",
+              "FAILED",
+              "SKIPPED"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "channel",
+          "status",
+          "at",
+          "error"
+        ]
+      },
+      "PendingChangeResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "proposedStartsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "proposedStartsAt",
+          "reason",
+          "requestedAt"
         ]
       },
       "AppointmentResponse": {
@@ -8330,9 +9201,23 @@
             "nullable": true,
             "description": "Nombre de la clienta"
           },
+          "clientPhone": {
+            "type": "string",
+            "nullable": true,
+            "description": "Teléfono de la clienta"
+          },
           "stylistId": {
             "type": "string",
             "format": "uuid"
+          },
+          "stylistName": {
+            "type": "string",
+            "nullable": true
+          },
+          "stylistColor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Color de la profesional"
           },
           "startsAt": {
             "type": "string",
@@ -8426,6 +9311,31 @@
             "nullable": true,
             "format": "date-time"
           },
+          "reminderSentAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "lastReminder": {
+            "nullable": true,
+            "description": "Último intento de recordatorio a la clienta",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LastReminderResponse"
+              }
+            ]
+          },
+          "pendingChange": {
+            "nullable": true,
+            "description": "Cambio de hora que pidió la profesional y espera aprobación",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PendingChangeResponse"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -8439,7 +9349,10 @@
           "id",
           "clientId",
           "clientName",
+          "clientPhone",
           "stylistId",
+          "stylistName",
+          "stylistColor",
           "startsAt",
           "endsAt",
           "durationMinutes",
@@ -8458,6 +9371,9 @@
           "cancelledAt",
           "cancellationReason",
           "noShowAt",
+          "reminderSentAt",
+          "lastReminder",
+          "pendingChange",
           "createdAt",
           "updatedAt"
         ]
@@ -8475,12 +9391,18 @@
           },
           "durationMinutes": {
             "type": "number"
+          },
+          "stylistId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Profesional con la que es el hueco"
           }
         },
         "required": [
           "startsAt",
           "endsAt",
-          "durationMinutes"
+          "durationMinutes",
+          "stylistId"
         ]
       },
       "RescheduleAppointmentDto": {
@@ -8510,6 +9432,406 @@
             "maxLength": 500,
             "description": "Motivo de la cancelación. Se guarda en la ficha y en la auditoría.",
             "example": "La clienta ha avisado de que está enferma"
+          }
+        }
+      },
+      "UpdateAppointmentNotesDto": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 1000
+          },
+          "internalNotes": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 1000,
+            "description": "Editable incluso en citas terminadas: es donde se apunta la fórmula usada."
+          }
+        }
+      },
+      "RequestChangeDto": {
+        "type": "object",
+        "properties": {
+          "startsAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Hora a la que se propone mover la cita"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "example": "La clienta pidió venir más tarde"
+          }
+        },
+        "required": [
+          "startsAt"
+        ]
+      },
+      "ChangeRequestResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "appointmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stylistId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stylistName": {
+            "type": "string",
+            "nullable": true
+          },
+          "stylistColor": {
+            "type": "string",
+            "nullable": true
+          },
+          "clientName": {
+            "type": "string",
+            "nullable": true
+          },
+          "serviceNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "durationMinutes": {
+            "type": "number",
+            "description": "Duración de la cita, en minutos"
+          },
+          "appointmentStatus": {
+            "type": "string",
+            "nullable": true,
+            "description": "Estado actual de la cita"
+          },
+          "currentStartsAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Hora de la cita al pedir el cambio"
+          },
+          "proposedStartsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "WITHDRAWN"
+            ]
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decidedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "decisionNote": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "appointmentId",
+          "stylistId",
+          "stylistName",
+          "stylistColor",
+          "clientName",
+          "serviceNames",
+          "durationMinutes",
+          "appointmentStatus",
+          "currentStartsAt",
+          "proposedStartsAt",
+          "reason",
+          "status",
+          "requestedAt",
+          "decidedAt",
+          "decisionNote"
+        ]
+      },
+      "ManualReminderResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Mensaje ya redactado, con el enlace de confirmación"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "example": "+50255551234"
+          },
+          "whatsappUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Enlace wa.me que abre la conversación con el mensaje escrito"
+          }
+        },
+        "required": [
+          "message",
+          "phone",
+          "whatsappUrl"
+        ]
+      },
+      "IntervalResponse": {
+        "type": "object",
+        "properties": {
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "startsAt",
+          "endsAt"
+        ]
+      },
+      "ShiftDayResponse": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-10-08"
+          },
+          "intervals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntervalResponse"
+            }
+          }
+        },
+        "required": [
+          "date",
+          "intervals"
+        ]
+      },
+      "BlockResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "startsAt",
+          "endsAt",
+          "reason"
+        ]
+      },
+      "StylistShiftsResponse": {
+        "type": "object",
+        "properties": {
+          "stylistId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string",
+            "example": "#EC4899"
+          },
+          "isBookable": {
+            "type": "boolean"
+          },
+          "serviceIds": {
+            "description": "Servicios que hace. Vacío: todos.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShiftDayResponse"
+            }
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlockResponse"
+            }
+          }
+        },
+        "required": [
+          "stylistId",
+          "name",
+          "color",
+          "isBookable",
+          "serviceIds",
+          "days",
+          "blocks"
+        ]
+      },
+      "BlockTimeDto": {
+        "type": "object",
+        "properties": {
+          "stylistId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startsAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "endsAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "example": "Comida"
+          }
+        },
+        "required": [
+          "stylistId",
+          "startsAt",
+          "endsAt"
+        ]
+      },
+      "DecideChangeDto": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string",
+            "maxLength": 500,
+            "example": "Ese hueco ya lo tiene otra clienta"
+          }
+        }
+      },
+      "ReminderSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "LOG",
+              "WHATSAPP",
+              "SMS"
+            ]
+          },
+          "leadHours": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "enabled",
+          "channel",
+          "leadHours"
+        ]
+      },
+      "ReminderRunResponse": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "number"
+          },
+          "failed": {
+            "type": "number"
+          },
+          "skipped": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "sent",
+          "failed",
+          "skipped"
+        ]
+      },
+      "PublicAppointmentResponse": {
+        "type": "object",
+        "properties": {
+          "salonName": {
+            "type": "string"
+          },
+          "clientFirstName": {
+            "type": "string"
+          },
+          "stylistName": {
+            "type": "string"
+          },
+          "serviceNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          },
+          "canConfirm": {
+            "type": "boolean"
+          },
+          "canCancel": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "salonName",
+          "clientFirstName",
+          "stylistName",
+          "serviceNames",
+          "startsAt",
+          "endsAt",
+          "status",
+          "canConfirm",
+          "canCancel"
+        ]
+      },
+      "PublicCancelDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 300
           }
         }
       },

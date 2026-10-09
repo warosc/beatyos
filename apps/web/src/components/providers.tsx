@@ -25,6 +25,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener('storage', storage);
     window.addEventListener('pageshow', restored);
+    // Service worker de la app instalable y de los avisos del sistema. No guarda caché:
+    // si falla al registrarse, la aplicación funciona igual.
+    navigator.serviceWorker?.register('/sw.js').catch(() => undefined);
     return () => {
       window.removeEventListener('storage', storage);
       window.removeEventListener('pageshow', restored);

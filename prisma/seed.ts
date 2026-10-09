@@ -521,10 +521,16 @@ async function seedSalon(salon: DemoSalon, roleIds: Map<string, string>): Promis
   }
 
   // --- Clientas ------------------------------------------------------------
+  // Teléfonos de Guatemala: el recordatorio por WhatsApp los usa tal cual. Pilar va sin
+  // prefijo, como los apunta de verdad la recepción, para que la demo enseñe que se
+  // completa con el del salón.
   const clients = [
-    { local: 'rosa', first: 'Rosa', last: 'Iglesias', phone: '+34600111222' },
-    { local: 'elena', first: 'Elena', last: 'Vidal', phone: '+34600333444' },
-    { local: 'pilar', first: 'Pilar', last: 'Serrano', phone: '+34600555666' },
+    { local: 'rosa', first: 'Rosa', last: 'Iglesias', phone: '+502 5551 1122' },
+    { local: 'elena', first: 'Elena', last: 'Vidal', phone: '+502 5553 3344' },
+    { local: 'pilar', first: 'Pilar', last: 'Serrano', phone: '5555-5566' },
+    { local: 'lucia', first: 'Lucía', last: 'Méndez', phone: '+502 4777 1200' },
+    { local: 'ana', first: 'Ana', last: 'Castillo', phone: '+502 3012 4455' },
+    { local: 'marisol', first: 'Marisol', last: 'Herrera', phone: null },
   ];
 
   for (const client of clients) {
@@ -576,9 +582,273 @@ async function seedSalon(salon: DemoSalon, roleIds: Map<string, string>): Promis
     },
   });
 
+  const booked = await seedAgendaDemo(salon);
+
   console.log(
-    `  · ${name}: ${staff.length} usuarios, ${services.length} servicios, ${products.length} productos, ${clients.length} clientas`,
+    `  · ${name}: ${staff.length} usuarios, ${services.length} servicios, ${products.length} productos, ${clients.length} clientas, ${booked} citas de ejemplo`,
   );
+}
+
+/** Instante de una hora local de Guatemala (UTC-6, sin horario de verano). */
+const guatemalaTime = (day: Date, hour: number, minute = 0): Date =>
+  new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), hour + 6, minute));
+
+/**
+ * Equipo y agenda de demostración.
+ *
+ * Con una sola profesional, la vista por columnas de la agenda no enseña nada: hacen falta
+ * varias, con colores distintos y alguna que no haga todos los servicios, para que la
+ * búsqueda de «cualquier profesional» tenga algo que decidir.
+ *
+ * Las citas solo se crean si el salón no tiene ninguna, y siempre para hoy y mañana en la
+ * hora del salón: así la demo tiene contenido el día que se abra, y volver a sembrar no
+ * duplica ni pisa lo que se haya agendado a mano.
+ */
+async function seedAgendaDemo(salon: DemoSalon): Promise<number> {
+  const { tenantId, slug } = salon;
+
+  const extra = [
+    { key: '2', first: 'Valeria', last: 'Ortiz', color: '#0EA5E9', start: 9, end: 18, skip: [] },
+    // Andrea no hace mechas: la búsqueda de huecos no debe ofrecérsela para un balayage.
+    {
+      key: '3',
+      first: 'Andrea',
+      last: 'López',
+      color: '#22C55E',
+      start: 10,
+      end: 19,
+      skip: ['MEC-B'],
+    },
+  ];
+
+  const catalog = await prisma.service.findMany({
+    where: { tenantId, deletedAt: null },
+    select: { id: true, code: true, durationMinutes: true, bufferMinutes: true, price: true },
+  });
+  const byCode = new Map(catalog.map((service) => [service.code, service]));
+
+  for (const person of extra) {
+    const id = seedId(slug, 'stylist', person.key);
+    await prisma.stylist.upsert({
+      where: { id },
+      update: { tenantId, firstName: person.first, lastName: person.last, color: person.color },
+      create: {
+        id,
+        tenantId,
+        firstName: person.first,
+        lastName: person.last,
+        email: `${person.first.toLowerCase()}@${slug}.es`,
+        color: person.color,
+        commissionRate: '12.00',
+        hiredAt: new Date('2025-01-15'),
+      },
+    });
+
+    if ((await prisma.stylistSchedule.count({ where: { stylistId: id, deletedAt: null } })) === 0) {
+      await prisma.stylistSchedule.createMany({
+        data: [1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+          id: seedId(slug, `schedule-${person.key}`, String(dayOfWeek)),
+          tenantId,
+          stylistId: id,
+          dayOfWeek,
+          startMinutes: person.start * 60,
+          endMinutes: person.end * 60,
+        })),
+      });
+    }
+
+    if (
+      person.skip.length &&
+      (await prisma.stylistService.count({ where: { stylistId: id } })) === 0
+    ) {
+      await prisma.stylistService.createMany({
+        data: catalog
+          .filter((service) => !person.skip.includes(service.code ?? ''))
+          .map((service) => ({ stylistId: id, serviceId: service.id, tenantId })),
+      });
+    }
+  }
+
+  if ((await prisma.appointment.count({ where: { tenantId } })) > 0) return 0;
+
+  const sara = await prisma.stylist.findFirst({
+    where: { tenantId, email: `estilista@${slug}.es` },
+    select: { id: true },
+  });
+  if (!sara) return 0;
+  const stylists = {
+    sara: sara.id,
+    valeria: seedId(slug, 'stylist', '2'),
+    andrea: seedId(slug, 'stylist', '3'),
+  };
+  const client = (local: string) => seedId(slug, 'client', local);
+
+  // Hoy y mañana en Guatemala. Si mañana es domingo —el salón cierra— se usa el lunes.
+  const now = new Date();
+  const today = new Date(now.getTime() - 6 * 3_600_000);
+  const tomorrow = new Date(today.getTime() + 86_400_000);
+  if (tomorrow.getUTCDay() === 0) tomorrow.setTime(tomorrow.getTime() + 86_400_000);
+  const todayIsOpen = today.getUTCDay() !== 0;
+
+  type Plan = {
+    day: Date;
+    hour: number;
+    minute?: number;
+    stylist: keyof typeof stylists;
+    client: string;
+    services: string[];
+    status: 'SCHEDULED' | 'CONFIRMED';
+  };
+  const plan: Plan[] = [
+    ...(todayIsOpen
+      ? ([
+          {
+            day: today,
+            hour: 9,
+            stylist: 'sara',
+            client: 'rosa',
+            services: ['COR-M'],
+            status: 'CONFIRMED',
+          },
+          {
+            day: today,
+            hour: 11,
+            stylist: 'sara',
+            client: 'elena',
+            services: ['COL-R'],
+            status: 'SCHEDULED',
+          },
+          {
+            day: today,
+            hour: 15,
+            stylist: 'sara',
+            client: 'lucia',
+            services: ['PEI-F'],
+            status: 'CONFIRMED',
+          },
+          {
+            day: today,
+            hour: 10,
+            stylist: 'valeria',
+            client: 'ana',
+            services: ['MEC-B'],
+            status: 'CONFIRMED',
+          },
+          {
+            day: today,
+            hour: 14,
+            minute: 30,
+            stylist: 'valeria',
+            client: 'pilar',
+            services: ['COR-M'],
+            status: 'SCHEDULED',
+          },
+          {
+            day: today,
+            hour: 12,
+            stylist: 'andrea',
+            client: 'marisol',
+            services: ['COR-M', 'PEI-F'],
+            status: 'SCHEDULED',
+          },
+        ] satisfies Plan[])
+      : []),
+    {
+      day: tomorrow,
+      hour: 10,
+      stylist: 'sara',
+      client: 'pilar',
+      services: ['COL-R'],
+      status: 'SCHEDULED',
+    },
+    {
+      day: tomorrow,
+      hour: 16,
+      stylist: 'sara',
+      client: 'ana',
+      services: ['COR-M'],
+      status: 'SCHEDULED',
+    },
+    {
+      day: tomorrow,
+      hour: 9,
+      minute: 30,
+      stylist: 'valeria',
+      client: 'rosa',
+      services: ['PEI-F'],
+      status: 'CONFIRMED',
+    },
+    {
+      day: tomorrow,
+      hour: 13,
+      stylist: 'andrea',
+      client: 'elena',
+      services: ['COR-M'],
+      status: 'SCHEDULED',
+    },
+  ];
+
+  const appointmentId = (stylist: string, startsAt: Date) =>
+    seedId(slug, 'appointment', `${stylist}-${startsAt.toISOString()}`);
+
+  let created = 0;
+  for (const item of plan) {
+    const lines = item.services.map((code) => byCode.get(code)).filter((s) => s !== undefined);
+    if (lines.length !== item.services.length) continue;
+    const minutes = lines.reduce((sum, s) => sum + s.durationMinutes + s.bufferMinutes, 0);
+    const startsAt = guatemalaTime(item.day, item.hour, item.minute);
+    const id = appointmentId(item.stylist, startsAt);
+    const total = lines.reduce((sum, s) => sum + Number(s.price), 0).toFixed(2);
+
+    await prisma.appointment.create({
+      data: {
+        id,
+        tenantId,
+        clientId: client(item.client),
+        stylistId: stylists[item.stylist],
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + minutes * 60_000),
+        status: item.status,
+        source: 'PHONE',
+        confirmedAt: item.status === 'CONFIRMED' ? now : null,
+        estimatedTotal: total,
+        currency: 'GTQ',
+        services: {
+          create: lines.map((s, order) => ({
+            id: seedId(slug, 'appointment-line', `${id}-${order}`),
+            tenantId,
+            serviceId: s.id,
+            durationMinutes: s.durationMinutes + s.bufferMinutes,
+            price: s.price,
+            currency: 'GTQ',
+            sortOrder: order,
+          })),
+        },
+      },
+    });
+    created += 1;
+  }
+
+  // Una petición de cambio de Sara esperando a la encargada: es el circuito que la demo
+  // tiene que poder enseñar sin preparar nada.
+  const pendingFor = appointmentId('sara', guatemalaTime(tomorrow, 10));
+  const user = await prisma.user.findFirst({ where: { tenantId, email: `estilista@${slug}.es` } });
+  if (user && (await prisma.appointment.count({ where: { id: pendingFor } })) > 0) {
+    await prisma.appointmentChangeRequest.create({
+      data: {
+        id: seedId(slug, 'change-request', pendingFor),
+        tenantId,
+        appointmentId: pendingFor,
+        stylistId: stylists.sara,
+        requestedBy: user.id,
+        currentStartsAt: guatemalaTime(tomorrow, 10),
+        proposedStartsAt: guatemalaTime(tomorrow, 12),
+        reason: 'La clienta pidió venir a mediodía',
+      },
+    });
+  }
+
+  return created;
 }
 
 async function main(): Promise<void> {
