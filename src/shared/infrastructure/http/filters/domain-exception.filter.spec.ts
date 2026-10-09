@@ -1,4 +1,10 @@
-import { ArgumentsHost, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
 
 import {
   BusinessRuleViolationError,
@@ -217,6 +223,26 @@ describe('GlobalExceptionFilter', () => {
           'traza-123',
         );
       });
+    });
+  });
+
+  describe('registro', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('no escribe el enlace de la clienta, ni en los 4xx ni en los 5xx', () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      const url = '/api/v1/public/appointment-links/EnlaceSecreto123456/cancel';
+
+      captureFor(new ConflictError('APPOINTMENT_ALREADY_CANCELLED', 'ya cancelada'), { url });
+      captureFor(new Error('fallo'), { url, method: 'POST' });
+
+      const written = [...warn.mock.calls, ...error.mock.calls].map((c) => String(c[0]));
+      expect(written).toHaveLength(2);
+      for (const line of written) {
+        expect(line).not.toContain('EnlaceSecreto123456');
+        expect(line).toContain('/public/appointment-links/…/cancel');
+      }
     });
   });
 });

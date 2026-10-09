@@ -29,7 +29,11 @@ import {
   RequestAppointmentChangeUseCase,
   WithdrawChangeRequestUseCase,
 } from './change-request.use-cases';
-import { PrepareManualReminderUseCase, SendDueRemindersUseCase } from './reminder.use-cases';
+import {
+  PrepareManualReminderUseCase,
+  PublicAppointmentLinkUseCase,
+  SendDueRemindersUseCase,
+} from './reminder.use-cases';
 import { LoggingReminderSender } from '../infrastructure/reminders/reminder-senders';
 
 /**
@@ -437,6 +441,91 @@ describe('Agenda: equipo, cambios pedidos, bloqueos y recordatorios', () => {
       expect(prepared.whatsappUrl).toMatch(/^https:\/\/wa\.me\/50255551234\?text=Hola%20Rosa/);
       expect(log.attempts.at(-1)).toMatchObject({ channel: 'MANUAL', status: 'SENT' });
       await expect(sendDue.execute()).resolves.toEqual({ sent: 0, failed: 0, skipped: 0 });
+    });
+
+    describe('recordatorio manual', () => {
+      let manual: PrepareManualReminderUseCase;
+
+      beforeEach(() => {
+        manual = new PrepareManualReminderUseCase(log, appointments, settings, ids, clock, events);
+      });
+
+      it('no se prepara para una cita cancelada', async () => {
+        const cancelled = await book('sara', fri(9));
+        cancelled.cancel('La clienta llamó', NOW, 'recepcion');
+        await appointments.update(cancelled);
+
+        await expect(
+          manual.execute({ appointmentId: cancelled.id, actorId: 'recepcion' }),
+        ).rejects.toMatchObject({ code: 'REMINDER_NOT_APPLICABLE' });
+        expect(log.attempts).toHaveLength(0);
+      });
+
+      it('sin teléfono da el texto para copiarlo, sin enlace de WhatsApp', async () => {
+        const due = await book('sara', fri(9));
+        log.contexts.set(due.id, {
+          tenantId: TENANT,
+          salonName: 'Salón',
+          clientFirstName: 'Marisol',
+          clientPhone: null,
+          stylistName: 'Sara',
+          serviceNames: [],
+        });
+
+        const prepared = await manual.execute({ appointmentId: due.id, actorId: 'recepcion' });
+
+        expect(prepared).toMatchObject({ phone: null, whatsappUrl: null });
+        expect(prepared.message).toContain('Marisol');
+      });
+    });
+
+    describe('enlace de la clienta', () => {
+      let link: PublicAppointmentLinkUseCase;
+
+      beforeEach(() => {
+        link = new PublicAppointmentLinkUseCase(appointments, log, clock, audit);
+      });
+
+      it('confirmar dos veces no es un error y solo deja una constancia', async () => {
+        const due = await book('sara', fri(9));
+
+        await expect(link.confirm(due.id)).resolves.toMatchObject({ status: 'CONFIRMED' });
+        await expect(link.confirm(due.id)).resolves.toMatchObject({
+          status: 'CONFIRMED',
+          canConfirm: false,
+          canCancel: true,
+        });
+        expect(
+          audit.entries.filter((entry) => entry.entityId === due.id && entry.action === 'UPDATE'),
+        ).toHaveLength(1);
+      });
+
+      it('al cancelar queda el motivo que escribió la clienta', async () => {
+        const due = await book('sara', fri(9));
+
+        await link.cancel(due.id, '  Me salió un viaje  ');
+
+        expect((await appointments.findByIdOrFail(due.id)).cancellationReason).toBe(
+          'Cancelada por la clienta desde el recordatorio: Me salió un viaje',
+        );
+      });
+
+      it('una cita que ya pasó no se confirma ni se cancela desde el enlace', async () => {
+        const due = await book('sara', fri(9));
+        clock.setTo(fri(9, 1));
+
+        await expect(link.confirm(due.id)).rejects.toMatchObject({
+          code: 'APPOINTMENT_LINK_EXPIRED',
+        });
+        await expect(link.cancel(due.id)).rejects.toMatchObject({
+          code: 'APPOINTMENT_LINK_EXPIRED',
+        });
+        await expect(link.view(due.id)).resolves.toMatchObject({
+          status: 'SCHEDULED',
+          canConfirm: false,
+          canCancel: false,
+        });
+      });
     });
   });
 });

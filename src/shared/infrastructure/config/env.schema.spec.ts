@@ -72,6 +72,22 @@ describe('validateEnv', () => {
       ).toThrow(/distinto de JWT_ACCESS_SECRET/);
     });
 
+    it('con WhatsApp o SMS exige las tres credenciales de Twilio', () => {
+      // Sin ellas la API arrancaría y fallaría cada envío, en silencio, a las 5 de la mañana.
+      expect(() => validateEnv({ ...baseEnv, REMINDER_CHANNEL: 'whatsapp' })).toThrow(
+        /TWILIO_ACCOUNT_SID[\s\S]*TWILIO_AUTH_TOKEN[\s\S]*TWILIO_FROM/,
+      );
+      expect(
+        validateEnv({
+          ...baseEnv,
+          REMINDER_CHANNEL: 'sms',
+          TWILIO_ACCOUNT_SID: 'AC123',
+          TWILIO_AUTH_TOKEN: 'secreto',
+          TWILIO_FROM: '+15005550006',
+        }).REMINDER_CHANNEL,
+      ).toBe('sms');
+    });
+
     it('valida el formato de los TTL', () => {
       expect(() => validateEnv({ ...baseEnv, JWT_ACCESS_TTL: '15 minutos' })).toThrow(/15m/);
     });

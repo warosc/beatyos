@@ -10,6 +10,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { map, tap, type Observable } from 'rxjs';
 
 import { RequestContextStore } from '../context/request-context';
+import { redactUrl } from './redact-url';
 
 /**
  * Middleware que abre el contexto de petición.
@@ -111,8 +112,7 @@ export class HttpLoggingInterceptor implements NestInterceptor {
     const response = context.switchToHttp().getResponse<Response>();
     const startedAt = Date.now();
     const { correlationId, userId, tenantId } = RequestContextStore.get();
-    // El enlace de la cita es la credencial de la clienta: no se escribe en el registro.
-    const url = request.originalUrl.replace(/(\/public\/appointment-links\/)[^/?]+/, '$1…');
+    const url = redactUrl(request.originalUrl);
 
     // Un canal de avisos en vivo emite durante horas: registrar cada latido llenaría el log
     // de líneas idénticas. Se registra al abrirlo, una vez.

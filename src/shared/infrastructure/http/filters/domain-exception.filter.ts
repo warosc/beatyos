@@ -20,6 +20,7 @@ import {
 } from '../../../domain/errors';
 import { RequestContextStore } from '../../context/request-context';
 import { MissingTenantScopeError } from '../../persistence/prisma/prisma.extensions';
+import { redactUrl } from '../redact-url';
 
 /**
  * Filtro global de errores (ADR-0008).
@@ -85,18 +86,19 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const correlationId = RequestContextStore.correlationId;
 
     const problem = this.toProblemDetails(exception, request, correlationId);
+    const url = redactUrl(request.url);
 
     // Los 5xx son fallos nuestros y se registran enteros, con traza. Los 4xx son
     // comportamiento esperado del cliente y solo dejan una línea: registrarlos con la
     // misma severidad ahogaría los fallos reales entre miles de 404 rutinarios.
     if (problem.status >= 500) {
       this.logger.error(
-        `[${correlationId}] ${request.method} ${request.url} -> ${problem.status} ${problem.code}`,
+        `[${correlationId}] ${request.method} ${url} -> ${problem.status} ${problem.code}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
     } else {
       this.logger.warn(
-        `[${correlationId}] ${request.method} ${request.url} -> ${problem.status} ${problem.code}`,
+        `[${correlationId}] ${request.method} ${url} -> ${problem.status} ${problem.code}`,
       );
     }
 
