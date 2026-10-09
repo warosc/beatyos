@@ -40,6 +40,30 @@ test.describe('el panel del día en Guatemala', () => {
   });
 });
 
+test('pide el cumpleaños con día y mes, sin año', async ({ context, page }) => {
+  await context.addCookies([
+    { name: 'beautyos_access', value: 'e2e-token', domain: '127.0.0.1', path: '/' },
+  ]);
+  let sent: Record<string, unknown> | undefined;
+  await page.route('**/api/clients', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    sent = route.request().postDataJSON() as Record<string, unknown>;
+    return route.fulfill({ status: 201, json: { data: { id: 'client-e2e' } } });
+  });
+  await page.goto('/clientes');
+  await page.getByRole('button', { name: 'Nueva clienta' }).click();
+  await page.getByLabel('Nombre').fill('Rosa');
+  await page.getByLabel('Apellido').fill('Iglesias');
+  await page.getByLabel('Teléfono').fill('+50255555555');
+  await expect(page.getByText('No pedimos el año.')).toBeVisible();
+  await page.getByLabel('Día del cumpleaños').selectOption('17');
+  await page.getByLabel('Mes del cumpleaños').selectOption({ label: 'abril' });
+  await page.getByRole('button', { name: 'Guardar ficha' }).click();
+
+  await expect.poll(() => sent?.birthday).toBe('04-17');
+  expect(sent).not.toHaveProperty('birthDate');
+});
+
 test('permite completar el alta de una clienta', async ({ context, page }) => {
   await context.addCookies([
     { name: 'beautyos_access', value: 'e2e-token', domain: '127.0.0.1', path: '/' },

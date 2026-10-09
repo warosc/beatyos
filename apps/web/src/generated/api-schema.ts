@@ -1902,10 +1902,10 @@ export interface components {
              */
             phone?: string | null;
             /**
-             * Format: date
-             * @example 1988-04-17
+             * @description Cumpleaños como MM-DD: día y mes, sin año. La edad no se pide ni se guarda.
+             * @example 04-17
              */
-            birthDate?: string | null;
+            birthday?: string | null;
             /** @enum {string|null} */
             gender?: "FEMALE" | "MALE" | "OTHER" | "UNDISCLOSED" | null;
             /** @description Preferencias, historial de color, observaciones. */
@@ -1931,10 +1931,11 @@ export interface components {
             fullName: string;
             email: string | null;
             phone: string | null;
-            /** Format: date */
-            birthDate: string | null;
-            /** @description Edad en años cumplidos */
-            age: number | null;
+            /**
+             * @description Día y mes (MM-DD), sin año
+             * @example 04-17
+             */
+            birthday: string | null;
             /** @enum {string|null} */
             gender: "FEMALE" | "MALE" | "OTHER" | "UNDISCLOSED" | null;
             notes: string | null;
@@ -1978,8 +1979,11 @@ export interface components {
              */
             email?: string | null;
             phone?: string | null;
-            /** Format: date */
-            birthDate?: string | null;
+            /**
+             * @description Cumpleaños como MM-DD: día y mes, sin año. La edad no se pide ni se guarda.
+             * @example 04-17
+             */
+            birthday?: string | null;
             /** @enum {string|null} */
             gender?: "FEMALE" | "MALE" | "OTHER" | "UNDISCLOSED" | null;
             notes?: string | null;

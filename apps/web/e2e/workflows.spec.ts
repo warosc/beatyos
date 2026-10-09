@@ -134,7 +134,8 @@ test('inicia sesión correctamente', async ({ page }) => {
 
 test('reserva una cita desde el acceso rápido del Home', async ({ page }) => {
   await authenticated(page);
-  await mockAgenda(page);
+  const writes: { url: string; body: unknown }[] = [];
+  await mockAgenda(page, (url, body) => writes.push({ url, body }));
   await page.route('**/api/reports**', (route) =>
     route.fulfill({
       status: 200,
@@ -163,14 +164,62 @@ test('reserva una cita desde el acceso rápido del Home', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('link', { name: 'Nueva cita' }).click();
   await expect(page.getByRole('heading', { name: 'Nueva cita' })).toBeVisible();
-  // La clienta se busca en el servidor, como en el punto de venta.
+  const wizard = page.getByRole('dialog', { name: 'Nueva cita' });
+  const next = wizard.getByRole('button', { name: 'Siguiente' });
+  // 1. La clienta se busca en el servidor, como en el punto de venta.
+  await expect(next).toBeDisabled();
   await page.getByRole('combobox', { name: 'Clienta' }).click();
   await page.getByRole('option', { name: /Ana Prueba/ }).click();
-  await page.getByLabel('Profesional').selectOption(stylists[0].id);
-  await page.getByLabel('Fecha y hora').fill('2026-09-03T10:00');
-  await page.locator('input[name="serviceIds"]').check();
-  await page.getByRole('button', { name: 'Reservar cita' }).click();
+  await next.click();
+  // 2. Servicios.
+  await wizard.getByRole('checkbox', { name: /Corte/ }).check();
+  await expect(wizard).toContainText(/1 servicio/);
+  await next.click();
+  // 3. Profesional y hora: sin huecos en el doble de la API, se escribe la hora.
+  await wizard.getByRole('button', { name: /María/ }).click();
+  await wizard.getByLabel('Otra hora').fill('10:00');
+  await next.click();
+  // 4. Confirmar.
+  await expect(wizard).toContainText('Revisa la cita');
+  await wizard.getByLabel('Nota interna (opcional)').fill('Prefiere sin secador');
+  await wizard.getByRole('button', { name: 'Reservar cita' }).click();
   await expect(page.getByRole('heading', { name: 'Nueva cita' })).not.toBeVisible();
+  expect(writes.find((x) => x.url.endsWith('/api/agenda'))?.body).toMatchObject({
+    clientId: client.id,
+    stylistId: stylists[0].id,
+    serviceIds: [service.id],
+    source: 'STAFF',
+    internalNotes: 'Prefiere sin secador',
+  });
+});
+
+test.describe('agendar desde el teléfono', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('con un menú largo los botones del asistente siguen a la vista', async ({ page }) => {
+    await authenticated(page);
+    await mockAgenda(page);
+    const menu = Array.from({ length: 30 }, (_, index) => ({
+      ...service,
+      id: `svc-${index}`,
+      name: `Servicio ${index + 1}`,
+    }));
+    await page.route('**/api/agenda?resource=services**', (route) =>
+      route.fulfill({ json: { data: menu } }),
+    );
+    await page.goto('/agenda?new=1');
+    const wizard = page.getByRole('dialog', { name: 'Nueva cita' });
+    await page.getByRole('combobox', { name: 'Clienta' }).click();
+    await page.getByRole('option', { name: /Ana Prueba/ }).click();
+    await wizard.getByRole('button', { name: 'Siguiente' }).click();
+
+    // El último servicio está al fondo de la lista; el botón no se va con él.
+    await wizard.getByRole('checkbox', { name: /Servicio 30/ }).check();
+    await expect(wizard.getByRole('button', { name: 'Siguiente' })).toBeInViewport();
+    // Y el buscador encuentra sin recorrer la lista.
+    await wizard.getByLabel('Buscar servicio').fill('servicio 7');
+    await expect(wizard.getByRole('checkbox')).toHaveCount(1);
+  });
 });
 
 test('cancela una cita y cambia de estilista', async ({ page }) => {

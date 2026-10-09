@@ -17,8 +17,8 @@ import {
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ClientCombobox, type PosClient } from '@/features/sales/client-combobox';
 import { RegisterServiceDialog } from '@/features/service-tickets/register-service-dialog';
+import { BookingWizard } from './booking-wizard';
 import { STATUS_LABEL, type ServiceTicket } from '@/features/service-tickets/types';
 import { PendingRegisterBanner } from '@/features/stylist-day/pending-register-banner';
 import { MY_DAY_KEY } from '@/features/stylist-day/use-my-day';
@@ -30,7 +30,6 @@ import {
   type Service,
   type Stylist,
 } from './types';
-import { money } from '@/lib/utils';
 import { LoadError } from '@/components/ui/states';
 import { DialogClose } from '@/components/ui/dialog-close';
 
@@ -39,7 +38,6 @@ const dayMs = 86_400_000;
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 const isoDay = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 async function get<T>(resource: string, params = '') {
   const response = await sessionFetch(`/api/agenda?resource=${resource}${params}`);
   if (!response.ok) throw new Error('No pudimos cargar la agenda.');
@@ -314,7 +312,7 @@ export function AgendaBoard({
         </div>
       </Card>
       {creating && (canBookAny || canBookOwn) && (
-        <BookingForm
+        <BookingWizard
           initialClientId={initialClientId}
           stylists={stylists.data ?? []}
           services={services.data ?? []}
@@ -737,186 +735,6 @@ function RescheduleSection({
       >
         {chosen ? `Mover a las ${hourOf(chosen)}` : 'Elige una hora'}
       </Button>
-    </div>
-  );
-}
-
-function BookingForm({
-  initialClientId,
-  stylists,
-  services,
-  ownStylist,
-  onClose,
-  onSaved,
-}: {
-  initialClientId?: string;
-  stylists: Stylist[];
-  services: Service[];
-  /** Con ámbito propio: la ficha a bloquear, `null` si no tiene una vinculada, `undefined` si no aplica. */
-  ownStylist?: Stylist | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  // La clienta se busca en el servidor, como en el punto de venta: cargarlas todas para un
-  // `<select>` deja de servir en cuanto el salón pasa de unas decenas. Si se llega desde
-  // la ficha de una clienta, viene ya elegida; `undefined` es «aún no la tocaron».
-  const [picked, setPicked] = useState<PosClient | null | undefined>(undefined);
-  const initialClient = useQuery({
-    queryKey: ['booking-client', initialClientId],
-    enabled: Boolean(initialClientId),
-    queryFn: async () => {
-      const response = await sessionFetch(`/api/clients/${encodeURIComponent(initialClientId!)}`);
-      if (!response.ok) return null;
-      return ((await response.json()) as { data: PosClient }).data;
-    },
-  });
-  const client = picked === undefined ? (initialClient.data ?? null) : picked;
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    const data = new FormData(event.currentTarget);
-    const clientId = client?.id ?? '';
-    const stylistId = String(data.get('stylistId') ?? '');
-    const serviceIds = data.getAll('serviceIds');
-    if (!uuidPattern.test(clientId) || !uuidPattern.test(stylistId)) {
-      setBusy(false);
-      setError(
-        client ? 'Selecciona la profesional que la atenderá.' : 'Busca y elige a la clienta.',
-      );
-      return;
-    }
-    if (serviceIds.length === 0) {
-      setBusy(false);
-      setError('Selecciona al menos un servicio.');
-      return;
-    }
-    const response = await sessionFetch('/api/agenda', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clientId,
-        stylistId,
-        startsAt: new Date(String(data.get('startsAt'))).toISOString(),
-        serviceIds,
-        source: 'STAFF',
-      }),
-    });
-    setBusy(false);
-    if (!response.ok) {
-      const body = (await response.json()) as {
-        detail?: string;
-        message?: string;
-        errors?: { message: string }[];
-      };
-      setError(
-        body.errors?.map((item) => item.message).join('. ') ??
-          body.detail ??
-          body.message ??
-          'No pudimos reservar la cita.',
-      );
-      return;
-    }
-    onSaved();
-  }
-  const field = 'h-11 w-full rounded-xl border bg-background px-3 text-sm';
-  const dialogRef = useDialog(onClose);
-  return (
-    <div
-      ref={dialogRef}
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Nueva cita"
-      className="fixed inset-0 z-50 grid place-items-end bg-black/40 sm:place-items-center sm:p-6"
-    >
-      <form
-        onSubmit={submit}
-        onChange={() => error && setError('')}
-        // Con muchos servicios el formulario no cabe en un teléfono: se desplaza dentro.
-        className="max-h-[92dvh] w-full max-w-xl space-y-4 overflow-y-auto rounded-t-3xl bg-card p-6 sm:rounded-2xl"
-      >
-        <div className="flex justify-between">
-          <h2 className="font-display text-2xl font-semibold">Nueva cita</h2>
-          <DialogClose onClose={onClose} />
-        </div>
-        <div className="space-y-1.5 text-sm font-semibold">
-          <span>Clienta</span>
-          <ClientCombobox
-            value={client}
-            onChange={setPicked}
-            label="Clienta"
-            placeholder="Buscar por nombre o teléfono"
-          />
-        </div>
-        {ownStylist !== undefined ? (
-          <label className="block text-sm font-semibold">
-            Profesional
-            {ownStylist ? (
-              <>
-                <p className={`${field} mt-1.5 flex items-center bg-muted text-muted-foreground`}>
-                  {ownStylist.displayName} (tú)
-                </p>
-                <input type="hidden" name="stylistId" value={ownStylist.id} />
-              </>
-            ) : (
-              <p role="alert" className="mt-1.5 text-sm text-danger">
-                Tu cuenta no tiene una ficha de profesional vinculada. Pide a la propietaria que la
-                enlace antes de agendar.
-              </p>
-            )}
-          </label>
-        ) : (
-          <label className="block text-sm font-semibold">
-            Profesional
-            <select required name="stylistId" className={`${field} mt-1.5`}>
-              <option value="">Selecciona…</option>
-              {stylists
-                .filter((x) => x.isBookable)
-                .map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.displayName}
-                  </option>
-                ))}
-            </select>
-          </label>
-        )}
-        <label className="block text-sm font-semibold">
-          Fecha y hora
-          <input required name="startsAt" type="datetime-local" className={`${field} mt-1.5`} />
-        </label>
-        <fieldset>
-          <legend className="text-sm font-semibold">Servicios</legend>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {services
-              .filter((x) => x.isBookable)
-              .map((x) => (
-                <label key={x.id} className="flex gap-2 rounded-xl border p-3 text-sm">
-                  <input type="checkbox" name="serviceIds" value={x.id} />
-                  <span>
-                    {x.name}
-                    <small className="block text-muted-foreground">
-                      {x.blockedMinutes} min · {money(x.priceWithTax)}
-                    </small>
-                  </span>
-                </label>
-              ))}
-          </div>
-        </fieldset>
-        {error && (
-          <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
-            {error}
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button disabled={busy}>{busy ? 'Reservando…' : 'Reservar cita'}</Button>
-        </div>
-      </form>
     </div>
   );
 }

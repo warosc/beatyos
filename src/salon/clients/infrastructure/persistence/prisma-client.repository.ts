@@ -19,6 +19,7 @@ import type {
   ClientRepository,
   ClientSortField,
 } from '../../domain/client.repository';
+import { Birthday } from '../../domain/birthday.vo';
 
 /**
  * Adaptador Prisma de clientas.
@@ -192,7 +193,8 @@ export class PrismaClientRepository
       lastName: client.name.lastName,
       email: client.email?.value ?? null,
       phone: client.phone?.value ?? null,
-      birthDate: client.birthDate,
+      birthMonth: client.birthday?.month ?? null,
+      birthDay: client.birthday?.day ?? null,
       gender: client.gender,
       notes: client.notes,
       allergies: client.allergies,
@@ -219,7 +221,10 @@ export class PrismaClientRepository
       name: PersonName.create(row.firstName, row.lastName),
       email: Email.createOptional(row.email),
       phone: Phone.createOptional(row.phone),
-      birthDate: row.birthDate,
+      birthday:
+        row.birthMonth !== null && row.birthDay !== null
+          ? Birthday.create(row.birthMonth, row.birthDay)
+          : null,
       gender: row.gender,
       notes: row.notes,
       allergies: row.allergies,

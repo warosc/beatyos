@@ -30,6 +30,8 @@ export interface Stylist {
   displayName: string;
   color: string;
   isBookable: boolean;
+  /** Servicios que hace. Sin ninguno registrado, hace de todo (así lo entiende la API). */
+  skills?: { serviceId: string }[];
 }
 export interface Service {
   id: string;
@@ -38,9 +40,5 @@ export interface Service {
   priceWithTax: string;
   currency: string;
   isBookable: boolean;
-}
-export interface AgendaClient {
-  id: string;
-  fullName: string;
-  phone: string | null;
+  categoryId?: string | null;
 }

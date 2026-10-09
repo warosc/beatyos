@@ -21,6 +21,7 @@ import { FormulaGallery } from './formula-gallery';
 import { ServiceHistory } from './service-history';
 import type { Client } from './types';
 import { money } from '@/lib/utils';
+import { formatBirthday } from '@/lib/birthday';
 
 export function ClientDetail({ client }: { client: Client }) {
   const { can } = useAccess();
@@ -101,13 +102,10 @@ export function ClientDetail({ client }: { client: Client }) {
                 {client.city}
               </p>
             )}
-            {client.birthDate && (
+            {client.birthday && (
               <p className="flex items-center gap-3">
                 <Cake className="text-muted-foreground" size={18} />
-                {new Intl.DateTimeFormat('es-GT', { day: 'numeric', month: 'long' }).format(
-                  new Date(`${client.birthDate}T00:00:00`),
-                )}
-                {client.age !== null && ` · ${client.age} años`}
+                Cumple el {formatBirthday(client.birthday)}
               </p>
             )}
           </div>

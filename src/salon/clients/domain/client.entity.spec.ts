@@ -3,6 +3,7 @@ import { Email, PersonName, Phone } from '@shared/domain/value-objects/contact.v
 import { Money } from '@shared/domain/value-objects/money.vo';
 
 import { Client } from './client.entity';
+import { Birthday } from './birthday.vo';
 
 describe('Client', () => {
   const NOW = new Date('2026-09-02T10:00:00.000Z');
@@ -45,10 +46,6 @@ describe('Client', () => {
       const client = create({ email: null, phone: Phone.create('+34600111222') });
       expect(client.phone?.value).toBe('+34600111222');
       expect(client.email).toBeNull();
-    });
-
-    it('rechaza una fecha de nacimiento futura', () => {
-      expect(() => create({ birthDate: new Date('2030-01-01') })).toThrow(DomainValidationError);
     });
 
     it('sella la fecha al otorgar el consentimiento comercial', () => {
@@ -227,32 +224,23 @@ describe('Client', () => {
     });
   });
 
-  describe('edad y cumpleaños', () => {
-    it('calcula la edad en años cumplidos', () => {
-      const client = create({ birthDate: new Date('1988-04-17T00:00:00.000Z') });
-      expect(client.ageAt(NOW)).toBe(38);
-    });
-
-    it('no cuenta el año en curso si aún no ha cumplido', () => {
-      // Sin este ajuste, quien cumple en diciembre aparecería un año mayor durante once
-      // meses del año.
-      const client = create({ birthDate: new Date('1988-12-31T00:00:00.000Z') });
-      expect(client.ageAt(NOW)).toBe(37);
-    });
-
-    it('devuelve null si no consta la fecha', () => {
-      expect(create().ageAt(NOW)).toBeNull();
+  describe('cumpleaños', () => {
+    it('guarda día y mes, sin año: no hay edad que calcular', () => {
+      const client = create({ birthday: Birthday.create(4, 17) });
+      expect(client.birthday?.toString()).toBe('04-17');
+      expect(client).not.toHaveProperty('ageAt');
     });
 
     it('detecta cumpleaños próximos', () => {
-      const client = create({ birthDate: new Date('1990-09-10T00:00:00.000Z') });
-      expect(client.hasBirthdayWithin(30, NOW)).toBe(true);
-      expect(client.hasBirthdayWithin(3, NOW)).toBe(false);
+      const reference = new Date(2026, 8, 3);
+      const client = create({ birthday: Birthday.create(9, 10) });
+      expect(client.hasBirthdayWithin(30, reference)).toBe(true);
+      expect(client.hasBirthdayWithin(3, reference)).toBe(false);
     });
 
     it('cruza el fin de año al buscar cumpleaños próximos', () => {
-      const december = new Date('2026-12-28T00:00:00.000Z');
-      const client = create({ birthDate: new Date('1990-01-05T00:00:00.000Z') });
+      const december = new Date(2026, 11, 28);
+      const client = create({ birthday: Birthday.create(1, 5) });
 
       // En diciembre hay que poder preparar las felicitaciones de enero.
       expect(client.hasBirthdayWithin(15, december)).toBe(true);
@@ -267,7 +255,7 @@ describe('Client', () => {
     it('destruye los datos personales y conserva las métricas', () => {
       const client = create({
         phone: Phone.create('+34600111222'),
-        birthDate: new Date('1988-04-17'),
+        birthday: Birthday.create(4, 17),
         allergies: 'Alergia a la PPD',
         addressLine: 'Calle Mayor 1',
         city: 'Madrid',
@@ -280,7 +268,7 @@ describe('Client', () => {
       expect(client.name.firstName).toBe('Anónimo');
       expect(client.email).toBeNull();
       expect(client.phone).toBeNull();
-      expect(client.birthDate).toBeNull();
+      expect(client.birthday).toBeNull();
       expect(client.addressLine).toBeNull();
       expect(client.notes).toBeNull();
       // Las alergias también se borran: son dato de salud, la categoría más protegida

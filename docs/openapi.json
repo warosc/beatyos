@@ -6966,11 +6966,12 @@
             "example": "+34600111222",
             "description": "Obligatorio si no se indica correo."
           },
-          "birthDate": {
-            "format": "date",
+          "birthday": {
             "type": "string",
             "nullable": true,
-            "example": "1988-04-17"
+            "pattern": "^(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+            "example": "04-17",
+            "description": "Cumpleaños como MM-DD: día y mes, sin año. La edad no se pide ni se guarda."
           },
           "gender": {
             "nullable": true,
@@ -7044,15 +7045,11 @@
             "type": "string",
             "nullable": true
           },
-          "birthDate": {
+          "birthday": {
             "type": "string",
             "nullable": true,
-            "format": "date"
-          },
-          "age": {
-            "type": "number",
-            "nullable": true,
-            "description": "Edad en años cumplidos"
+            "example": "04-17",
+            "description": "Día y mes (MM-DD), sin año"
           },
           "gender": {
             "type": "string",
@@ -7143,8 +7140,7 @@
           "fullName",
           "email",
           "phone",
-          "birthDate",
-          "age",
+          "birthday",
           "gender",
           "notes",
           "allergies",
@@ -7187,10 +7183,12 @@
             "nullable": true,
             "maxLength": 20
           },
-          "birthDate": {
-            "format": "date",
+          "birthday": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "pattern": "^(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+            "example": "04-17",
+            "description": "Cumpleaños como MM-DD: día y mes, sin año. La edad no se pide ni se guarda."
           },
           "gender": {
             "nullable": true,
