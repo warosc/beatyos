@@ -96,9 +96,7 @@ export function ChangeRequestsInbox({ onDone }: { onDone: (message: string) => v
                   {when(request.currentStartsAt)}
                 </span>
                 <ArrowRight size={14} />
-                <span className="font-semibold">
-                  {when(request.proposedStartsAt)}
-                </span>
+                <span className="font-semibold">{when(request.proposedStartsAt)}</span>
                 <span className="text-muted-foreground">· {request.durationMinutes} min</span>
               </p>
               {request.reason && <p className="mt-1 text-muted-foreground">«{request.reason}»</p>}
@@ -179,9 +177,7 @@ export function MyChangeRequests() {
               </div>
               <p className="flex flex-wrap items-center gap-1.5 tabular-nums text-muted-foreground">
                 {when(request.currentStartsAt)} <ArrowRight size={13} />
-                <span className="text-foreground">
-                  {when(request.proposedStartsAt)}
-                </span>
+                <span className="text-foreground">{when(request.proposedStartsAt)}</span>
               </p>
               {request.decisionNote && <p>«{request.decisionNote}»</p>}
               {request.status === 'PENDING' && (

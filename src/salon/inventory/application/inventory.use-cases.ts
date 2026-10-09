@@ -392,6 +392,17 @@ export class ReceiveStockUseCase implements UseCase<ReceiveStockInput, ReceiveSt
         );
       }
 
+      // Y al revés: un lote en un producto que no los lleva sería un lote fantasma. Las
+      // salidas de ese producto no descuentan lotes, así que quedaría con existencias y
+      // caducidad para siempre, y saldría en las alertas de vencimiento sin motivo.
+      if (!product.tracksBatches && (input.batchNumber || input.expiresAt)) {
+        throw new BusinessRuleViolationError(
+          'PRODUCT_DOES_NOT_TRACK_BATCHES',
+          `${product.name} no se traza por lote: recíbalo sin número de lote ni vencimiento`,
+          { productId: product.id },
+        );
+      }
+
       const batch = input.batchNumber
         ? await this.receiveIntoBatch({ product, input, unitCost, now })
         : null;

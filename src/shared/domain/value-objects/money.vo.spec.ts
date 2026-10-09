@@ -96,6 +96,20 @@ describe('Money', () => {
       expect(Money.fromDecimal('100.00', 'EUR').percentage(0).isZero()).toBe(true);
     });
 
+    it('separa el impuesto que va dentro de un importe', () => {
+      expect(Money.fromDecimal('112.00', 'GTQ').includedTax(12).toDecimalString()).toBe('12.00');
+      // 45,50 / 1,12 = 40,625 → base 40,63 (half-up) e impuesto 4,87: suman el importe exacto.
+      expect(Money.fromDecimal('45.50', 'GTQ').includedTax(12).toDecimalString()).toBe('4.87');
+      expect(Money.fromDecimal('100.00', 'GTQ').includedTax(0).isZero()).toBe(true);
+    });
+
+    it('el impuesto incluido se desvía como mucho medio céntimo del exacto', () => {
+      for (let cents = 1; cents <= 5_000; cents++) {
+        const tax = Money.fromMinorUnits(cents, 'GTQ').includedTax(12);
+        expect(Math.abs(tax.minorUnits - (cents * 12) / 112)).toBeLessThanOrEqual(0.5);
+      }
+    });
+
     it('niega y toma valor absoluto', () => {
       const amount = Money.fromDecimal('12.50', 'EUR');
       expect(amount.negate().toDecimalString()).toBe('-12.50');

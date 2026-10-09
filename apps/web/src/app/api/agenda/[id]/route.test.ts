@@ -44,7 +44,12 @@ describe('cambios sobre una cita', () => {
     expect(calledUrl().pathname).toMatch(/\/appointments\/a1\/start$/);
   });
 
-  it.each(['', 'action=reschedule', 'action=delete'])(
+  it.each(['confirm', 'complete', 'no-show'])('pasa la cita a su estado (%s)', async (action) => {
+    await patch('a1', `action=${action}`);
+    expect(calledUrl().pathname).toMatch(new RegExp(`/appointments/a1/${action}$`));
+  });
+
+  it.each(['', 'action=reschedule', 'action=delete', 'action=constructor'])(
     'reprograma en cualquier otro caso (%s)',
     async (query) => {
       await patch('a1', query);

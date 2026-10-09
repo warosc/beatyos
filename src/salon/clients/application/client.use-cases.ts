@@ -19,6 +19,7 @@ import {
   type ClientRepository,
   type ClientSortField,
 } from '../domain/client.repository';
+import { Birthday } from '../domain/birthday.vo';
 
 /**
  * Casos de uso de clientas.
@@ -37,7 +38,8 @@ export interface CreateClientInput {
   readonly lastName: string;
   readonly email?: string | null;
   readonly phone?: string | null;
-  readonly birthDate?: Date | null;
+  /** `MM-DD`: día y mes, sin año. */
+  readonly birthday?: string | null;
   readonly gender?: GenderValue | null;
   readonly notes?: string | null;
   readonly allergies?: string | null;
@@ -86,7 +88,7 @@ export class CreateClientUseCase implements UseCase<CreateClientInput, Client> {
       name: PersonName.create(input.firstName, input.lastName),
       email,
       phone: Phone.createOptional(input.phone),
-      birthDate: input.birthDate ?? null,
+      birthday: Birthday.parseOptional(input.birthday),
       gender: input.gender ?? null,
       notes: input.notes ?? null,
       allergies: input.allergies ?? null,
@@ -118,7 +120,8 @@ export interface UpdateClientInput {
   readonly lastName?: string;
   readonly email?: string | null;
   readonly phone?: string | null;
-  readonly birthDate?: Date | null;
+  /** `MM-DD`: día y mes, sin año. */
+  readonly birthday?: string | null;
   readonly gender?: GenderValue | null;
   readonly notes?: string | null;
   readonly allergies?: string | null;
@@ -161,7 +164,7 @@ export class UpdateClientUseCase implements UseCase<UpdateClientInput, Client> {
             : undefined,
         email: input.email !== undefined ? Email.createOptional(input.email) : undefined,
         phone: input.phone !== undefined ? Phone.createOptional(input.phone) : undefined,
-        birthDate: input.birthDate,
+        birthday: input.birthday !== undefined ? Birthday.parseOptional(input.birthday) : undefined,
         gender: input.gender,
         notes: input.notes,
         allergies: input.allergies,

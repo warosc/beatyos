@@ -6,11 +6,13 @@ import { usePagedList } from '@/lib/use-paged-list';
 import { loadOptions } from '@/lib/pagination';
 import { Pagination } from '@/components/ui/pagination';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trophy, X } from 'lucide-react';
+import { Plus, Trophy } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { money } from '@/lib/utils';
+import { LoadError } from '@/components/ui/states';
+import { DialogClose } from '@/components/ui/dialog-close';
 
 type Metric = 'SERVICE_REVENUE' | 'PRODUCT_REVENUE';
 type GoalStatus = 'ACTIVE' | 'ACHIEVED' | 'EXPIRED';
@@ -40,6 +42,7 @@ export function GoalsBoard() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
+  const [cancelError, setCancelError] = useState('');
   const goals = usePagedList<GoalItem>('goals', `/api/goals?limit=20&page=${page}`);
   const stylists = useQuery({
     queryKey: ['stylists'],
@@ -55,7 +58,16 @@ export function GoalsBoard() {
 
   async function cancelGoal(id: string) {
     if (!window.confirm('¿Cancelar esta meta?')) return;
-    await sessionFetch(`/api/goals/${id}`, { method: 'DELETE' });
+    setCancelError('');
+    const response = await sessionFetch(`/api/goals/${id}`, { method: 'DELETE' });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as {
+        detail?: string;
+        message?: string;
+      };
+      setCancelError(body.detail ?? body.message ?? 'No pudimos cancelar la meta.');
+      return;
+    }
     await refresh();
   }
 
@@ -76,12 +88,14 @@ export function GoalsBoard() {
           </Button>
         )}
       </div>
+      {cancelError && (
+        <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
+          {cancelError}
+        </p>
+      )}
       {goals.isPending && <p role="status">Cargando metas…</p>}
       {goals.error && (
-        <p role="alert">
-          No se pudieron cargar las metas.{' '}
-          <button onClick={() => goals.refetch()}>Reintentar</button>
-        </p>
+        <LoadError message="No se pudieron cargar las metas." onRetry={() => goals.refetch()} />
       )}
       {!goals.isPending && !goals.error && !goals.data?.length && (
         <p className="py-10 text-center text-sm text-muted-foreground">
@@ -218,12 +232,10 @@ function GoalForm({
       >
         <div className="flex justify-between">
           <h2 className="font-display text-2xl font-semibold">Nueva meta</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar">
-            <X />
-          </button>
+          <DialogClose onClose={onClose} />
         </div>
         <label className="block text-sm font-semibold">
-          Estilista
+          Profesional
           <select required name="stylistId" className={input}>
             <option value="">Selecciona…</option>
             {stylists.map((item) => (
@@ -241,15 +253,23 @@ function GoalForm({
           </select>
         </label>
         <label className="block text-sm font-semibold">
-          Objetivo (Q)
+          Objetivo (Q, sin IVA)
           <input
             required
             type="number"
             min="0.01"
             step="0.01"
+            inputMode="decimal"
             name="targetAmount"
+            aria-describedby="goal-target-hint"
             className={input}
           />
+          <span
+            id="goal-target-hint"
+            className="mt-1 block text-xs font-normal text-muted-foreground"
+          >
+            Se mide con lo vendido sin el IVA, igual que las comisiones.
+          </span>
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block text-sm font-semibold">
@@ -266,7 +286,7 @@ function GoalForm({
           <input
             required
             name="rewardDescription"
-            placeholder="Ej. Gift card Q200 Walmart"
+            placeholder="Ej. Tarjeta de regalo de Q200"
             className={input}
           />
         </label>

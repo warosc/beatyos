@@ -1,6 +1,9 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, Mail } from 'lucide-react';
 import { ForgotPasswordForm } from './forgot-password-form';
+
+export const metadata: Metadata = { title: 'Recuperar contraseña' };
 
 export default function ForgotPasswordPage() {
   return (

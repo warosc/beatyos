@@ -8,6 +8,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -59,11 +60,17 @@ export class CreateClientDto {
   @Transform(trim)
   phone?: string | null;
 
-  @ApiPropertyOptional({ example: '1988-04-17', format: 'date' })
+  @ApiPropertyOptional({
+    example: '04-17',
+    nullable: true,
+    description: 'Cumpleaños como MM-DD: día y mes, sin año. La edad no se pide ni se guarda.',
+  })
   @IsOptional()
-  @Type(() => Date)
-  @IsDate()
-  birthDate?: Date | null;
+  @IsString()
+  @Matches(/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, {
+    message: 'El cumpleaños se indica como MM-DD, p. ej. 04-17',
+  })
+  birthday?: string | null;
 
   @ApiPropertyOptional({ enum: GENDERS })
   @IsOptional()
@@ -159,11 +166,17 @@ export class UpdateClientDto {
   @MaxLength(20)
   phone?: string | null;
 
-  @ApiPropertyOptional({ format: 'date', nullable: true })
+  @ApiPropertyOptional({
+    example: '04-17',
+    nullable: true,
+    description: 'Cumpleaños como MM-DD: día y mes, sin año. La edad no se pide ni se guarda.',
+  })
   @IsOptional()
-  @Type(() => Date)
-  @IsDate()
-  birthDate?: Date | null;
+  @IsString()
+  @Matches(/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, {
+    message: 'El cumpleaños se indica como MM-DD, p. ej. 04-17',
+  })
+  birthday?: string | null;
 
   @ApiPropertyOptional({ enum: GENDERS, nullable: true })
   @IsOptional()
@@ -279,8 +292,8 @@ export class ClientResponse {
   @ApiProperty() fullName!: string;
   @ApiProperty({ nullable: true }) email!: string | null;
   @ApiProperty({ nullable: true }) phone!: string | null;
-  @ApiProperty({ nullable: true, format: 'date' }) birthDate!: string | null;
-  @ApiProperty({ nullable: true, description: 'Edad en años cumplidos' }) age!: number | null;
+  @ApiProperty({ nullable: true, example: '04-17', description: 'Día y mes (MM-DD), sin año' })
+  birthday!: string | null;
   @ApiProperty({ enum: GENDERS, nullable: true }) gender!: string | null;
   @ApiProperty({ nullable: true }) notes!: string | null;
   @ApiProperty({ nullable: true, description: 'Consultar SIEMPRE antes de aplicar químicos' })
@@ -328,8 +341,7 @@ export class ClientResponse {
       fullName: client.name.full,
       email: client.email?.value ?? null,
       phone: client.phone?.value ?? null,
-      birthDate: client.birthDate?.toISOString().slice(0, 10) ?? null,
-      age: client.ageAt(now),
+      birthday: client.birthday?.toString() ?? null,
       gender: client.gender,
       notes: client.notes,
       allergies: client.allergies,
@@ -351,8 +363,7 @@ export class ClientResponse {
     if (!includeSensitive) {
       response.email = null;
       response.phone = null;
-      response.birthDate = null;
-      response.age = null;
+      response.birthday = null;
       response.notes = null;
       response.addressLine = null;
       response.city = null;

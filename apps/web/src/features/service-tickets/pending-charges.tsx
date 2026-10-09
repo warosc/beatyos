@@ -14,6 +14,7 @@ import { loadPage } from '@/lib/pagination';
 import { sessionFetch } from '@/lib/session-fetch';
 import { useDialog } from '@/lib/use-dialog';
 import { money, problem, type ServiceTicket } from './types';
+import { LoadError } from '@/components/ui/states';
 
 const pendingUrl = (page: number) =>
   `/api/service-tickets?status=PENDING&sort=createdAt:asc&limit=50&page=${page}`;
@@ -107,7 +108,7 @@ export function PendingCharges({ cashOpen }: { cashOpen: boolean }) {
             )}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Registrados por las estilistas al terminar cada servicio.
+            Registrados por las profesionales al terminar cada servicio.
           </p>
         </div>
       </div>
@@ -117,10 +118,11 @@ export function PendingCharges({ cashOpen }: { cashOpen: boolean }) {
         </p>
       )}
       {pending.error ? (
-        <p role="alert" className="p-5 text-sm">
-          No se pudieron cargar los servicios pendientes.{' '}
-          <button onClick={() => pending.refetch()}>Reintentar</button>
-        </p>
+        <LoadError
+          className="m-5"
+          message="No se pudieron cargar los servicios pendientes."
+          onRetry={() => pending.refetch()}
+        />
       ) : tickets.length ? (
         <div className="divide-y">
           {tickets.map((t) => {
@@ -259,7 +261,10 @@ function CancelDialog({
       aria-label="Anular servicio"
       className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
     >
-      <form onSubmit={submit} className="w-full max-w-md space-y-4 rounded-2xl bg-card p-6">
+      <form
+        onSubmit={submit}
+        className="max-h-[92dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-card p-6"
+      >
         <h2 className="font-display text-2xl font-semibold">Anular servicio</h2>
         <p className="text-sm text-muted-foreground">
           {ticket.clientName} · {ticket.lines.map((l) => l.name).join(', ')}

@@ -2,10 +2,11 @@
  * Cuenta del punto de venta: lógica pura, sin React.
  *
  * Los importes van en céntimos enteros y se redondean igual que la factura del servidor
- * (`invoice.entity.ts`): bruto = precio × cantidad, neto = bruto − descuento, IVA sobre el
- * neto, cada paso redondeado al céntimo. Si la pantalla sumara de otra forma, el cobro
- * exacto que exige la API fallaría por un céntimo.
+ * (`invoice.entity.ts`, ADR-0021): el precio ya lleva el IVA dentro, así que bruto = precio ×
+ * cantidad, total = bruto − descuento, y el IVA se separa de ese total. Si la pantalla sumara
+ * de otra forma, el cobro exacto que exige la API fallaría por un céntimo.
  */
+import { includedTax } from '@/lib/tax';
 
 export type ItemKind = 'SERVICE' | 'PRODUCT';
 
@@ -13,7 +14,7 @@ export interface SaleItem {
   kind: ItemKind;
   id: string;
   name: string;
-  /** Precio unitario sin IVA, como lo devuelve la API. */
+  /** Precio unitario con el IVA dentro, como lo devuelve la API: lo que paga la clienta. */
   price: string;
   taxRate: number | string;
   color?: string | null;
@@ -28,13 +29,17 @@ export interface CartLine {
   item: SaleItem;
   quantity: number;
   stylistId: string | null;
+  /** Lo que deja de pagar la clienta, con el IVA dentro, como lo guarda la API. */
   discountCents: number;
 }
 
 export interface LineAmounts {
+  /** Precio × cantidad, con IVA: lo que pagaría la clienta sin descuento. */
   grossCents: number;
   discountCents: number;
+  /** Base sin IVA: sobre ella van las comisiones. */
   netCents: number;
+  /** IVA que va dentro del total. */
   taxCents: number;
   totalCents: number;
 }
@@ -49,17 +54,14 @@ export const fromCents = (cents: number): number => cents / 100;
 export const lineKey = (item: Pick<SaleItem, 'kind' | 'id'>, stylistId: string | null) =>
   item.kind === 'SERVICE' ? `SERVICE:${item.id}:${stylistId ?? ''}` : `PRODUCT:${item.id}`;
 
-export const unitTotalCents = (item: SaleItem): number => {
-  const net = toCents(item.price);
-  return net + Math.round((net * Number(item.taxRate)) / 100);
-};
+export const unitTotalCents = (item: SaleItem): number => toCents(item.price);
 
 export function lineAmounts(line: CartLine): LineAmounts {
   const grossCents = Math.round(toCents(line.item.price) * line.quantity);
   const discountCents = Math.min(Math.max(line.discountCents, 0), grossCents);
-  const netCents = grossCents - discountCents;
-  const taxCents = Math.round((netCents * Number(line.item.taxRate)) / 100);
-  return { grossCents, discountCents, netCents, taxCents, totalCents: netCents + taxCents };
+  const totalCents = grossCents - discountCents;
+  const taxCents = includedTax(totalCents, Number(line.item.taxRate));
+  return { grossCents, discountCents, netCents: totalCents - taxCents, taxCents, totalCents };
 }
 
 export function cartTotals(lines: readonly CartLine[]) {

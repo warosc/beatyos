@@ -90,6 +90,19 @@ class InMemoryServiceTicketRepository implements ServiceTicketRepository {
     this.persistedStatus.set(ticket.id, ticket.status);
     return ticket;
   }
+  async findChargedByInvoiceId(invoiceId: string) {
+    return [...this.items.values()].filter(
+      (t) => t.invoiceId === invoiceId && t.status === 'CHARGED',
+    );
+  }
+  async reopen(ticket: ServiceTicket) {
+    if (this.persistedStatus.get(ticket.id) !== 'CHARGED') {
+      throw new ConflictError('SERVICE_TICKET_NOT_CHARGED', 'Ya no está cobrada');
+    }
+    this.items.set(ticket.id, ticket);
+    this.persistedStatus.set(ticket.id, ticket.status);
+    return ticket;
+  }
   async save(ticket: ServiceTicket) {
     return this.update(ticket);
   }
@@ -289,7 +302,7 @@ describe('Casos de uso de comandas de servicio', () => {
   });
 
   describe('listar', () => {
-    it('calcula el total con impuesto con la misma regla que la factura', async () => {
+    it('calcula el total con la misma regla que la factura', async () => {
       await registerFor({ serviceIds: [CUT, COLOR] });
 
       const page = await list.execute({
@@ -299,8 +312,8 @@ describe('Casos de uso de comandas de servicio', () => {
         restrictToStylistId: null,
       });
 
-      // (100 + 250) con el 12 % de IVA.
-      expect(page.data[0].total.toDecimalString()).toBe('392.00');
+      // 100 + 250: el IVA ya va dentro de cada precio (ADR-0021).
+      expect(page.data[0].total.toDecimalString()).toBe('350.00');
       expect(page.data[0].stylistName).toBe('Sara');
     });
 

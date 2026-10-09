@@ -2,6 +2,7 @@ import { BusinessRuleViolationError, DomainValidationError } from '../../../shar
 import { AggregateRoot, type AuditMetadata } from '../../../shared/domain/primitives';
 import { Email, PersonName, Phone } from '../../../shared/domain/value-objects/contact.vo';
 import { Money } from '../../../shared/domain/value-objects/money.vo';
+import { Birthday } from './birthday.vo';
 
 /**
  * Clienta del salón.
@@ -19,7 +20,8 @@ export interface ClientProps {
   readonly name: PersonName;
   readonly email: Email | null;
   readonly phone: Phone | null;
-  readonly birthDate: Date | null;
+  /** Día y mes, sin año: el salón la felicita, no necesita saber su edad. */
+  readonly birthday: Birthday | null;
   readonly gender: GenderValue | null;
   readonly notes: string | null;
   /**
@@ -57,7 +59,7 @@ export class Client extends AggregateRoot {
     name: PersonName;
     email?: Email | null;
     phone?: Phone | null;
-    birthDate?: Date | null;
+    birthday?: Birthday | null;
     gender?: GenderValue | null;
     notes?: string | null;
     allergies?: string | null;
@@ -78,10 +80,6 @@ export class Client extends AggregateRoot {
       );
     }
 
-    if (params.birthDate && params.birthDate.getTime() > params.now.getTime()) {
-      throw new DomainValidationError('La fecha de nacimiento no puede ser futura', 'birthDate');
-    }
-
     const consentGranted = params.marketingConsent === true;
 
     return new Client(params.id, {
@@ -89,7 +87,7 @@ export class Client extends AggregateRoot {
       name: params.name,
       email: params.email ?? null,
       phone: params.phone ?? null,
-      birthDate: params.birthDate ?? null,
+      birthday: params.birthday ?? null,
       gender: params.gender ?? null,
       notes: params.notes ?? null,
       allergies: params.allergies ?? null,
@@ -135,8 +133,8 @@ export class Client extends AggregateRoot {
   get phone(): Phone | null {
     return this.props.phone;
   }
-  get birthDate(): Date | null {
-    return this.props.birthDate;
+  get birthday(): Birthday | null {
+    return this.props.birthday;
   }
   get gender(): GenderValue | null {
     return this.props.gender;
@@ -218,36 +216,15 @@ export class Client extends AggregateRoot {
     };
   }
 
-  /** Edad en años cumplidos, o `null` si no consta la fecha de nacimiento. */
-  ageAt(reference: Date): number | null {
-    if (!this.props.birthDate) return null;
-    const birth = this.props.birthDate;
-    let age = reference.getFullYear() - birth.getFullYear();
-    const monthDiff = reference.getMonth() - birth.getMonth();
-    // Sin este ajuste, quien cumple años en diciembre aparecería un año mayor durante
-    // once meses.
-    if (monthDiff < 0 || (monthDiff === 0 && reference.getDate() < birth.getDate())) {
-      age -= 1;
-    }
-    return age;
-  }
-
   /** `true` si cumple años dentro de los próximos `days` días. Alimenta las campañas. */
   hasBirthdayWithin(days: number, reference: Date): boolean {
-    if (!this.props.birthDate) return false;
+    if (!this.props.birthday) return false;
 
-    const next = new Date(
-      reference.getFullYear(),
-      this.props.birthDate.getMonth(),
-      this.props.birthDate.getDate(),
-    );
-    // Si ya pasó este año, se mira el del año que viene: en diciembre hay que poder
+    // Si ya pasó este año, cuenta el del año que viene: en diciembre hay que poder
     // preparar las felicitaciones de enero.
-    if (next.getTime() < reference.getTime()) {
-      next.setFullYear(next.getFullYear() + 1);
-    }
-
-    const diffDays = Math.ceil((next.getTime() - reference.getTime()) / 86_400_000);
+    const next = this.props.birthday.nextOccurrence(reference);
+    const today = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate());
+    const diffDays = Math.round((next.getTime() - today.getTime()) / 86_400_000);
     return diffDays >= 0 && diffDays <= days;
   }
 
@@ -258,7 +235,7 @@ export class Client extends AggregateRoot {
       name?: PersonName;
       email?: Email | null;
       phone?: Phone | null;
-      birthDate?: Date | null;
+      birthday?: Birthday | null;
       gender?: GenderValue | null;
       notes?: string | null;
       allergies?: string | null;
@@ -281,16 +258,12 @@ export class Client extends AggregateRoot {
       );
     }
 
-    if (changes.birthDate && changes.birthDate.getTime() > now.getTime()) {
-      throw new DomainValidationError('La fecha de nacimiento no puede ser futura', 'birthDate');
-    }
-
     this.props = {
       ...this.props,
       name: changes.name ?? this.props.name,
       email,
       phone,
-      birthDate: changes.birthDate !== undefined ? changes.birthDate : this.props.birthDate,
+      birthday: changes.birthday !== undefined ? changes.birthday : this.props.birthday,
       gender: changes.gender !== undefined ? changes.gender : this.props.gender,
       notes: changes.notes !== undefined ? changes.notes : this.props.notes,
       allergies: changes.allergies !== undefined ? changes.allergies : this.props.allergies,
@@ -436,7 +409,7 @@ export class Client extends AggregateRoot {
       name: PersonName.create('Anónimo', pseudonym),
       email: null,
       phone: null,
-      birthDate: null,
+      birthday: null,
       gender: null,
       notes: null,
       allergies: null,

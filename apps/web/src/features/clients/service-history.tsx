@@ -7,6 +7,8 @@ import { Card } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
 import { Scissors } from 'lucide-react';
 import { useState } from 'react';
+import { money } from '@/lib/utils';
+import { LoadError } from '@/components/ui/states';
 
 type InvoiceLine = {
   kind: 'PRODUCT' | 'SERVICE';
@@ -48,10 +50,7 @@ export function ServiceHistory({ clientId }: { clientId: string }) {
     <div>
       {invoices.isPending && <p role="status">Cargando historial…</p>}
       {invoices.error && (
-        <p role="alert">
-          No se pudo cargar el historial.{' '}
-          <button onClick={() => invoices.refetch()}>Reintentar</button>
-        </p>
+        <LoadError message="No se pudo cargar el historial." onRetry={() => invoices.refetch()} />
       )}
       {!invoices.isPending && !invoices.error && visits.length === 0 && (
         <p className="py-10 text-center text-sm text-muted-foreground">
@@ -81,9 +80,7 @@ export function ServiceHistory({ clientId }: { clientId: string }) {
                       </small>
                     )}
                   </span>
-                  <strong className="whitespace-nowrap">
-                    {line.lineTotal} {invoice.currency}
-                  </strong>
+                  <strong className="whitespace-nowrap">{money(line.lineTotal)}</strong>
                 </li>
               ))}
             </ul>

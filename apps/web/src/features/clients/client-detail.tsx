@@ -20,6 +20,8 @@ import { ClientForm } from './client-form';
 import { FormulaGallery } from './formula-gallery';
 import { ServiceHistory } from './service-history';
 import type { Client } from './types';
+import { money } from '@/lib/utils';
+import { formatBirthday } from '@/lib/birthday';
 
 export function ClientDetail({ client }: { client: Client }) {
   const { can } = useAccess();
@@ -34,7 +36,7 @@ export function ClientDetail({ client }: { client: Client }) {
         className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft size={18} />
-        Clientes
+        Clientas
       </Link>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex items-center gap-4">
@@ -100,13 +102,10 @@ export function ClientDetail({ client }: { client: Client }) {
                 {client.city}
               </p>
             )}
-            {client.birthDate && (
+            {client.birthday && (
               <p className="flex items-center gap-3">
                 <Cake className="text-muted-foreground" size={18} />
-                {new Intl.DateTimeFormat('es-GT', { day: 'numeric', month: 'long' }).format(
-                  new Date(`${client.birthDate}T00:00:00`),
-                )}
-                {client.age !== null && ` · ${client.age} años`}
+                Cumple el {formatBirthday(client.birthday)}
               </p>
             )}
           </div>
@@ -123,9 +122,7 @@ export function ClientDetail({ client }: { client: Client }) {
           {client.totalSpent && (
             <Card className="p-5">
               <p className="text-sm text-muted-foreground">Gasto acumulado</p>
-              <p className="mt-2 text-2xl font-bold">
-                {client.totalSpent} {client.currency}
-              </p>
+              <p className="mt-2 text-2xl font-bold">{money(client.totalSpent)}</p>
             </Card>
           )}
           <Card className="p-5">

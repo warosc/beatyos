@@ -1,4 +1,8 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { MulterModule } from '@nestjs/platform-express';
+
+import type { Env } from '../../shared/infrastructure/config/env.schema';
 
 import {
   DeleteClientPhotoUseCase,
@@ -34,6 +38,20 @@ import { PrismaClientRepository } from './infrastructure/persistence/prisma-clie
  * queriendo, porque no tienen forma de nombrar la clase concreta (ADR-0001).
  */
 @Module({
+  imports: [
+    // El tope de la foto se aplica mientras llega, no después: sin `limits`, multer carga
+    // en memoria el fichero entero —cien megas, si los manda— antes de que nadie lo mire.
+    MulterModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) => ({
+        limits: {
+          fileSize: config.get('PHOTO_MAX_BYTES', { infer: true }),
+          files: 1,
+          fields: 20,
+        },
+      }),
+    }),
+  ],
   controllers: [ClientsController, ClientPhotosController, PhotoMaintenanceController],
   providers: [
     CreateClientUseCase,

@@ -12,9 +12,8 @@ import {
   ListServiceTicketsUseCase,
   RegisterServiceTicketUseCase,
 } from './application/service-ticket.use-cases';
-import { SERVICE_TICKET_REPOSITORY } from './domain/service-ticket.repository';
 import { ServiceTicketsController } from './infrastructure/http/service-tickets.controller';
-import { PrismaServiceTicketRepository } from './infrastructure/persistence/prisma-service-ticket.repository';
+import { ServiceTicketsPersistenceModule } from './service-tickets-persistence.module';
 
 /**
  * Comandas de servicio (ADR-0019): la profesional declara lo que ha hecho y caja lo cobra.
@@ -24,7 +23,14 @@ import { PrismaServiceTicketRepository } from './infrastructure/persistence/pris
  * caja salgan idénticos por los dos caminos.
  */
 @Module({
-  imports: [SalesModule, AppointmentsModule, CatalogModule, ClientsModule, StylistsModule],
+  imports: [
+    ServiceTicketsPersistenceModule,
+    SalesModule,
+    AppointmentsModule,
+    CatalogModule,
+    ClientsModule,
+    StylistsModule,
+  ],
   controllers: [ServiceTicketsController],
   providers: [
     RegisterServiceTicketUseCase,
@@ -32,7 +38,6 @@ import { PrismaServiceTicketRepository } from './infrastructure/persistence/pris
     CancelServiceTicketUseCase,
     ListServiceTicketsUseCase,
     ListAssignableServicesUseCase,
-    { provide: SERVICE_TICKET_REPOSITORY, useClass: PrismaServiceTicketRepository },
   ],
 })
 export class ServiceTicketsModule {}

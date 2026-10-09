@@ -8,23 +8,28 @@ const paths = {
   receive: 'inventory/receive',
   adjust: 'inventory/adjust',
 } as const;
-async function forward(request: NextRequest, method: 'GET' | 'POST') {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+async function forward(request: NextRequest, method: 'GET' | 'POST' | 'PATCH') {
   const token = (await cookies()).get('beautyos_access')?.value;
   if (!token) return NextResponse.json({ message: 'Sesión expirada.' }, { status: 401 });
   const resource = request.nextUrl.searchParams.get('resource') as keyof typeof paths;
   if (!paths[resource]) return NextResponse.json({ message: 'Recurso inválido.' }, { status: 400 });
+  // Solo se edita un producto concreto: el id va en la ruta de la API, así que se valida aquí.
+  const id = request.nextUrl.searchParams.get('id');
+  if (method === 'PATCH' && (resource !== 'products' || !id || !UUID.test(id))) {
+    return NextResponse.json({ message: 'Producto inválido.' }, { status: 400 });
+  }
   const query = new URLSearchParams(request.nextUrl.searchParams);
   query.delete('resource');
-  const response = await fetch(
-    `${API_URL}/${paths[resource]}${method === 'GET' ? `?${query}` : ''}`,
-    {
-      method,
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: method === 'POST' ? await request.text() : undefined,
-      cache: 'no-store',
-    },
-  );
+  const target = method === 'PATCH' ? `${paths[resource]}/${id}` : paths[resource];
+  const response = await fetch(`${API_URL}/${target}${method === 'GET' ? `?${query}` : ''}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: method === 'GET' ? undefined : await request.text(),
+    cache: 'no-store',
+  });
   return NextResponse.json(await response.json(), { status: response.status });
 }
 export const GET = (r: NextRequest) => forward(r, 'GET');
 export const POST = (r: NextRequest) => forward(r, 'POST');
+export const PATCH = (r: NextRequest) => forward(r, 'PATCH');

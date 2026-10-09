@@ -284,6 +284,23 @@ export function AppointmentSheet({
                   No vino
                 </Button>
               )}
+              {/* Cerrar la cita sin enviar a caja: un retoque sin cobro, una cortesía. Lo
+                  habitual es «Registrar lo realizado», que además la cobra. */}
+              {!ticket && canUpdate && (started || appointment.status === 'IN_PROGRESS') && (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    run(
+                      () => appointmentAction(appointment.id, 'complete'),
+                      'Cita marcada como realizada.',
+                    )
+                  }
+                >
+                  <CheckCircle2 size={17} />
+                  Marcar como realizada
+                </Button>
+              )}
             </div>
           </div>
         )}

@@ -74,7 +74,10 @@ class SaleLineDto {
 
   @ApiPropertyOptional() @IsOptional() @IsUUID() stylistId?: string;
 
-  @ApiPropertyOptional({ example: 5, description: 'Descuento en importe sobre la línea' })
+  @ApiPropertyOptional({
+    example: 5,
+    description: 'Lo que deja de pagar la clienta en la línea, con el IVA incluido',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

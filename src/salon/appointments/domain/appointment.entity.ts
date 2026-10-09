@@ -296,16 +296,22 @@ export class Appointment extends AggregateRoot {
     this.props = { ...this.props, startedAt: now };
   }
 
+  /**
+   * Cierra la cita como realizada.
+   *
+   * Si nadie marcó el inicio, se recorre «empezar» con la hora prevista —o con ahora, si la
+   * visita se adelantó—. Ocurre a diario: en un salón con trabajo nadie pulsa «empezar», y
+   * negarse a cerrar la cita por eso solo conseguiría que la recepción dejase de usar el
+   * sistema. Pasar por el estado intermedio, y no saltarlo, mantiene una sola máquina de
+   * estados.
+   */
   complete(now: Date, actorId: string | null): void {
+    if (this.props.status === 'SCHEDULED' || this.props.status === 'CONFIRMED') {
+      const planned = this.props.period.startsAt;
+      this.start(planned.getTime() < now.getTime() ? planned : now, actorId);
+    }
     this.transitionTo('COMPLETED', now, actorId);
-    this.props = {
-      ...this.props,
-      completedAt: now,
-      // Si nadie marcó el inicio, se asume la hora prevista. Ocurre a diario: en un salón
-      // con trabajo nadie pulsa «empezar», y negarse a cerrar la cita por eso solo
-      // conseguiría que la recepción dejase de usar el sistema.
-      startedAt: this.props.startedAt ?? this.props.period.startsAt,
-    };
+    this.props = { ...this.props, completedAt: now };
   }
 
   cancel(reason: string, now: Date, actorId: string | null): void {

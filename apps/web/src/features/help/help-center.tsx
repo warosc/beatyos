@@ -22,14 +22,14 @@ const guides = [
   {
     image: '/help/caja.svg',
     title: 'Abre, opera y cierra caja',
-    text: 'Registra el fondo inicial, movimientos y el efectivo contado. La propiedad puede auditar quién abrió cada turno.',
+    text: 'Registra el fondo inicial, movimientos y el efectivo contado. La propietaria puede revisar quién abrió cada turno.',
     href: '/caja',
     permissions: ['cash.read'],
   },
   {
     image: '/help/caja.svg',
     title: 'Cobra en Ventas sin soltar el teclado',
-    text: 'Escribe el nombre, SKU o código de barras y pulsa Enter para agregar. Asigna la estilista de cada línea, cobra con F2 y anota lo que entrega la clienta: el vuelto se calcula solo. También puedes dividir el pago entre efectivo y tarjeta.',
+    text: 'Escribe el nombre, SKU o código de barras y pulsa Enter para agregar. Asigna la profesional de cada línea, cobra con F2 y anota lo que entrega la clienta: el vuelto se calcula solo. También puedes dividir el pago entre efectivo y tarjeta.',
     href: '/ventas',
     permissions: ['invoices.create'],
   },
@@ -50,7 +50,7 @@ const guides = [
   {
     image: '/help/equipo.svg',
     title: 'Configura servicios y jornadas',
-    text: 'Define comisiones, agrega o retira servicios, asigna qué servicios realiza cada estilista y registra descansos, vacaciones y horarios.',
+    text: 'Define comisiones, agrega o retira servicios, asigna qué servicios realiza cada profesional y registra descansos, vacaciones y horarios.',
     href: '/comisiones',
     permissions: ['services.update', 'stylists.manage-schedule'],
   },
@@ -106,7 +106,7 @@ export function HelpCenter() {
             agrega, <kbd>F2</kbd> cobra y <kbd>Esc</kbd> cierra la ventana abierta.
           </li>
           <li>
-            Una ausencia bloquea automáticamente la disponibilidad del profesional durante ese
+            Una ausencia bloquea automáticamente la disponibilidad de la profesional durante ese
             período.
           </li>
         </ul>

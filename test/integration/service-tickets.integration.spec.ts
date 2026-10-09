@@ -22,7 +22,7 @@ describe('Comandas de servicio (integración)', () => {
   let stylistToken: string;
   let receptionToken: string;
 
-  // El servicio del seed vale 25,00 con 21 % de IVA: 30,25 al cobro.
+  // El servicio del seed vale 30,25 con el IVA dentro: 25,00 de base más el 21 %.
   const TOTAL = '30.25';
 
   beforeAll(async () => {
@@ -111,6 +111,27 @@ describe('Comandas de servicio (integración)', () => {
       prisma.client.serviceTicket.findFirstOrThrow({ where: { id: ticket.id } }),
     );
     expect(stored.invoiceId).toBe(invoice.id);
+  });
+
+  it('anular la venta devuelve la comanda a caja para cobrarla bien (ADR-0020)', async () => {
+    const ticket = (await registerTicket().expect(201)).body.data;
+    const charged = (await charge(ticket.id).expect(201)).body.data;
+    const ownerToken = await loginAs(salonA.ownerEmail);
+
+    await request(server())
+      .post(api(`/sales/${charged.invoiceId as string}/void`))
+      .set(auth(ownerToken))
+      .send({ reason: 'Cobrada a la clienta equivocada' })
+      .expect(201);
+
+    const stored = await inspect(() =>
+      prisma.client.serviceTicket.findFirstOrThrow({ where: { id: ticket.id } }),
+    );
+    expect(stored).toMatchObject({ status: 'PENDING', invoiceId: null, chargedAt: null });
+
+    const recharged = await charge(ticket.id).expect(201);
+    expect(recharged.body.data).toMatchObject({ status: 'CHARGED', total: TOTAL });
+    expect(recharged.body.data.invoiceId).not.toBe(charged.invoiceId);
   });
 
   it('dos cobros simultáneos de la misma comanda facturan una sola vez', async () => {

@@ -63,7 +63,7 @@ describe('Ventas y caja (integración)', () => {
     const response = await request(server())
       .post(api('/products'))
       .set(auth())
-      .send({ sku: 'VENTA-1', name: 'Producto de venta', price: 100, ...overrides })
+      .send({ sku: 'VENTA-1', name: 'Producto de venta', price: 112, ...overrides })
       .expect(201);
     return response.body.data.id as string;
   };
@@ -75,11 +75,11 @@ describe('Ventas y caja (integración)', () => {
 
   describe('emisión y cobro', () => {
     it('emite la factura con el IVA de Guatemala y la deja pagada', async () => {
-      // El servicio sembrado cuesta 35,00. Con el 12 % son 4,20 de impuesto y 39,20 en total.
+      // El servicio cuesta 39,20 con el IVA dentro: 35,00 de base y 4,20 del 12 %.
       await inspect(() =>
         prisma.client.service.updateMany({
           where: { id: salonA.serviceId },
-          data: { price: '35.00', taxRate: '12.00' },
+          data: { price: '39.20', taxRate: '12.00' },
         }),
       );
 
@@ -107,7 +107,7 @@ describe('Ventas y caja (integración)', () => {
       await inspect(() =>
         prisma.client.service.updateMany({
           where: { id: salonA.serviceId },
-          data: { price: '35.00', taxRate: '12.00' },
+          data: { price: '39.20', taxRate: '12.00' },
         }),
       );
 
@@ -213,8 +213,8 @@ describe('Ventas y caja (integración)', () => {
     });
 
     it('solo concede descuentos quien tiene invoices.discount', async () => {
-      const base = { kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1, discountAmount: 5 };
-      // 25,00 − 5,00 = 20,00 de base; con el 21 % sembrado, 24,20.
+      const base = { kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1, discountAmount: 6.05 };
+      // 30,25 − 6,05 = 24,20, que con el 21 % sembrado son 20,00 de base.
       const body = { lines: [base], payments: [{ method: 'CARD', amount: 24.2 }] };
 
       const recepcion = await request(server())
@@ -240,7 +240,11 @@ describe('Ventas y caja (integración)', () => {
         .expect(201);
 
       const owner = await sell(body).expect(201);
-      expect(owner.body.data).toMatchObject({ discountTotal: '5.00', total: '24.20' });
+      expect(owner.body.data).toMatchObject({
+        discountTotal: '6.05',
+        subtotal: '20.00',
+        total: '24.20',
+      });
     });
 
     it('congela precio e impuesto en la factura', async () => {
@@ -249,7 +253,7 @@ describe('Ventas y caja (integración)', () => {
       await inspect(() =>
         prisma.client.service.updateMany({
           where: { id: salonA.serviceId },
-          data: { price: '35.00', taxRate: '12.00' },
+          data: { price: '39.20', taxRate: '12.00' },
         }),
       );
 
@@ -270,7 +274,7 @@ describe('Ventas y caja (integración)', () => {
         .set(auth())
         .expect(200);
 
-      expect(reread.body.data.lines[0].unitPrice).toBe('35.00');
+      expect(reread.body.data.lines[0].unitPrice).toBe('39.20');
       expect(reread.body.data.total).toBe('39.20');
     });
   });
@@ -282,7 +286,7 @@ describe('Ventas y caja (integración)', () => {
       const productId = await createProduct({
         sku: 'TINTE-VENTA',
         tracksBatches: true,
-        price: 100,
+        price: 112,
       });
 
       await receive({
@@ -324,7 +328,7 @@ describe('Ventas y caja (integración)', () => {
       const productId = await createProduct({
         sku: 'TINTE-TRAZA',
         tracksBatches: true,
-        price: 100,
+        price: 112,
       });
       await receive({
         productId,
@@ -354,7 +358,7 @@ describe('Ventas y caja (integración)', () => {
     });
 
     it('rechaza la venta sin existencias suficientes y no emite la factura', async () => {
-      const productId = await createProduct({ sku: 'SIN-STOCK', price: 100 });
+      const productId = await createProduct({ sku: 'SIN-STOCK', price: 112 });
       await receive({ productId, quantity: 1, unitCost: 40 }).expect(201);
 
       await sell({
@@ -371,7 +375,7 @@ describe('Ventas y caja (integración)', () => {
       // Hay artículos que se facturan y no se inventarían: un bono, una tarjeta regalo.
       const productId = await createProduct({
         sku: 'BONO-10',
-        price: 100,
+        price: 112,
         trackStock: false,
       });
 
@@ -480,6 +484,23 @@ describe('Ventas y caja (integración)', () => {
         .expect(422);
 
       expect(response.body.detail).toMatch(/No se pueden sacar/);
+    });
+
+    it('un gasto puede salir de lo vendido en efectivo aunque el fondo sea cero', async () => {
+      await openCash(0).expect(201);
+      const total = Number(await totalFor(salonA.serviceId));
+      await sell({
+        lines: [{ kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1 }],
+        payments: [{ method: 'CASH', amount: total }],
+      }).expect(201);
+
+      const gasto = await request(server())
+        .post(api('/cash/movements'))
+        .set(auth())
+        .send({ type: 'EXPENSE', amount: 10, concept: 'Café' })
+        .expect(201);
+
+      expect(gasto.body.data.session.expectedAmount).toBe((total - 10).toFixed(2));
     });
 
     it('cierra cuadrando cuando el recuento coincide', async () => {
@@ -715,7 +736,7 @@ describe('Ventas y caja (integración)', () => {
       const productId = await createProduct({
         sku: 'TINTE-ANULA',
         tracksBatches: true,
-        price: 100,
+        price: 112,
       });
       await receive({
         productId,
@@ -866,13 +887,12 @@ describe('Ventas y caja (integración)', () => {
 
   // =========================================================================
 
-  /** Total con impuesto del servicio sembrado, tal y como lo calcula el dominio. */
+  /** Lo que paga la clienta por el servicio: su precio, que ya lleva el IVA dentro. */
   const totalFor = async (serviceId: string): Promise<string> => {
     const service = await inspect(() =>
       prisma.client.service.findFirst({ where: { id: serviceId } }),
     );
-    const base = Number(service!.price);
-    return (base * (1 + Number(service!.taxRate) / 100)).toFixed(2);
+    return Number(service!.price).toFixed(2);
   };
 });
 

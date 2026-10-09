@@ -110,17 +110,17 @@ describe('Service', () => {
   });
 
   describe('precio e impuestos', () => {
-    it('calcula el impuesto y el precio final', () => {
-      const service = create({ price: Money.fromDecimal('25.00', 'EUR') });
+    it('el precio ya lleva el IVA dentro (ADR-0021)', () => {
+      const service = create({ price: Money.fromDecimal('28.00', 'EUR') });
 
-      // IVA de Guatemala: 25,00 × 12% = 3,00.
+      // IVA de Guatemala: 28,00 = 25,00 de base + 3,00 de IVA.
       expect(service.taxAmount.toDecimalString()).toBe('3.00');
       expect(service.priceWithTax.toDecimalString()).toBe('28.00');
     });
 
     it('el cálculo no arrastra error de coma flotante', () => {
       const service = create({
-        price: Money.fromDecimal('45.50', 'EUR'),
+        price: Money.fromDecimal('55.06', 'EUR'),
         taxRate: Percentage.create(21),
       });
 
@@ -129,7 +129,10 @@ describe('Service', () => {
     });
 
     it('admite un tipo impositivo distinto', () => {
-      const service = create({ taxRate: Percentage.create(10) });
+      const service = create({
+        price: Money.fromDecimal('27.50', 'EUR'),
+        taxRate: Percentage.create(10),
+      });
       expect(service.taxAmount.toDecimalString()).toBe('2.50');
     });
 

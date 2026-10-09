@@ -409,6 +409,22 @@ describe('Autenticación (integración)', () => {
       await login(salonA.ownerEmail, nuevaContrasena).expect(200);
     });
 
+    it('cierra las sesiones abiertas: quien conocía la contraseña deja de entrar', async () => {
+      const session = await login(salonA.ownerEmail).expect(200);
+      const token = await tokenFor(salonA.ownerEmail);
+
+      await reset(token, 'ContrasenaNueva9').expect(204);
+
+      await request(app.getHttpServer())
+        .post(api('/auth/refresh'))
+        .send({ refreshToken: session.body.data.refreshToken })
+        .expect(422);
+      const tokens = await prisma.client.refreshToken.findMany({
+        where: { userId: 'user-salon-a-owner' },
+      });
+      expect(tokens.every((t) => t.revokedAt !== null)).toBe(true);
+    });
+
     it('el token es de un solo uso', async () => {
       const token = await tokenFor(salonA.ownerEmail);
       await reset(token, 'ContrasenaNueva9').expect(204);

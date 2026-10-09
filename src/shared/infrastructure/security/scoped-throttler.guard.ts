@@ -1,5 +1,15 @@
-import { Injectable, SetMetadata, type ExecutionContext } from '@nestjs/common';
-import { ThrottlerGuard, type ThrottlerRequest } from '@nestjs/throttler';
+import { Inject, Injectable, SetMetadata, type ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import {
+  InjectThrottlerOptions,
+  InjectThrottlerStorage,
+  ThrottlerGuard,
+  type ThrottlerModuleOptions,
+  type ThrottlerRequest,
+  type ThrottlerStorage,
+} from '@nestjs/throttler';
+
+import { TOKEN_SIGNER, type TokenSigner } from '../../application/ports';
 
 /**
  * Guard de límites de peticiones con throttlers de ámbito acotado.
@@ -27,6 +37,15 @@ import { ThrottlerGuard, type ThrottlerRequest } from '@nestjs/throttler';
  * declarar deja el endpoint *sin* ese límite extra, nunca la API entera *con* él. El
  * fallo se degrada a "este endpoint es menos estricto de lo previsto" y no a "el
  * producto no funciona".
+ *
+ * ── A quién se cuenta ──────────────────────────────────────────────────────────────
+ *
+ * Con sesión, a la **persona** (`sub` del token), no a la IP. Todo el salón llega a la API
+ * desde el contenedor web, así que por IP compartían un solo cupo: con dos o tres equipos
+ * abiertos en la agenda aparecían 429 que nadie entendía. El token se verifica antes de
+ * fiarse de él —este guard va antes que `JwtAuthGuard`—: con un `sub` sin verificar,
+ * inventar tokens daría un cupo nuevo en cada petición. Sin sesión, o con un token que no
+ * vale, se cuenta por IP como siempre.
  */
 
 export const APPLIED_THROTTLERS_KEY = 'throttler:applied';
@@ -44,6 +63,29 @@ export const ApplyThrottler = (...names: string[]) => SetMetadata(APPLIED_THROTT
 
 @Injectable()
 export class ScopedThrottlerGuard extends ThrottlerGuard {
+  constructor(
+    @InjectThrottlerOptions() options: ThrottlerModuleOptions,
+    @InjectThrottlerStorage() storage: ThrottlerStorage,
+    reflector: Reflector,
+    @Inject(TOKEN_SIGNER) private readonly tokens: TokenSigner,
+  ) {
+    super(options, storage, reflector);
+  }
+
+  protected override async getTracker(req: Record<string, unknown>): Promise<string> {
+    const header = (req.headers as Record<string, unknown> | undefined)?.authorization;
+    const [scheme, token] = typeof header === 'string' ? header.split(' ') : [];
+    if (scheme === 'Bearer' && token) {
+      try {
+        const claims = await this.tokens.verifyAccess(token);
+        return `user:${claims.sub}`;
+      } catch {
+        // Un token inválido no da cupo propio: cuenta por IP, y `JwtAuthGuard` lo rechaza.
+      }
+    }
+    return super.getTracker(req);
+  }
+
   protected override async handleRequest(request: ThrottlerRequest): Promise<boolean> {
     const name = request.throttler.name;
 

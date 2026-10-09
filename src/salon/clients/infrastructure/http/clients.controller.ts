@@ -29,6 +29,7 @@ import { CLOCK, type AccessTokenClaims, type Clock } from '../../../../shared/ap
 import { Inject } from '@nestjs/common';
 import type { Env } from '../../../../shared/infrastructure/config/env.schema';
 import { CurrentUser, RequirePermissions } from '../../../../shared/infrastructure/http/decorators';
+import { includeDeletedFor } from '../../../../shared/infrastructure/http/include-deleted';
 import { PageMetaResponse } from '../../../../shared/infrastructure/http/dto/pagination.dto';
 import {
   AnonymizeClientUseCase,
@@ -138,7 +139,7 @@ export class ClientsController {
         birthdayWithinDays: query.birthdayWithinDays,
       },
       page: query.toPageRequest<ClientSortField>(),
-      includeDeleted: query.includeDeleted,
+      includeDeleted: includeDeletedFor(query.includeDeleted, user, PERMISSIONS.clients.restore),
     });
 
     // El filtro de cumpleaños se resuelve en memoria sobre la página ya traída: en SQL

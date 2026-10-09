@@ -1,4 +1,4 @@
-import type { AppointmentStatus } from './types';
+import { APPOINTMENT_STATUS_LABEL, type AppointmentStatus } from './types';
 
 /**
  * Cómo se ve cada estado en la agenda.
@@ -12,37 +12,37 @@ export const STATUS_META: Record<
   { label: string; badge: string; block: string; dot: string }
 > = {
   SCHEDULED: {
-    label: 'Pendiente',
+    label: APPOINTMENT_STATUS_LABEL.SCHEDULED,
     badge: 'bg-warning/15 text-warning',
     block: '',
     dot: 'bg-warning',
   },
   CONFIRMED: {
-    label: 'Confirmada',
+    label: APPOINTMENT_STATUS_LABEL.CONFIRMED,
     badge: 'bg-success/15 text-success',
     block: '',
     dot: 'bg-success',
   },
   IN_PROGRESS: {
-    label: 'En curso',
+    label: APPOINTMENT_STATUS_LABEL.IN_PROGRESS,
     badge: 'bg-primary/15 text-primary',
     block: 'ring-2 ring-primary',
     dot: 'bg-primary',
   },
   COMPLETED: {
-    label: 'Atendida',
+    label: APPOINTMENT_STATUS_LABEL.COMPLETED,
     badge: 'bg-muted text-muted-foreground',
     block: 'opacity-60',
     dot: 'bg-muted-foreground',
   },
   CANCELLED: {
-    label: 'Cancelada',
+    label: APPOINTMENT_STATUS_LABEL.CANCELLED,
     badge: 'bg-muted text-muted-foreground',
     block: 'opacity-50 line-through',
     dot: 'bg-muted-foreground',
   },
   NO_SHOW: {
-    label: 'No vino',
+    label: APPOINTMENT_STATUS_LABEL.NO_SHOW,
     badge: 'bg-danger/15 text-danger',
     block: 'opacity-60',
     dot: 'bg-danger',

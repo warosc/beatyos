@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ArrowUpRight,
   CalendarClock,
-  CircleCheck,
   Clock3,
   PackageMinus,
   Plus,
@@ -13,21 +12,22 @@ import {
 import Link from 'next/link';
 import { buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { dayRange, localDay } from '@/lib/dates';
 import { cn, currency } from '@/lib/utils';
 import { DashboardReport, loadReport } from './types';
+import { LoadError } from '@/components/ui/states';
+import { ValueSkeleton } from './executive-report';
 
 export function DashboardView() {
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
-  const from = `${today.toISOString().slice(0, 10)}T00:00:00-06:00`;
-  const to = `${tomorrow.toISOString().slice(0, 10)}T00:00:00-06:00`;
+  // El día del salón, no el de UTC: a las 18:00 en Guatemala UTC ya va por mañana.
+  const day = localDay();
+  const { from, to } = dayRange(day);
   const report = useQuery({
-    queryKey: ['dashboard', from],
+    queryKey: ['dashboard', day],
     queryFn: () =>
       loadReport<DashboardReport>(
         'dashboard',
-        `&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        `&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`,
       ),
     refetchInterval: 60_000,
   });
@@ -36,7 +36,7 @@ export function DashboardView() {
     {
       label: 'Ventas del día',
       value: currency.format(Number(data?.sales ?? 0)),
-      detail: `${data?.tickets ?? 0} tickets cobrados`,
+      detail: `${data?.tickets ?? 0} ventas cobradas`,
       icon: WalletCards,
       accent: 'text-success',
     },
@@ -61,7 +61,7 @@ export function DashboardView() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="mb-1 text-sm font-medium text-primary">
-            {today.toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long' })}
+            {from.toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
           <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
             Panel de operación
@@ -76,8 +76,11 @@ export function DashboardView() {
         </Link>
       </div>
       {report.isError && (
-        <p role="alert" className="rounded-xl bg-danger/10 p-4 text-sm text-danger">
-          {report.error.message}
+        <LoadError message={report.error.message} onRetry={() => report.refetch()} />
+      )}
+      {report.isPending && (
+        <p role="status" className="sr-only">
+          Cargando el panel del día…
         </p>
       )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -89,8 +92,12 @@ export function DashboardView() {
                 <Icon className={accent} size={20} />
               </span>
             </div>
-            <p className="text-3xl font-bold tracking-tight">{value}</p>
-            <p className="mt-2 text-xs text-muted-foreground">{detail}</p>
+            <p className="text-3xl font-bold tracking-tight">
+              {report.isPending ? <ValueSkeleton /> : value}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {report.isPending ? '\u00a0' : detail}
+            </p>
           </Card>
         ))}
         <Card className="overflow-hidden border-0 bg-primary p-5 text-primary-foreground">
@@ -100,11 +107,11 @@ export function DashboardView() {
               <span
                 className={`size-2 rounded-full ${data?.cash.isOpen ? 'bg-emerald-300' : 'bg-white/50'}`}
               />
-              {data?.cash.isOpen ? 'Abierta' : 'Cerrada'}
+              {report.isPending ? '…' : data?.cash.isOpen ? 'Abierta' : 'Cerrada'}
             </span>
           </div>
           <p className="text-3xl font-bold tracking-tight">
-            {currency.format(Number(data?.cash.expected ?? 0))}
+            {report.isPending ? '…' : currency.format(Number(data?.cash.expected ?? 0))}
           </p>
           <p className="mt-2 text-xs opacity-70">
             {data?.cash.openedAt
@@ -124,7 +131,7 @@ export function DashboardView() {
             </div>
             <Link
               href="/agenda"
-              className="hidden items-center gap-1 text-sm font-semibold text-primary sm:flex"
+              className="flex items-center gap-1 text-sm font-semibold text-primary"
             >
               Ver agenda <ArrowUpRight size={16} />
             </Link>
@@ -174,7 +181,7 @@ export function DashboardView() {
         <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-1">
           <Card className="relative overflow-hidden p-5 sm:p-6">
             <Sparkles className="absolute -right-4 -top-4 size-24 text-secondary" />
-            <p className="text-sm font-medium text-muted-foreground">Estilista destacada</p>
+            <p className="text-sm font-medium text-muted-foreground">Profesional destacada</p>
             <div className="mt-5">
               <h2 className="font-display text-xl font-semibold">
                 {top?.name ?? 'Sin ventas asignadas'}
@@ -186,10 +193,6 @@ export function DashboardView() {
             <div className="mt-5 flex gap-6 border-t pt-4 text-sm">
               <span>
                 <strong>{top?.services ?? 0}</strong> servicios
-              </span>
-              <span className="flex items-center gap-1 text-success">
-                <CircleCheck size={15} />
-                Datos reales
               </span>
             </div>
           </Card>

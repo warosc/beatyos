@@ -12,20 +12,22 @@ import {
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { dayRange, localDay } from '@/lib/dates';
 import { currency } from '@/lib/utils';
 import { ExecutiveReport, loadReport } from './types';
+import { LoadError } from '@/components/ui/states';
 
-const iso = (date: Date) => date.toISOString().slice(0, 10);
 export function ExecutiveReportView() {
   const now = new Date();
-  const [from, setFrom] = useState(iso(new Date(now.getTime() - 30 * 86_400_000)));
-  const [to, setTo] = useState(iso(now));
+  // Fechas en la hora del salón: con UTC, por la noche «hoy» ya sería mañana.
+  const [from, setFrom] = useState(localDay(new Date(now.getTime() - 30 * 86_400_000)));
+  const [to, setTo] = useState(localDay(now));
   const report = useQuery({
     queryKey: ['reports', from, to],
     queryFn: () =>
       loadReport<ExecutiveReport>(
         'executive',
-        `&from=${from}T00:00:00-06:00&to=${to}T23:59:59-06:00`,
+        `&from=${encodeURIComponent(dayRange(from).from.toISOString())}&to=${encodeURIComponent(dayRange(to).to.toISOString())}`,
       ),
   });
   const data = report.data;
@@ -50,27 +52,25 @@ export function ExecutiveReportView() {
         </div>
       </div>
       {report.isError && (
-        <p role="alert" className="rounded-xl bg-danger/10 p-4 text-sm text-danger">
-          {report.error.message}
-        </p>
+        <LoadError message={report.error.message} onRetry={() => report.refetch()} />
       )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Metric
           icon={CircleDollarSign}
           label="Ventas"
-          value={currency.format(Number(data?.sales ?? 0))}
+          value={data && currency.format(Number(data.sales))}
         />
         <Metric
           icon={Receipt}
-          label="Ticket promedio"
-          value={currency.format(Number(data?.averageTicket ?? 0))}
+          label="Venta promedio"
+          value={data && currency.format(Number(data.averageTicket))}
         />
-        <Metric icon={UsersRound} label="Retención" value={`${data?.retentionRate ?? 0}%`} />
-        <Metric icon={CalendarRange} label="Ocupación" value={`${data?.occupancyRate ?? 0}%`} />
+        <Metric icon={UsersRound} label="Retención" value={data && `${data.retentionRate}%`} />
+        <Metric icon={CalendarRange} label="Ocupación" value={data && `${data.occupancyRate}%`} />
         <Metric
           icon={Percent}
           label="Comisiones"
-          value={currency.format(Number(data?.commissionTotal ?? 0))}
+          value={data && currency.format(Number(data.commissionTotal))}
         />
       </div>
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
@@ -81,13 +81,19 @@ export function ExecutiveReportView() {
               data.dailySales.map((item) => (
                 <div key={item.date} className="flex min-w-12 flex-1 flex-col items-center gap-2">
                   <span className="text-[10px] font-semibold">
-                    Q {Number(item.total).toFixed(0)}
+                    {currency.format(Number(item.total))}
                   </span>
                   <div
                     className="w-full rounded-t-lg bg-primary"
                     style={{ height: `${Math.max(5, (Number(item.total) / maxSale) * 180)}px` }}
                   />
-                  <span className="text-[10px] text-muted-foreground">{item.date.slice(5)}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {/* Mediodía para que ningún huso horario lo pase al día anterior. */}
+                    {new Date(`${item.date.slice(0, 10)}T12:00:00`).toLocaleDateString('es-GT', {
+                      day: 'numeric',
+                      month: 'short',
+                    })}
+                  </span>
                 </div>
               ))
             ) : (
@@ -100,7 +106,7 @@ export function ExecutiveReportView() {
           <div className="mt-6 space-y-4">
             <Summary label="Completadas" value={data?.completedAppointments ?? 0} />
             <Summary label="Canceladas" value={data?.cancelledAppointments ?? 0} />
-            <Summary label="Tickets cobrados" value={data?.tickets ?? 0} />
+            <Summary label="Ventas cobradas" value={data?.tickets ?? 0} />
           </div>
         </Card>
       </div>
@@ -114,7 +120,7 @@ export function ExecutiveReportView() {
           }))}
         />
         <Ranking
-          title="Estilistas más rentables"
+          title="Profesionales con más ventas"
           rows={(data?.topStylists ?? []).map((x) => ({
             name: x.name,
             detail: `${x.services} servicios · Comisión ${currency.format(Number(x.commission))}`,
@@ -153,7 +159,8 @@ function Metric({
 }: {
   icon: typeof ChartNoAxesCombined;
   label: string;
-  value: string;
+  /** `undefined` mientras carga. */
+  value: string | undefined;
 }) {
   return (
     <Card className="p-5">
@@ -161,7 +168,7 @@ function Metric({
         <Icon size={20} />
       </span>
       <p className="mt-5 text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 text-3xl font-bold">{value}</p>
+      <p className="mt-2 text-3xl font-bold">{value ?? <ValueSkeleton />}</p>
     </Card>
   );
 }
@@ -211,4 +218,11 @@ function Ranking({
 }
 function Empty() {
   return <p className="m-auto text-sm text-muted-foreground">No hay datos en este período.</p>;
+}
+
+/** Hueco mientras llegan los datos: un cero parecería una cifra real del día. */
+export function ValueSkeleton({ className = 'h-9 w-28' }: { className?: string }) {
+  return (
+    <span aria-hidden className={`inline-block animate-pulse rounded-lg bg-muted ${className}`} />
+  );
 }

@@ -105,9 +105,20 @@ describe('Appointment', () => {
       // En un salón con trabajo nadie pulsa «empezar». Negarse a cerrar la cita por eso
       // solo conseguiría que la recepción dejase de usar el sistema.
       const appointment = schedule();
-      appointment.start(NOW, 'estilista');
-      appointment.complete(NOW, 'estilista');
-      expect(appointment.startedAt).toEqual(NOW);
+      const later = new Date(appointment.period.startsAt.getTime() + 60 * 60_000);
+      appointment.complete(later, 'recepción');
+
+      expect(appointment.status).toBe('COMPLETED');
+      expect(appointment.startedAt).toEqual(appointment.period.startsAt);
+      expect(appointment.completedAt).toEqual(later);
+    });
+
+    it('una cita confirmada también se completa sin pasar por «empezar»', () => {
+      const appointment = schedule();
+      appointment.confirm(NOW, 'recepción');
+      appointment.complete(NOW, 'recepción');
+
+      expect(appointment.status).toBe('COMPLETED');
     });
 
     it('una cita completada no se puede cancelar', () => {

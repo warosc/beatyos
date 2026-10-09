@@ -357,7 +357,9 @@ model Client {
   lastName    String
   email       String?
   phone       String?
-  birthDate   DateTime?    @db.Date
+  /// Cumpleaños sin año (ADR-0022): día y mes, nunca la edad.
+  birthMonth  Int?         @db.SmallInt
+  birthDay    Int?         @db.SmallInt
   gender      Gender?
   notes       String?
   /// Alergias y notas clinicas: critico antes de aplicar quimicos.

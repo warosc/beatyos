@@ -415,7 +415,7 @@ function CatalogRow({
                 : 'bg-muted text-muted-foreground',
           )}
         >
-          {stock <= 0 ? 'Agotado' : `Stock ${stock}`}
+          {stock <= 0 ? 'Agotado' : `Quedan ${stock}`}
         </span>
       )}
       <span className="w-24 text-right font-semibold tabular-nums">

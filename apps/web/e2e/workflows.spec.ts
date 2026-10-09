@@ -63,7 +63,7 @@ const appointmentEnd = new Date(appointmentStart.getTime() + 45 * 60_000);
 const appointment = {
   id: '01900000-0000-7000-8000-000000000020',
   clientId: client.id,
-  // La API resuelve el nombre: la agenda ya no descarga el fichero de clientas.
+  // La API resuelve el nombre: la agenda ya no descarga todas las clientas.
   clientName: client.fullName,
   stylistId: stylists[0].id,
   startsAt: appointmentStart.toISOString(),
@@ -169,7 +169,8 @@ test('inicia sesión correctamente', async ({ page }) => {
 
 test('reserva una cita desde el acceso rápido del Home', async ({ page }) => {
   await authenticated(page);
-  await mockAgenda(page);
+  const writes: { url: string; body: unknown }[] = [];
+  await mockAgenda(page, (url, body) => writes.push({ url, body }));
   await page.route('**/api/reports**', (route) =>
     route.fulfill({
       status: 200,
@@ -198,19 +199,62 @@ test('reserva una cita desde el acceso rápido del Home', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('link', { name: 'Nueva cita' }).click();
   await expect(page.getByRole('heading', { name: 'Nueva cita' })).toBeVisible();
-  const wizard = page.getByRole('dialog');
-  // Clienta → servicios → profesional → hora → confirmar: solo se ofrecen horas libres.
-  await wizard.getByLabel('Clienta de la cita').click();
+  const wizard = page.getByRole('dialog', { name: 'Nueva cita' });
+  const next = wizard.getByRole('button', { name: 'Siguiente' });
+  // 1. La clienta se busca en el servidor, como en el punto de venta; elegirla avanza sola.
+  await expect(next).toBeDisabled();
+  await wizard.getByRole('combobox', { name: 'Clienta de la cita' }).click();
   await wizard.getByRole('option', { name: /Ana Prueba/ }).dispatchEvent('mousedown');
+  // 2. Servicios.
   await wizard.getByRole('button', { name: /Corte/ }).click();
-  await wizard.getByRole('button', { name: 'Siguiente' }).click();
+  await expect(wizard).toContainText('45 min');
+  await next.click();
+  // 3. Profesional: cualquiera que haga los servicios.
   await wizard.getByRole('button', { name: /Cualquiera disponible/ }).click();
+  // 4. Hora: solo se ofrecen las libres. Mañana, a las 11:00.
   await wizard.getByRole('option').nth(1).click();
   await wizard.getByRole('button', { name: /11:00/ }).click();
-  await wizard.getByRole('button', { name: 'Siguiente' }).click();
+  await next.click();
+  // 5. Confirmar.
   await expect(wizard.getByText('Ana Prueba')).toBeVisible();
+  await wizard.getByLabel(/Nota para el equipo/).fill('Prefiere sin secador');
   await wizard.getByRole('button', { name: 'Reservar cita' }).click();
   await expect(page.getByRole('heading', { name: 'Nueva cita' })).not.toBeVisible();
+  expect(writes.find((x) => x.url.endsWith('/api/agenda'))?.body).toMatchObject({
+    clientId: client.id,
+    stylistId: stylists[0].id,
+    serviceIds: [service.id],
+    source: 'PHONE',
+    internalNotes: 'Prefiere sin secador',
+  });
+});
+
+test.describe('agendar desde el teléfono', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('con un menú largo los botones del asistente siguen a la vista', async ({ page }) => {
+    await authenticated(page);
+    await mockAgenda(page);
+    const menu = Array.from({ length: 30 }, (_, index) => ({
+      ...service,
+      id: `svc-${index}`,
+      name: `Servicio ${index + 1}`,
+    }));
+    await page.route('**/api/agenda?resource=services**', (route) =>
+      route.fulfill({ json: { data: menu } }),
+    );
+    await page.goto('/agenda?new=1');
+    const wizard = page.getByRole('dialog', { name: 'Nueva cita' });
+    await wizard.getByRole('combobox', { name: 'Clienta de la cita' }).click();
+    await wizard.getByRole('option', { name: /Ana Prueba/ }).dispatchEvent('mousedown');
+
+    // El último servicio está al fondo de la lista; el botón no se va con él.
+    await wizard.getByRole('button', { name: /Servicio 30/ }).click();
+    await expect(wizard.getByRole('button', { name: 'Siguiente' })).toBeInViewport();
+    // Y el buscador encuentra sin recorrer la lista, aunque se escriba sin mayúsculas.
+    await wizard.getByLabel('Buscar servicio').fill('servicio 7');
+    await expect(wizard.getByRole('button', { name: /^Servicio \d+/ })).toHaveCount(1);
+  });
 });
 
 test('cancela una cita y cambia de estilista', async ({ page }) => {
@@ -222,7 +266,7 @@ test('cancela una cita y cambia de estilista', async ({ page }) => {
   // El bloque de la cita en la parrilla, no el título de la ficha, que también lleva el nombre.
   const cita = page.getByRole('button', { name: /Ana Prueba/ }).first();
   await cita.click();
-  const sheet = page.getByRole('dialog');
+  const sheet = page.getByRole('dialog', { name: 'Ana Prueba' });
   // Mover a otra profesional: se elige con quién y una hora libre de su agenda.
   await sheet.getByRole('button', { name: 'Mover a otra hora o profesional' }).click();
   await sheet.getByRole('button', { name: 'Andrea' }).click();
@@ -230,8 +274,12 @@ test('cancela una cita y cambia de estilista', async ({ page }) => {
   await sheet.getByRole('button', { name: /11:00/ }).click();
   await sheet.getByRole('button', { name: 'Mover aquí' }).click();
   await expect.poll(() => writes.some((x) => x.url.includes('action=reschedule'))).toBeTruthy();
+
   await cita.click();
+  // Cancelar es irreversible: primero pide el motivo y no envía nada todavía.
   await sheet.getByRole('button', { name: 'Cancelar cita' }).click();
+  await expect(sheet.getByText('¿Por qué se cancela?')).toBeVisible();
+  expect(writes.some((x) => x.url.includes('action=cancel'))).toBe(false);
   await sheet.getByRole('button', { name: 'La clienta se enfermó' }).click();
   await sheet.getByRole('button', { name: 'Cancelar cita' }).last().click();
   await expect
@@ -245,6 +293,65 @@ test('cancela una cita y cambia de estilista', async ({ page }) => {
     .toBeTruthy();
 });
 
+test('mueve una cita a otra hora con los huecos libres de la profesional', async ({ page }) => {
+  const writes: { url: string; body: unknown }[] = [];
+  await authenticated(page);
+  await mockAgenda(page, (url, body) => writes.push({ url, body }));
+  const slot = new Date(appointmentStart.getTime() + 4 * 60 * 60_000);
+  // La ruta más reciente gana: solo cambia la respuesta de los huecos.
+  await page.route('**/api/agenda?resource=availability**', (route) =>
+    route.fulfill({
+      json: {
+        data: [{ startsAt: slot.toISOString(), endsAt: slot.toISOString(), durationMinutes: 45 }],
+      },
+    }),
+  );
+  await page.goto('/agenda');
+  await page
+    .getByRole('button', { name: /Ana Prueba/ })
+    .first()
+    .click();
+  const sheet = page.getByRole('dialog', { name: 'Ana Prueba' });
+  const hora = slot.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
+
+  // Solo se ofrecen las horas que la API da por libres para esta profesional.
+  await sheet.getByRole('button', { name: 'Mover a otra hora o profesional' }).click();
+  await sheet.getByRole('button', { name: hora }).click();
+  await sheet.getByRole('button', { name: 'Mover aquí' }).click();
+
+  await expect
+    .poll(() => writes.find((x) => x.url.includes('action=reschedule'))?.body)
+    .toEqual({ startsAt: slot.toISOString() });
+});
+
+test('la agenda muestra el estado y deja confirmar, cerrar o marcar que no vino', async ({
+  page,
+}) => {
+  // Las 12:00 de hoy: la cita de las 10:00 ya pasó, así que «No vino» está disponible.
+  const noon = new Date();
+  noon.setHours(12, 0, 0, 0);
+  await page.clock.setFixedTime(noon);
+  const writes: { url: string; body: unknown }[] = [];
+  await authenticated(page);
+  await mockAgenda(page, (url, body) => writes.push({ url, body }));
+  await page.goto('/agenda');
+  const cita = page.getByRole('button', { name: /Ana Prueba/ }).first();
+  const acciones = page.getByRole('dialog', { name: 'Ana Prueba' });
+
+  await cita.click();
+  await expect(acciones).toContainText('Agendada');
+  await acciones.getByRole('button', { name: 'Confirmar' }).click();
+  await expect.poll(() => writes.some((x) => x.url.includes('action=confirm'))).toBe(true);
+
+  await cita.click();
+  await acciones.getByRole('button', { name: 'No vino' }).click();
+  await expect.poll(() => writes.some((x) => x.url.includes('action=no-show'))).toBe(true);
+
+  await cita.click();
+  await acciones.getByRole('button', { name: 'Marcar como realizada' }).click();
+  await expect.poll(() => writes.some((x) => x.url.includes('action=complete'))).toBe(true);
+});
+
 test('vende un producto en quetzales', async ({ page }) => {
   await authenticated(page);
   let sale: { payments: Array<{ method: string; amount: number }> } | null = null;
@@ -252,7 +359,7 @@ test('vende un producto en quetzales', async ({ page }) => {
     {
       id: 'product-1',
       name: 'Champú',
-      price: '10.04',
+      price: '11.24',
       taxRate: 12,
       stockOnHand: '10.000',
       trackStock: true,
@@ -260,7 +367,7 @@ test('vende un producto en quetzales', async ({ page }) => {
     {
       id: 'product-2',
       name: 'Tinte',
-      price: '10.04',
+      price: '11.24',
       taxRate: 12,
       stockOnHand: '10.000',
       trackStock: true,
@@ -490,7 +597,7 @@ test('crea proveedor, orden de compra y recibe mercancía', async ({ page }) => 
   await page.getByRole('button', { name: 'Enviar' }).click();
   await page.getByRole('button', { name: 'Recibir' }).click();
   await page.getByRole('button', { name: 'Confirmar recepción' }).click();
-  await expect(page.getByText('RECEIVED')).toBeVisible();
+  await expect(page.getByText('Recibida', { exact: true })).toBeVisible();
 });
 
 test('administra usuarios y roles del equipo', async ({ page }) => {
@@ -583,8 +690,8 @@ test('administra usuarios y roles del equipo', async ({ page }) => {
   await page.getByLabel('Contraseña temporal').fill('Temporal2026A');
   await page
     .getByRole('dialog', { name: 'Nuevo usuario' })
-    .locator('select[name="roleIds"]')
-    .selectOption([receptionistRole.id]);
+    .getByRole('checkbox', { name: receptionistRole.name })
+    .check();
   await page.getByRole('button', { name: 'Crear usuario' }).click();
   await expect(page.getByText('María López')).toBeVisible();
   expect((createdPayload as { roleIds: string[] }).roleIds).toEqual([receptionistRole.id]);
@@ -617,9 +724,13 @@ test('la propietaria atiende una solicitud de contraseña desde Equipo', async (
   });
 
   await page.goto('/configuracion');
-  // El aviso llega también al menú, para verlo desde cualquier pantalla.
+  // El aviso llega también al menú, para verlo desde cualquier pantalla. En el iPad, Equipo
+  // va en «Más», y el botón suma los avisos de lo que guarda.
   await expect(
-    page.getByLabel('1 solicitudes de contraseña').filter({ visible: true }),
+    page
+      .getByLabel('1 solicitudes de contraseña')
+      .or(page.getByLabel('1 avisos en otras secciones'))
+      .filter({ visible: true }),
   ).toBeVisible();
   await expect(page.getByText('1 persona no puede entrar')).toBeVisible();
   await page.getByRole('button', { name: 'Asignar contraseña' }).click();
@@ -669,11 +780,11 @@ test('la dueña crea un servicio escribiendo lo que cobra', async ({ page }) => 
   await page.getByRole('button', { name: 'Crear servicio' }).click();
 
   await expect(page.getByText('«Corte de señora» quedó creado')).toBeVisible();
-  // El sistema hace las cuentas: guarda la base sin IVA y el código lo pone la API.
+  // Se guarda lo que cobra, con el IVA dentro (ADR-0021); el código lo pone la API.
   expect(created).toEqual({
     name: 'Corte de señora',
     durationMinutes: 45,
-    price: '89.29',
+    price: '100.00',
     taxRate: 12,
     bufferMinutes: 10,
     commissionRate: null,
@@ -750,7 +861,7 @@ test('la encargada edita y elimina un servicio', async ({ page }) => {
     durationMinutes: 60,
     bufferMinutes: 10,
     commissionRate: null,
-    price: '133.93',
+    price: '150.00',
   });
 
   // Cambiar solo la comisión no manda el precio: no hay cambio de precio que auditar.
@@ -770,4 +881,83 @@ test('la encargada edita y elimina un servicio', async ({ page }) => {
   await page.getByRole('button', { name: 'Eliminar Corte y peinado' }).click();
   await expect(page.getByText('«Corte y peinado» se eliminó.')).toBeVisible();
   expect(deleted).toBe(true);
+});
+
+test('la dueña da de alta un producto con lo que cobra y lo corrige después', async ({ page }) => {
+  await authenticated(page);
+  const product = {
+    id: '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b',
+    sku: 'SH-ARG-500',
+    name: 'Champú de argán',
+    brand: null as string | null,
+    price: '100.00',
+    taxRate: '12.00',
+    currency: 'GTQ',
+    stockOnHand: '0.000',
+    reorderPoint: '2.000',
+    reorderQuantity: '6.000',
+    stockStatus: 'OUT',
+  };
+  let products: (typeof product)[] = [];
+  const writes: Array<{ method: string; url: string; body: Record<string, unknown> }> = [];
+  await page.route('**/api/inventory?resource=products**', (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') return route.fulfill({ json: { data: products } });
+    const body = request.postDataJSON() as Record<string, unknown>;
+    writes.push({ method: request.method(), url: request.url(), body });
+    // La API guarda lo que manda la pantalla: el precio con el IVA dentro.
+    products = [{ ...product, name: String(body.name), price: String(body.price ?? '100.00') }];
+    return route.fulfill({ status: request.method() === 'POST' ? 201 : 200, json: { data: {} } });
+  });
+
+  await page.goto('/inventario');
+  await page.getByRole('button', { name: 'Producto', exact: true }).click();
+  const alta = page.getByRole('dialog', { name: 'Nuevo producto' });
+  await alta.getByLabel('SKU').fill('sh arg 500');
+  await alta.getByLabel('Nombre').fill('Champú de argán');
+  await alta.getByLabel('Precio de venta (Q)').fill('100');
+  await expect(alta.getByRole('status')).toContainText(/Q\s?100\.00.*Q\s?10\.71 de IVA/);
+  await alta.getByLabel('Existencia mínima').fill('2');
+  await alta.getByLabel('Cantidad a reponer').fill('6');
+  await alta.getByRole('button', { name: 'Guardar' }).click();
+  await expect(alta).toBeHidden();
+
+  expect(writes[0]).toMatchObject({
+    method: 'POST',
+    body: {
+      sku: 'SH-ARG-500',
+      name: 'Champú de argán',
+      price: 100,
+      taxRate: 12,
+      reorderPoint: 2,
+      reorderQuantity: 6,
+    },
+  });
+  // En inventario se ve lo mismo que se escribió y lo mismo que se cobrará en caja.
+  await expect(page.getByText(/Q\s?100\.00/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Editar Champú de argán' }).click();
+  const edicion = page.getByRole('dialog', { name: 'Editar Champú de argán' });
+  await expect(edicion.getByLabel('Precio de venta (Q)')).toHaveValue('100');
+  await edicion.getByLabel('Precio de venta (Q)').fill('120');
+  await edicion.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(edicion).toBeHidden();
+
+  expect(writes[1].method).toBe('PATCH');
+  expect(writes[1].url).toContain(`id=${product.id}`);
+  expect(writes[1].body).toEqual({
+    name: 'Champú de argán',
+    brand: '',
+    reorderPoint: 2,
+    reorderQuantity: 6,
+    price: 120,
+  });
+
+  // Corregir solo el nombre no manda el precio: no hay cambio de precio que auditar.
+  await page.getByRole('button', { name: 'Editar Champú de argán' }).click();
+  const otra = page.getByRole('dialog', { name: 'Editar Champú de argán' });
+  await otra.getByLabel('Nombre').fill('Champú de argán 500 ml');
+  await otra.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(otra).toBeHidden();
+  expect(writes[2].body).not.toHaveProperty('price');
 });

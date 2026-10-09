@@ -63,6 +63,16 @@ export class PrismaServiceTicketRepository
     return row ? this.toDomain(row) : null;
   }
 
+  async findChargedByInvoiceId(invoiceId: string): Promise<ServiceTicket[]> {
+    const rows = await withMappedErrors(this.entityName, () =>
+      this.prisma.client.serviceTicket.findMany({
+        where: { invoiceId, status: 'CHARGED' },
+        include: TICKET_INCLUDE,
+      }),
+    );
+    return rows.map((row) => this.toDomain(row));
+  }
+
   async findActiveByAppointmentId(appointmentId: string): Promise<ServiceTicket | null> {
     const row = await withMappedErrors(this.entityName, () =>
       this.prisma.client.serviceTicket.findFirst({
@@ -150,6 +160,29 @@ export class PrismaServiceTicketRepository
       throw new ConflictError(
         'SERVICE_TICKET_NOT_PENDING',
         'Esta comanda ya no está pendiente: otra persona la cobró o la anuló. Actualice la lista.',
+        { ticketId: ticket.id },
+      );
+    }
+
+    return this.findByIdOrFail(ticket.id);
+  }
+
+  async reopen(ticket: ServiceTicket): Promise<ServiceTicket> {
+    const result = await withMappedErrors(this.entityName, () =>
+      this.prisma.client.serviceTicket.updateMany({
+        where: { id: ticket.id, status: 'CHARGED' },
+        data: {
+          ...this.toPersistence(ticket),
+          updatedAt: ticket.audit.updatedAt,
+          updatedBy: ticket.audit.updatedBy,
+        },
+      }),
+    );
+
+    if (result.count === 0) {
+      throw new ConflictError(
+        'SERVICE_TICKET_NOT_CHARGED',
+        'Esta comanda ya no está cobrada. Actualice la lista.',
         { ticketId: ticket.id },
       );
     }

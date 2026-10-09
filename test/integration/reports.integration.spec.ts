@@ -49,7 +49,7 @@ describe('Informes (integración)', () => {
     await inspect(() =>
       prisma.client.service.updateMany({
         where: { id: salonA.serviceId },
-        data: { price: '100.00', taxRate: '12.00', commissionRate: '20.00' },
+        data: { price: '112.00', taxRate: '12.00', commissionRate: '20.00' },
       }),
     );
   });
@@ -58,7 +58,7 @@ describe('Informes (integración)', () => {
   const server = () => app.getHttpServer();
   const inspect = <T>(work: () => Promise<T>): Promise<T> => QueryScopeStore.crossTenant(work);
 
-  /** Una venta de un servicio a 100,00 + 12 % = 112,00. */
+  /** Una venta de un servicio a 112,00: 100,00 de base más el 12 % de IVA. */
   const sellService = (method = 'CARD') =>
     request(server())
       .post(api('/sales'))

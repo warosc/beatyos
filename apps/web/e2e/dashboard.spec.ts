@@ -15,6 +15,55 @@ test('valida las credenciales antes de enviarlas', async ({ page }) => {
   await expect(page.getByText('Ingresa tu contraseña.')).toBeVisible();
 });
 
+test.describe('el panel del día en Guatemala', () => {
+  test.use({ timezoneId: 'America/Guatemala' });
+
+  test('a las 18:30 sigue pidiendo el día de hoy, no el de mañana', async ({ context, page }) => {
+    // A las 18:30 de Guatemala en UTC ya es el día siguiente: el panel mostraba Q0.
+    await page.clock.setFixedTime(new Date('2026-10-08T18:30:00-06:00'));
+    await context.addCookies([
+      { name: 'beautyos_access', value: 'e2e-token', domain: '127.0.0.1', path: '/' },
+    ]);
+    const requested: string[] = [];
+    await page.route('**/api/reports?**', (route) => {
+      requested.push(route.request().url());
+      return route.fulfill({ status: 503, json: { detail: 'Informe no disponible.' } });
+    });
+
+    await page.goto('/');
+
+    await expect.poll(() => requested.length).toBeGreaterThan(0);
+    const params = new URL(requested[0]).searchParams;
+    // Medianoche del 8 de octubre en Guatemala es 06:00 UTC del mismo día.
+    expect(params.get('from')).toBe('2026-10-08T06:00:00.000Z');
+    expect(params.get('to')).toBe('2026-10-09T05:59:59.999Z');
+  });
+});
+
+test('pide el cumpleaños con día y mes, sin año', async ({ context, page }) => {
+  await context.addCookies([
+    { name: 'beautyos_access', value: 'e2e-token', domain: '127.0.0.1', path: '/' },
+  ]);
+  let sent: Record<string, unknown> | undefined;
+  await page.route('**/api/clients', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    sent = route.request().postDataJSON() as Record<string, unknown>;
+    return route.fulfill({ status: 201, json: { data: { id: 'client-e2e' } } });
+  });
+  await page.goto('/clientes');
+  await page.getByRole('button', { name: 'Nueva clienta' }).click();
+  await page.getByLabel('Nombre').fill('Rosa');
+  await page.getByLabel('Apellido').fill('Iglesias');
+  await page.getByLabel('Teléfono').fill('+50255555555');
+  await expect(page.getByText('No pedimos el año.')).toBeVisible();
+  await page.getByLabel('Día del cumpleaños').selectOption('17');
+  await page.getByLabel('Mes del cumpleaños').selectOption({ label: 'abril' });
+  await page.getByRole('button', { name: 'Guardar ficha' }).click();
+
+  await expect.poll(() => sent?.birthday).toBe('04-17');
+  expect(sent).not.toHaveProperty('birthDate');
+});
+
 test('permite completar el alta de una clienta', async ({ context, page }) => {
   await context.addCookies([
     { name: 'beautyos_access', value: 'e2e-token', domain: '127.0.0.1', path: '/' },

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { sessionFetch } from '@/lib/session-fetch';
 import { safeReturnPath } from '@/lib/safe-return-path';
+import { LoadError } from '@/components/ui/states';
 
 export default function SessionPage() {
   const [error, setError] = useState(false);
@@ -22,10 +23,7 @@ export default function SessionPage() {
   return (
     <div className="p-8" role="status">
       {error ? (
-        <>
-          No se pudo renovar la sesión.{' '}
-          <button onClick={() => location.reload()}>Reintentar</button>
-        </>
+        <LoadError message="No se pudo renovar la sesión." onRetry={() => location.reload()} />
       ) : (
         'Renovando sesión…'
       )}

@@ -1,6 +1,6 @@
 'use client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronLeft, Clock, Search, Sparkles, UserPlus, Users } from 'lucide-react';
+import { Check, ChevronLeft, Clock, Search, Sparkles, UserPlus, Users, X } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useAccess } from '@/components/session-access';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { sessionFetch } from '@/lib/session-fetch';
 import { cn, money } from '@/lib/utils';
 import { agendaSend } from './api';
 import { SlotPicker } from './slot-picker';
-import { dayLabel, startOfDay, time } from './time';
+import { dayLabel, fold, formatDuration, startOfDay, time } from './time';
 import type { Appointment, Service, Slot, StylistShifts } from './types';
 import { AGENDA_KEY } from './use-agenda';
 
@@ -175,7 +175,7 @@ export function BookingWizard({
         {chosen.length > 0 && (
           <>
             <span className="font-semibold text-foreground">{money(totalPrice)}</span> ·{' '}
-            {totalMinutes} min
+            {formatDuration(totalMinutes)}
           </>
         )}
       </div>
@@ -329,7 +329,7 @@ export function BookingWizard({
             <Summary
               label="Servicios"
               value={chosen.map((service) => service.name).join(', ')}
-              hint={`${money(totalPrice)} · ${totalMinutes} min`}
+              hint={`${money(totalPrice)} · ${formatDuration(totalMinutes)}`}
             />
           </dl>
           {client.allergies && (
@@ -498,25 +498,84 @@ function ServicesStep({
   onToggle: (id: string) => void;
 }) {
   const [search, setSearch] = useState('');
-  const term = search.trim().toLowerCase();
-  const visible = term
-    ? services.filter((service) => service.name.toLowerCase().includes(term))
-    : services;
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const categories = useQuery({
+    queryKey: ['booking-categories'],
+    queryFn: async () => {
+      const response = await sessionFetch(
+        '/api/agenda?resource=categories&kind=SERVICE&isActive=true&limit=100',
+      );
+      if (!response.ok) return [];
+      return ((await response.json()) as { data: { id: string; name: string }[] }).data;
+    },
+  });
+  // Solo las categorías que de verdad tienen servicios para reservar.
+  const used = (categories.data ?? []).filter((category) =>
+    services.some((service) => service.categoryId === category.id),
+  );
+  const term = fold(search.trim());
+  // Al buscar se busca en todo el menú: la categoría elegida no esconde resultados.
+  const visible = services.filter(
+    (service) =>
+      (!term || fold(service.name).includes(term)) &&
+      (term || !categoryId || service.categoryId === categoryId),
+  );
+  const picked = selected
+    .map((id) => services.find((service) => service.id === id))
+    .filter((service): service is Service => Boolean(service));
 
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold">¿Qué se va a hacer?</h3>
-      {services.length > 6 && (
-        <label className="relative block">
-          <span className="sr-only">Buscar servicio</span>
-          <Search size={16} className="absolute top-3.5 left-3 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar servicio"
-            className="h-11 w-full rounded-xl border bg-background pr-3 pl-9 text-sm"
-          />
-        </label>
+      <label className="relative block">
+        <span className="sr-only">Buscar servicio</span>
+        <Search size={16} className="absolute top-3.5 left-3 text-muted-foreground" />
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Buscar servicio…"
+          className="h-11 w-full rounded-xl border bg-background pr-3 pl-9 text-sm"
+        />
+      </label>
+      {used.length > 1 && !term && (
+        <div
+          className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1"
+          role="group"
+          aria-label="Categorías"
+        >
+          {[{ id: null, name: 'Todos' }, ...used].map((category) => (
+            <button
+              key={category.id ?? 'todos'}
+              type="button"
+              aria-pressed={categoryId === category.id}
+              onClick={() => setCategoryId(category.id)}
+              className={cn(
+                'min-h-9 shrink-0 rounded-full border px-4 text-sm',
+                categoryId === category.id
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'bg-card',
+              )}
+            >
+              {category.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {picked.length > 0 && (
+        <div className="flex flex-wrap gap-2" aria-label="Servicios elegidos">
+          {picked.map((service) => (
+            <button
+              key={service.id}
+              type="button"
+              onClick={() => onToggle(service.id)}
+              aria-label={`Quitar ${service.name}`}
+              className="flex min-h-9 items-center gap-1 rounded-full bg-secondary px-3 text-xs font-semibold text-secondary-foreground"
+            >
+              {service.name}
+              <X size={14} />
+            </button>
+          ))}
+        </div>
       )}
       <div className="grid gap-2 sm:grid-cols-2">
         {visible.map((service) => {
@@ -544,7 +603,7 @@ function ServicesStep({
                 <span className="block font-medium">{service.name}</span>
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock size={12} />
-                  {service.blockedMinutes} min · {money(service.priceWithTax)}
+                  {formatDuration(service.blockedMinutes)} · {money(service.priceWithTax)}
                 </span>
               </span>
             </button>

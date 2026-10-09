@@ -51,6 +51,19 @@ export const shortTime = (iso: string | Date) => {
   return `${((date.getHours() + 11) % 12) + 1}:${String(date.getMinutes()).padStart(2, '0')}`;
 };
 
+/** Duración legible: «45 min», «1 h», «1 h 30 min». */
+export const formatDuration = (minutes: number) =>
+  minutes < 60
+    ? `${minutes} min`
+    : `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${minutes % 60} min` : ''}`;
+
+/** Sin tildes ni mayúsculas, para buscar: «depilacion» encuentra «Depilación». */
+export const fold = (text: string) =>
+  text
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+
 export const plural = (count: number, one: string, many: string) =>
   `${count} ${count === 1 ? one : many}`;
 

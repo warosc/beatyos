@@ -3,12 +3,16 @@ import { useDialog } from '@/lib/use-dialog';
 import { Can, useAccess } from '@/components/session-access';
 import { sessionFetch } from '@/lib/session-fetch';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { PackageCheck, Plus, Send, Truck, X } from 'lucide-react';
+import { PackageCheck, Plus, Send, Truck } from 'lucide-react';
 import { loadOptions } from '@/lib/pagination';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { components } from '@/generated/api-schema';
+import { label, PURCHASE_STATUS_LABEL } from '@/lib/labels';
+import { money } from '@/lib/utils';
+import { EmptyState, LoadError } from '@/components/ui/states';
+import { DialogClose } from '@/components/ui/dialog-close';
 
 type Supplier = components['schemas']['SupplierResponse'];
 type Order = components['schemas']['PurchaseOrderResponse'];
@@ -69,7 +73,7 @@ export function PurchasesBoard() {
           <p className="text-sm font-medium text-primary">Abastecimiento</p>
           <h1 className="font-display text-4xl font-semibold">Compras y proveedores</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Órdenes conectadas con stock, costo promedio y Kardex.
+            Órdenes que actualizan las existencias y el costo promedio.
           </p>
         </div>
         <div className="flex gap-2">
@@ -104,7 +108,13 @@ export function PurchasesBoard() {
         ))}
       </div>
       {(orders.error || suppliers.error || products.error) && (
-        <p role="alert">No se pudieron cargar las compras o sus opciones.</p>
+        <LoadError
+          message="No se pudieron cargar las compras o sus opciones."
+          onRetry={() => {
+            void orders.refetch();
+            void suppliers.refetch();
+          }}
+        />
       )}
       {orders.isPending && <p role="status">Cargando compras…</p>}
       {message && (
@@ -132,10 +142,10 @@ export function PurchasesBoard() {
                   <td className="p-4">{new Date(o.createdAt).toLocaleDateString('es-GT')}</td>
                   <td className="p-4">
                     <span className="rounded-full bg-secondary px-2 py-1 text-xs font-bold">
-                      {o.status}
+                      {label(PURCHASE_STATUS_LABEL, o.status)}
                     </span>
                   </td>
-                  <td className="p-4 font-bold">Q {Number(o.total).toFixed(2)}</td>
+                  <td className="p-4 font-bold">{money(o.total)}</td>
                   <td className="p-4">
                     <div className="flex gap-2">
                       {o.status === 'DRAFT' && (
@@ -160,7 +170,19 @@ export function PurchasesBoard() {
               ))}
             </tbody>
           </table>
+          {orders.data && orders.data.length === 0 && (
+            <EmptyState
+              className="m-4"
+              title="Todavía no hay órdenes de compra"
+              hint="Crea una con «Orden» para pedir mercancía a un proveedor."
+            />
+          )}
         </Card>
+      ) : suppliers.data && suppliers.data.length === 0 ? (
+        <EmptyState
+          title="Todavía no hay proveedores"
+          hint="Agrégalos con «Proveedor» para poder hacerles pedidos."
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {suppliers.data?.map((s) => (
@@ -212,9 +234,7 @@ function Dialog({
       <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-card p-6 sm:rounded-2xl">
         <div className="mb-5 flex justify-between">
           <h2 className="font-display text-2xl font-semibold">{title}</h2>
-          <button onClick={close} aria-label="Cerrar">
-            <X />
-          </button>
+          <DialogClose onClose={close} />
         </div>
         {children}
       </div>
@@ -363,8 +383,16 @@ function CreateForm({
               />
             </label>
             <label className="block text-sm font-semibold">
-              Costo unitario (Q)
-              <input required name="unitCost" type="number" min="0" step="0.01" className={field} />
+              Costo unitario (Q, sin IVA)
+              <input
+                required
+                name="unitCost"
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                className={field}
+              />
             </label>
             <label className="block text-sm font-semibold">
               Entrega esperada

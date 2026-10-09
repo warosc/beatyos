@@ -222,6 +222,23 @@ describe('Casos de uso de inventario', () => {
       ).rejects.toThrow(/indique el número impreso/);
     });
 
+    it('no crea lotes fantasma en un producto que no los lleva', async () => {
+      // Sus salidas no descuentan lotes: el lote quedaría con existencias y caducidad
+      // para siempre, y aparecería en las alertas de vencimiento sin motivo.
+      products.seed(aProduct({ tracksBatches: false }));
+
+      await expect(
+        receiveStock().execute({
+          tenantId: TENANT,
+          productId: 'product-1',
+          quantity: 6,
+          unitCost: '60.00',
+          batchNumber: 'L-001',
+          actorId: 'user-1',
+        }),
+      ).rejects.toThrow(/no se traza por lote/);
+    });
+
     it('amplía el lote existente cuando llega partido en dos entregas', async () => {
       products.seed(aProduct({ tracksBatches: true }));
       const existing = aBatch({ batchNumber: 'L-001', quantity: 10 });

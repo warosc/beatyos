@@ -4,11 +4,13 @@ import { Can, useAccess } from '@/components/session-access';
 import { sessionFetch } from '@/lib/session-fetch';
 import { usePagedList } from '@/lib/use-paged-list';
 import { useQueryClient } from '@tanstack/react-query';
-import { ImagePlus, Trash2, X } from 'lucide-react';
+import { ImagePlus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Pagination } from '@/components/ui/pagination';
+import { LoadError } from '@/components/ui/states';
+import { DialogClose } from '@/components/ui/dialog-close';
 
 type PhotoKind = 'BEFORE' | 'AFTER' | 'REFERENCE' | 'FORMULA' | 'OTHER';
 type Photo = {
@@ -58,10 +60,7 @@ export function FormulaGallery({ clientId }: { clientId: string }) {
       </div>
       {photos.isPending && <p role="status">Cargando galería…</p>}
       {photos.error && (
-        <p role="alert">
-          No se pudo cargar la galería.{' '}
-          <button onClick={() => photos.refetch()}>Reintentar</button>
-        </p>
+        <LoadError message="No se pudo cargar la galería." onRetry={() => photos.refetch()} />
       )}
       {!photos.isPending && !photos.error && !photos.data?.length && (
         <p className="py-10 text-center text-sm text-muted-foreground">
@@ -173,9 +172,7 @@ function UploadForm({
       >
         <div className="flex justify-between">
           <h2 className="font-display text-2xl font-semibold">Agregar foto</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar">
-            <X />
-          </button>
+          <DialogClose onClose={onClose} />
         </div>
         <label className="block text-sm font-semibold">
           Foto
@@ -210,11 +207,7 @@ function UploadForm({
         </label>
         <label className="block text-sm font-semibold">
           Fórmula / leyenda
-          <input
-            name="caption"
-            placeholder="Ej. Base 7 + 30ml oxidante 20vol"
-            className={input}
-          />
+          <input name="caption" placeholder="Ej. Base 7 + 30ml oxidante 20vol" className={input} />
         </label>
         <label className="block text-sm font-semibold">
           Notas técnicas
@@ -313,12 +306,10 @@ function PhotoDetail({
       aria-label="Detalle de foto"
       className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
     >
-      <div className="w-full max-w-lg space-y-4 rounded-2xl bg-card p-6">
+      <div className="max-h-[92dvh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-card p-6">
         <div className="flex justify-between">
           <h2 className="font-display text-xl font-semibold">{KIND_LABEL[photo.kind]}</h2>
-          <button onClick={onClose} aria-label="Cerrar">
-            <X />
-          </button>
+          <DialogClose onClose={onClose} />
         </div>
         {/* eslint-disable-next-line @next/next/no-img-element -- viene de una URL firmada de MinIO */}
         <img

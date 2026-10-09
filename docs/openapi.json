@@ -7764,11 +7764,12 @@
             "example": "+34600111222",
             "description": "Obligatorio si no se indica correo."
           },
-          "birthDate": {
-            "format": "date",
+          "birthday": {
             "type": "string",
             "nullable": true,
-            "example": "1988-04-17"
+            "pattern": "^(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+            "example": "04-17",
+            "description": "Cumpleaños como MM-DD: día y mes, sin año. La edad no se pide ni se guarda."
           },
           "gender": {
             "nullable": true,
@@ -7842,15 +7843,11 @@
             "type": "string",
             "nullable": true
           },
-          "birthDate": {
+          "birthday": {
             "type": "string",
             "nullable": true,
-            "format": "date"
-          },
-          "age": {
-            "type": "number",
-            "nullable": true,
-            "description": "Edad en años cumplidos"
+            "example": "04-17",
+            "description": "Día y mes (MM-DD), sin año"
           },
           "gender": {
             "type": "string",
@@ -7941,8 +7938,7 @@
           "fullName",
           "email",
           "phone",
-          "birthDate",
-          "age",
+          "birthday",
           "gender",
           "notes",
           "allergies",
@@ -7985,10 +7981,12 @@
             "nullable": true,
             "maxLength": 20
           },
-          "birthDate": {
-            "format": "date",
+          "birthday": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "pattern": "^(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+            "example": "04-17",
+            "description": "Cumpleaños como MM-DD: día y mes, sin año. La edad no se pide ni se guarda."
           },
           "gender": {
             "nullable": true,
@@ -8579,7 +8577,7 @@
           "price": {
             "type": "string",
             "example": "25.00",
-            "description": "Precio **sin** impuestos, como cadena decimal. Nunca como número: `JSON.parse` lo convertiría a coma flotante y dejaría de sumar exacto (ADR-0010)."
+            "description": "Precio que paga la clienta, **con** el IVA incluido (ADR-0021), como cadena decimal. Nunca como número: `JSON.parse` lo convertiría a coma flotante y dejaría de sumar exacto (ADR-0010)."
           },
           "bufferMinutes": {
             "type": "number",
@@ -8675,17 +8673,18 @@
           },
           "price": {
             "type": "string",
-            "example": "25.00",
-            "description": "Precio sin impuestos, como cadena decimal"
+            "example": "28.00",
+            "description": "Precio que paga la clienta, IVA incluido (ADR-0021), como cadena decimal"
           },
           "taxAmount": {
             "type": "string",
-            "example": "5.25"
+            "example": "3.00",
+            "description": "IVA que va dentro del precio"
           },
           "priceWithTax": {
             "type": "string",
-            "example": "30.25",
-            "description": "Precio final que ve la clienta"
+            "example": "28.00",
+            "description": "Igual que `price`: el IVA ya va dentro"
           },
           "currency": {
             "type": "string",
@@ -8804,7 +8803,7 @@
           "price": {
             "type": "string",
             "example": "30.00",
-            "description": "Cadena decimal. No cambia las citas ya agendadas."
+            "description": "Con el IVA incluido, como cadena decimal. No cambia las citas ya agendadas."
           },
           "taxRate": {
             "type": "number",
@@ -10014,7 +10013,8 @@
           "price": {
             "type": "number",
             "minimum": 0,
-            "example": 120.5
+            "example": 120.5,
+            "description": "Precio que paga la clienta, con el IVA incluido (ADR-0021)"
           },
           "costPrice": {
             "type": "number",
@@ -10102,7 +10102,8 @@
           "price": {
             "type": "number",
             "minimum": 0,
-            "example": 120.5
+            "example": 120.5,
+            "description": "Precio que paga la clienta, con el IVA incluido (ADR-0021)"
           },
           "costPrice": {
             "type": "number",
@@ -11327,7 +11328,7 @@
           "discountAmount": {
             "type": "number",
             "example": 5,
-            "description": "Descuento en importe sobre la línea"
+            "description": "Lo que deja de pagar la clienta en la línea, con el IVA incluido"
           }
         },
         "required": [
@@ -12610,7 +12611,7 @@
           },
           "price": {
             "type": "string",
-            "description": "Precio sin impuesto"
+            "description": "Precio que paga la clienta, IVA incluido"
           },
           "priceWithTax": {
             "type": "string"

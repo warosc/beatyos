@@ -108,7 +108,7 @@ describe('Agenda (integración)', () => {
         status: 'SCHEDULED',
         isBlocking: true,
         durationMinutes: 55,
-        estimatedTotal: '25.00',
+        estimatedTotal: '30.25',
       });
       expect(response.body.data.endsAt).toBe(at(10, 55));
     });
@@ -128,8 +128,8 @@ describe('Agenda (integración)', () => {
         .expect(200);
 
       // Subir la tarifa no puede cambiar lo que se le dijo a la clienta al reservar.
-      expect(reloaded.body.data.estimatedTotal).toBe('25.00');
-      expect(reloaded.body.data.services[0].price).toBe('25.00');
+      expect(reloaded.body.data.estimatedTotal).toBe('30.25');
+      expect(reloaded.body.data.services[0].price).toBe('30.25');
     });
 
     it('rechaza reservar fuera del horario', async () => {

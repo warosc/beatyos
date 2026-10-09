@@ -4,6 +4,7 @@ import { Mail, ShieldCheck, UserRound } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { ChangePasswordForm } from '@/features/profile/change-password-form';
 import type { SessionUser } from '@/lib/auth';
+import { label, ROLE_LABEL } from '@/lib/labels';
 
 interface Profile extends SessionUser {
   fullName: string;
@@ -65,12 +66,12 @@ export default async function ProfilePage() {
                   key={role}
                   className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold"
                 >
-                  {role}
+                  {label(ROLE_LABEL, role)}
                 </span>
               ))}
             </div>
             <p className="mt-4 text-sm text-muted-foreground">
-              {profile.permissions.length} permisos efectivos asignados
+              Tienes {profile.permissions.length} permisos según tu rol.
             </p>
           </Card>
           <ChangePasswordForm />
@@ -80,7 +81,7 @@ export default async function ProfilePage() {
           <UserRound className="mx-auto text-muted-foreground" />
           <h2 className="mt-4 font-semibold">No pudimos cargar tu perfil</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Comprueba que la API esté iniciada e inténtalo nuevamente.
+            Recarga la página e inténtalo nuevamente.
           </p>
         </Card>
       )}

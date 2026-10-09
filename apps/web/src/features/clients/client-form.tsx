@@ -8,6 +8,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import type { Client } from './types';
+import { daysInMonth, MONTHS, splitBirthday, toBirthday } from '@/lib/birthday';
 
 const schema = z
   .object({
@@ -15,7 +16,8 @@ const schema = z
     lastName: z.string().trim().min(1, 'El apellido es obligatorio.').max(100),
     email: z.string().trim().email('Correo no válido.').or(z.literal('')),
     phone: z.string().trim().max(20),
-    birthDate: z.string().trim(),
+    birthDay: z.string(),
+    birthMonth: z.string(),
     city: z.string().trim().max(100),
     allergies: z.string().trim().max(1000),
     notes: z.string().trim().max(2000),
@@ -24,7 +26,15 @@ const schema = z
   .refine((value) => value.email || value.phone, {
     message: 'Ingresa al menos un correo o teléfono.',
     path: ['phone'],
-  });
+  })
+  .refine((value) => Boolean(value.birthDay) === Boolean(value.birthMonth), {
+    message: 'Elige el día y el mes, o deja los dos vacíos.',
+    path: ['birthDay'],
+  })
+  .refine(
+    (value) => !value.birthDay || Number(value.birthDay) <= daysInMonth(Number(value.birthMonth)),
+    { message: 'Ese mes no tiene ese día.', path: ['birthDay'] },
+  );
 type Values = z.infer<typeof schema>;
 
 export function ClientForm({
@@ -48,7 +58,8 @@ export function ClientForm({
       lastName: client?.lastName ?? '',
       email: client?.email ?? '',
       phone: client?.phone ?? '',
-      birthDate: client?.birthDate ?? '',
+      birthDay: splitBirthday(client?.birthday).day,
+      birthMonth: splitBirthday(client?.birthday).month,
       city: client?.city ?? '',
       allergies: client?.allergies ?? '',
       notes: client?.notes ?? '',
@@ -56,11 +67,12 @@ export function ClientForm({
     },
   });
   const submit = handleSubmit(async (values) => {
+    const { birthDay, birthMonth, ...rest } = values;
     const payload = {
-      ...values,
+      ...rest,
       email: values.email || null,
       phone: values.phone || null,
-      birthDate: values.birthDate || null,
+      birthday: toBirthday(birthDay, birthMonth),
       city: values.city || null,
       allergies: values.allergies || null,
       notes: values.notes || null,
@@ -92,7 +104,7 @@ export function ClientForm({
       <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-card p-6 shadow-2xl sm:max-w-2xl sm:rounded-2xl">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-primary">CRM</p>
+            <p className="text-sm font-medium text-primary">Ficha</p>
             <h2 id="client-form-title" className="font-display text-2xl font-semibold">
               {client ? 'Editar clienta' : 'Nueva clienta'}
             </h2>
@@ -119,19 +131,46 @@ export function ClientForm({
               <label htmlFor={name} className="text-sm font-semibold">
                 {label}
               </label>
-              <input id={name} className={input} {...register(name)} />
+              <input
+                id={name}
+                // El teclado adecuado en el teléfono: números para el teléfono, @ para el correo.
+                type={name === 'email' ? 'email' : name === 'phone' ? 'tel' : 'text'}
+                inputMode={name === 'phone' ? 'tel' : undefined}
+                autoComplete={name === 'email' ? 'email' : name === 'phone' ? 'tel' : undefined}
+                className={input}
+                {...register(name)}
+              />
               {errors[name] && <p className="mt-1 text-xs text-danger">{errors[name]?.message}</p>}
             </div>
           ))}
-          <div>
-            <label htmlFor="birthDate" className="text-sm font-semibold">
-              Fecha de nacimiento
-            </label>
-            <input id="birthDate" type="date" className={input} {...register('birthDate')} />
-            {errors.birthDate && (
-              <p className="mt-1 text-xs text-danger">{errors.birthDate.message}</p>
+          {/* Solo día y mes: para felicitarla basta, y el año —su edad— no se pregunta. */}
+          <fieldset aria-describedby="birthday-hint">
+            <legend className="text-sm font-semibold">Cumpleaños (opcional)</legend>
+            <div className="grid grid-cols-[5.5rem_1fr] gap-2">
+              <select aria-label="Día del cumpleaños" className={input} {...register('birthDay')}>
+                <option value="">Día</option>
+                {Array.from({ length: 31 }, (_, index) => (
+                  <option key={index + 1} value={String(index + 1)}>
+                    {index + 1}
+                  </option>
+                ))}
+              </select>
+              <select aria-label="Mes del cumpleaños" className={input} {...register('birthMonth')}>
+                <option value="">Mes</option>
+                {MONTHS.map((month, index) => (
+                  <option key={month} value={String(index + 1)}>
+                    {month}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p id="birthday-hint" className="mt-1 text-xs text-muted-foreground">
+              Solo día y mes, para felicitarla. No pedimos el año.
+            </p>
+            {errors.birthDay && (
+              <p className="mt-1 text-xs text-danger">{errors.birthDay.message}</p>
             )}
-          </div>
+          </fieldset>
           <div className="sm:col-span-2">
             <label htmlFor="allergies" className="text-sm font-semibold">
               Alergias y sensibilidades

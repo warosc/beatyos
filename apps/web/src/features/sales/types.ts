@@ -1,4 +1,5 @@
 import { problem } from '@/features/service-tickets/types';
+import { localDay } from '@/lib/dates';
 import { sessionFetch } from '@/lib/session-fetch';
 
 export type SalePayment = {
@@ -94,20 +95,9 @@ export const fetchSummary = (from: Date, to: Date) =>
 export const fetchTenantProfile = () =>
   getData<TenantProfile>('/api/tenant/profile', 'No se pudieron cargar los datos del salón.');
 
-/** Un día completo en la hora del navegador, que es la del salón. */
-export function dayRange(day: string): { from: Date; to: Date } {
-  const [year, month, date] = day.split('-').map(Number);
-  return {
-    from: new Date(year, month - 1, date, 0, 0, 0, 0),
-    to: new Date(year, month - 1, date, 23, 59, 59, 999),
-  };
-}
+export { dayRange } from '@/lib/dates';
 
-export const today = () => {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-};
+export const today = () => localDay();
 
 /** Lo que falta por devolver de un cobro. */
 export const pendingRefund = (payment: SalePayment) =>

@@ -93,7 +93,7 @@ export function Commissions() {
                 <p className="text-sm text-muted-foreground">
                   {money(x.priceWithTax)} · {x.durationMinutes} min
                   {x.bufferMinutes > 0 && ` + ${x.bufferMinutes} de limpieza`} · Comisión:{' '}
-                  {x.commissionRate === null ? 'la de cada estilista' : `${x.commissionRate} %`}
+                  {x.commissionRate === null ? 'la de cada profesional' : `${x.commissionRate} %`}
                 </p>
               </div>
               {can('services.update') && (
@@ -131,7 +131,7 @@ export function Commissions() {
         />
       )}
       <Card className="p-6">
-        <h2 className="font-display text-xl font-semibold">Por estilista</h2>
+        <h2 className="font-display text-xl font-semibold">Por profesional</h2>
         <div className="mt-3 divide-y">
           {stylists.data?.map((x) => (
             <CommissionRow
@@ -243,13 +243,13 @@ function SkillsManager({
 
   return (
     <Card className="p-6">
-      <h2 className="font-display text-xl font-semibold">Servicios por estilista</h2>
+      <h2 className="font-display text-xl font-semibold">Servicios por profesional</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Marca los servicios que cada estilista realiza. Son los que podrá registrar desde su perfil
-        para que caja los cobre. Sin ninguno marcado, puede registrar cualquiera.
+        Marca los servicios que cada profesional realiza. Son los que podrá registrar desde su
+        perfil para que caja los cobre. Sin ninguno marcado, puede registrar cualquiera.
       </p>
       <select
-        aria-label="Estilista"
+        aria-label="Profesional"
         value={selectedId}
         onChange={(e) => {
           setId(e.target.value);
@@ -364,7 +364,7 @@ function ScheduleManager({ stylists }: { stylists: Stylist[] }) {
   }
   return (
     <Card className="p-6">
-      <h2 className="font-display text-xl font-semibold">Jornada por estilista</h2>
+      <h2 className="font-display text-xl font-semibold">Jornada por profesional</h2>
       <select
         value={selectedId}
         onChange={(e) => {
@@ -498,7 +498,7 @@ function CommissionRow({
           min="0"
           max="100"
           step="0.01"
-          placeholder={nullable ? 'De la estilista' : undefined}
+          placeholder={nullable ? 'De la profesional' : undefined}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           disabled={!editable}

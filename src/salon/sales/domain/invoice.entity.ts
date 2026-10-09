@@ -34,13 +34,16 @@ export interface InvoiceLine {
   readonly stylistId: string | null;
   readonly description: string;
   readonly quantity: number;
+  /** Precio que paga la clienta, con el IVA incluido (ADR-0021). */
   readonly unitPrice: Money;
+  /** Lo que deja de pagar la clienta, también con el IVA incluido. */
   readonly discountAmount: Money;
   readonly taxRate: Percentage;
+  /** IVA que va dentro de `lineTotal`. */
   readonly taxAmount: Money;
-  /** `unitPrice × quantity − descuento`. Base imponible de la línea. */
+  /** `lineTotal − taxAmount`. Base imponible de la línea: sobre ella van las comisiones. */
   readonly lineSubtotal: Money;
-  /** `lineSubtotal + taxAmount`. */
+  /** `unitPrice × quantity − descuento`: lo que paga la clienta por la línea. */
   readonly lineTotal: Money;
   readonly commissionRate: Percentage | null;
   readonly commissionAmount: Money;
@@ -199,7 +202,7 @@ export class Invoice extends Entity {
     return this.props.audit.deletedAt !== null;
   }
 
-  /** Base imponible: la suma de las líneas antes de impuestos. */
+  /** Base imponible: la suma de las líneas sin el IVA que llevan dentro. */
   get subtotal(): Money {
     return Money.sum(
       this.props.lines.map((line) => line.lineSubtotal),
@@ -423,9 +426,10 @@ export class Invoice extends Entity {
  * en un solo sitio es lo que garantiza que el ticket, la factura y el informe de comisiones
  * digan lo mismo.
  *
- * El orden importa: primero el descuento sobre la base, después el impuesto sobre la base
- * ya descontada. Aplicar el IVA antes del descuento haría pagar impuesto sobre dinero que
- * el cliente no desembolsa.
+ * Los precios llevan el IVA dentro (ADR-0021): lo que dice el catálogo es lo que paga la
+ * clienta, al céntimo. Primero se resta el descuento, después se separa el IVA de lo que
+ * queda. Así el impuesto se paga solo sobre el dinero que la clienta desembolsa, igual que
+ * antes, pero el total ya no depende de qué bases de dos decimales existen.
  */
 export const buildInvoiceLine = (params: {
   id: string;
@@ -463,8 +467,9 @@ export const buildInvoiceLine = (params: {
     );
   }
 
-  const lineSubtotal = gross.subtract(discountAmount);
-  const taxAmount = lineSubtotal.percentage(params.taxRate.value);
+  const lineTotal = gross.subtract(discountAmount);
+  const taxAmount = lineTotal.includedTax(params.taxRate.value);
+  const lineSubtotal = lineTotal.subtract(taxAmount);
 
   return {
     id: params.id,
@@ -479,7 +484,7 @@ export const buildInvoiceLine = (params: {
     taxRate: params.taxRate,
     taxAmount,
     lineSubtotal,
-    lineTotal: lineSubtotal.add(taxAmount),
+    lineTotal,
     commissionRate: params.commissionRate ?? null,
     // La comisión se calcula sobre la base imponible, nunca sobre el total con impuesto:
     // el IVA no es ingreso del salón, es dinero que se recauda para Hacienda, y pagar

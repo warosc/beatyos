@@ -1,4 +1,4 @@
-# ADR-0021: Agenda por equipo, cambios aprobados por la encargada y recordatorios
+# ADR-0023: Agenda por equipo, cambios aprobados por la encargada y recordatorios
 
 - **Estado:** Aceptado
 - **Fecha:** 2026-10-08

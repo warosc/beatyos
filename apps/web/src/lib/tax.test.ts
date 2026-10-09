@@ -1,23 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { commissionOf, splitPriceWithTax } from './tax';
+import { commissionOf, includedTax } from './tax';
 
-describe('precio con IVA', () => {
-  it('reparte un precio redondo en base más IVA exactos', () => {
-    expect(splitPriceWithTax(10_000)).toEqual({ base: 8_929, tax: 1_071, total: 10_000 });
+describe('IVA incluido en el precio', () => {
+  it('separa el IVA de un precio redondo', () => {
+    // Q100 son 89,29 para el salón y 10,71 de IVA.
+    expect(includedTax(10_000)).toBe(1_071);
+    expect(includedTax(11_200)).toBe(1_200);
   });
 
-  it('alcanza exacto cualquier precio en quetzales enteros', () => {
-    for (let quetzales = 1; quetzales <= 3_000; quetzales++) {
-      expect(splitPriceWithTax(quetzales * 100).total).toBe(quetzales * 100);
-    }
+  it('cualquier precio se cobra exacto: el IVA sale de dentro, no se suma', () => {
+    // Con el IVA sumado encima, Q45.50 no se podía cobrar; ahora es 40,63 + 4,87.
+    expect(includedTax(4_550)).toBe(487);
   });
 
-  it('si el total no se puede alcanzar, dice el real y no cobra de más', () => {
-    // Q45.50 no tiene base que dé exacto con el 12 %: 40.62 da 45.49 y 40.63 da 45.51.
-    const split = splitPriceWithTax(4_550);
-
-    expect(split.total).toBe(4_549);
-    expect(split.base + split.tax).toBe(split.total);
+  it('usa el IVA de cada artículo', () => {
+    expect(includedTax(3_025, 21)).toBe(525);
+    expect(includedTax(5_000, 0)).toBe(0);
   });
 
   it('calcula la comisión sobre el precio sin IVA', () => {

@@ -27,12 +27,14 @@ const record = (
   type: CashMovementTypeValue,
   amount: string,
   concept = 'Concepto',
+  cashSales = '0.00',
 ) =>
   session.recordMovement({
     id: `movement-${(sequence += 1)}`,
     type,
     amount: gtq(amount),
     concept,
+    cashSales: gtq(cashSales),
     now: NOW,
     actorId: 'user-1',
   });
@@ -120,6 +122,16 @@ describe('CashSession', () => {
 
       expect(() => record(session, 'WITHDRAWAL', '150.00')).toThrow(BusinessRuleViolationError);
       expect(session.movements).toHaveLength(0);
+    });
+
+    it('cuenta las ventas en efectivo como dinero del cajón', () => {
+      // Fondo cero y Q500 vendidos en efectivo: el gasto de Q50 sale de ese dinero.
+      const session = aSession('0.00');
+
+      expect(() => record(session, 'EXPENSE', '50.00', 'Café', '500.00')).not.toThrow();
+      expect(() => record(session, 'WITHDRAWAL', '451.00', 'Banco', '500.00')).toThrow(
+        /debería haber Q\s?450\.00|450\.00/,
+      );
     });
 
     it('no admite movimientos con la caja cerrada', () => {

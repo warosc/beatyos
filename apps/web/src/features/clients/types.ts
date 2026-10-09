@@ -5,8 +5,8 @@ export interface Client {
   fullName: string;
   email: string | null;
   phone: string | null;
-  birthDate: string | null;
-  age: number | null;
+  /** `MM-DD`: día y mes, sin año. El salón la felicita; su edad no se pide. */
+  birthday: string | null;
   gender: string | null;
   notes: string | null;
   allergies: string | null;

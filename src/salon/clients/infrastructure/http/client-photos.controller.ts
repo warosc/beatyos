@@ -56,7 +56,8 @@ import type { ClientPhoto } from '../../domain/client-photo.entity';
  *
  * La subida es multipart y el fichero llega **en memoria**, no a disco. Un temporal en disco
  * exige limpiarlo aunque la petición falle a mitad, y una foto de un salón cabe holgadamente
- * en memoria; el tope lo impone `PHOTO_MAX_BYTES` antes de que el caso de uso la mire.
+ * en memoria; el tope lo impone `PHOTO_MAX_BYTES` mientras llega (`MulterModule` en
+ * `ClientsModule`), antes de que el caso de uso la mire.
  */
 
 export class UploadPhotoDto {

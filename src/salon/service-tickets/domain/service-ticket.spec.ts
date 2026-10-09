@@ -83,6 +83,22 @@ describe('ServiceTicket', () => {
       expect(() => register().cancel('  ', NOW, 'user-stylist')).toThrow(DomainValidationError);
     });
 
+    it('si se anula su venta vuelve a caja, lista para cobrarse bien (ADR-0020)', () => {
+      const ticket = register();
+      ticket.markCharged('invoice-1', NOW, 'user-cashier');
+      ticket.reopen(NOW, 'user-owner');
+
+      expect(ticket.status).toBe('PENDING');
+      expect(ticket.invoiceId).toBeNull();
+      expect(ticket.chargedAt).toBeNull();
+      ticket.markCharged('invoice-2', NOW, 'user-cashier');
+      expect(ticket.invoiceId).toBe('invoice-2');
+    });
+
+    it('solo se reabre una comanda cobrada', () => {
+      expect(() => register().reopen(NOW, 'user-owner')).toThrow(InvalidStateTransitionError);
+    });
+
     it('una comanda anulada ya no se cobra', () => {
       const ticket = register();
       ticket.cancel('Clienta equivocada', NOW, 'user-stylist');

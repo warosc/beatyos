@@ -3,27 +3,27 @@ import { useDialog } from '@/lib/use-dialog';
 import { Can, useAccess } from '@/components/session-access';
 import { sessionFetch } from '@/lib/session-fetch';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Boxes, PackageCheck, PackageX, Plus, Search, Truck, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Boxes,
+  PackageCheck,
+  PackageX,
+  Pencil,
+  Plus,
+  Search,
+  Truck,
+} from 'lucide-react';
 import { usePagedList } from '@/lib/use-paged-list';
-import { loadOptions } from '@/lib/pagination';
+import { loadOptions, loadPage } from '@/lib/pagination';
+import { EmptyState, LoadError } from '@/components/ui/states';
 import { Pagination } from '@/components/ui/pagination';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-type Product = {
-  id: string;
-  sku: string;
-  name: string;
-  brand: string | null;
-  price: string;
-  /** La API lo omite a quien no tiene `products.read-cost`: hoy, solo la propietaria lo ve. */
-  costPrice?: string;
-  currency: string;
-  stockOnHand: string;
-  reorderPoint: string;
-  reorderQuantity: string;
-  stockStatus: 'AVAILABLE' | 'LOW' | 'OUT';
-};
+import { money } from '@/lib/utils';
+import { ProductDialog, type Product } from './product-form';
+import { label, MOVEMENT_TYPE_LABEL } from '@/lib/labels';
+import { DialogClose } from '@/components/ui/dialog-close';
 type Move = {
   id: string;
   type: string;
@@ -49,6 +49,7 @@ export function InventoryBoard() {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'stock' | 'kardex' | 'batches'>('stock');
   const [action, setAction] = useState<'product' | 'receive' | 'adjust' | null>(null);
+  const [editing, setEditing] = useState<Product | null>(null);
   const products = usePagedList<Product>(
     'products',
     '/api/inventory?resource=products&limit=20&page=' +
@@ -77,13 +78,50 @@ export function InventoryBoard() {
   });
   const active = tab === 'stock' ? products : tab === 'kardex' ? moves : batches;
   const filtered = products.data ?? [];
+  // Los contadores son de todo el inventario, no de la página de 20 que se está viendo.
+  const counts = useQuery({
+    queryKey: ['products', 'counts', search],
+    enabled: tab === 'stock',
+    queryFn: ({ signal }) =>
+      Promise.all(
+        (['available', 'low', 'out'] as const).map((stock) =>
+          loadPage<Product>(
+            `/api/inventory?resource=products&limit=1&stock=${stock}&search=${encodeURIComponent(search)}`,
+            signal,
+          ).then((page) => page.meta?.total ?? page.data.length),
+        ),
+      ),
+  });
   const groups = [
-    { key: 'AVAILABLE', label: 'Disponible', icon: PackageCheck, tone: 'text-success' },
-    { key: 'LOW', label: 'Bajo', icon: AlertTriangle, tone: 'text-warning' },
-    { key: 'OUT', label: 'Agotado', icon: PackageX, tone: 'text-danger' },
+    // En pantallas estrechas las columnas se apilan: lo que pide atención va primero.
+    {
+      key: 'AVAILABLE',
+      label: 'Disponible',
+      icon: PackageCheck,
+      tone: 'text-success',
+      order: 'order-last xl:order-none',
+      count: counts.data?.[0],
+    },
+    {
+      key: 'LOW',
+      label: 'Bajo',
+      icon: AlertTriangle,
+      tone: 'text-warning',
+      order: '',
+      count: counts.data?.[1],
+    },
+    {
+      key: 'OUT',
+      label: 'Agotado',
+      icon: PackageX,
+      tone: 'text-danger',
+      order: '',
+      count: counts.data?.[2],
+    },
   ] as const;
   const refresh = async () => {
     setAction(null);
+    setEditing(null);
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['products'] }),
       qc.invalidateQueries({ queryKey: ['kardex'] }),
@@ -98,7 +136,7 @@ export function InventoryBoard() {
           <p className="text-sm font-medium text-primary">Existencias</p>
           <h1 className="mt-1 font-display text-4xl font-semibold">Inventario</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Stock, lotes y trazabilidad en tiempo real.
+            Existencias, lotes y movimientos al día.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -123,11 +161,15 @@ export function InventoryBoard() {
         </div>
       </div>
       <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="flex rounded-xl bg-muted p-1">
+        <div
+          role="tablist"
+          aria-label="Vista del inventario"
+          className="flex rounded-xl bg-muted p-1"
+        >
           {(
             [
-              ['stock', 'Stock'],
-              ['kardex', 'Kardex'],
+              ['stock', 'Existencias'],
+              ['kardex', 'Movimientos'],
               ['batches', 'Lotes'],
             ] as const
           )
@@ -135,6 +177,8 @@ export function InventoryBoard() {
             .map(([k, l]) => (
               <button
                 key={k}
+                role="tab"
+                aria-selected={tab === k}
                 onClick={() => {
                   setTab(k);
                   setPage(1);
@@ -145,29 +189,33 @@ export function InventoryBoard() {
               </button>
             ))}
         </div>
-        <label className="flex h-11 flex-1 items-center gap-2 rounded-xl border bg-card px-3">
-          <Search size={17} />
-          <input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="w-full bg-transparent text-sm outline-none"
-            aria-label="Buscar producto"
-            placeholder="Buscar producto…"
-          />
-        </label>
+        {/* El kardex no se busca por nombre: mostrar el buscador ahí sería un campo que no
+            hace nada. */}
+        {tab !== 'kardex' && (
+          <label className="flex h-11 flex-1 items-center gap-2 rounded-xl border bg-card px-3">
+            <Search size={17} />
+            <input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="w-full bg-transparent text-sm outline-none"
+              aria-label="Buscar producto"
+              placeholder="Buscar producto…"
+            />
+          </label>
+        )}
       </div>
       {tab === 'stock' && (
         <div className="grid gap-4 xl:grid-cols-3">
           {groups.map((g) => (
-            <section key={g.key} className="rounded-2xl bg-muted/60 p-3">
+            <section key={g.key} className={`rounded-2xl bg-muted/60 p-3 ${g.order}`}>
               <h2 className="mb-3 flex items-center gap-2 px-1 font-semibold">
                 <g.icon className={g.tone} size={19} />
                 {g.label}
                 <span className="ml-auto rounded-full bg-card px-2 py-1 text-xs">
-                  {filtered.filter((p) => p.stockStatus === g.key).length}
+                  {g.count ?? filtered.filter((p) => p.stockStatus === g.key).length}
                 </span>
               </h2>
               <div className="space-y-3">
@@ -184,11 +232,22 @@ export function InventoryBoard() {
                         </div>
                         <p className="text-xl font-bold">{Number(p.stockOnHand)}</p>
                       </div>
-                      <div className="mt-4 flex justify-between border-t pt-3 text-xs text-muted-foreground">
+                      <div className="mt-4 flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
                         <span>Mínimo {Number(p.reorderPoint)}</span>
-                        <span>
-                          {p.price} {p.currency}
+                        {/* Lo que paga la clienta: el mismo importe que sale en caja. */}
+                        <span className="ml-auto font-semibold text-foreground">
+                          {money(p.price)}
                         </span>
+                        <Can permission="products.update">
+                          <button
+                            type="button"
+                            aria-label={`Editar ${p.name}`}
+                            onClick={() => setEditing(p)}
+                            className="-my-2 -mr-2 grid size-9 place-items-center rounded-lg hover:bg-muted hover:text-foreground"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                        </Can>
                       </div>
                     </Card>
                   ))}
@@ -219,7 +278,7 @@ export function InventoryBoard() {
                       {m.product.sku}
                     </small>
                   </td>
-                  <td className="p-4">{m.type}</td>
+                  <td className="p-4">{label(MOVEMENT_TYPE_LABEL, m.type)}</td>
                   <td
                     className={`p-4 font-bold ${Number(m.quantityDelta) >= 0 ? 'text-success' : 'text-danger'}`}
                   >
@@ -262,13 +321,40 @@ export function InventoryBoard() {
       )}
       {active.isPending && <p role="status">Cargando inventario…</p>}
       {active.error && (
-        <p role="alert">
-          No se pudo cargar el inventario.{' '}
-          <button onClick={() => active.refetch()}>Reintentar</button>
-        </p>
+        <LoadError message="No se pudo cargar el inventario." onRetry={() => active.refetch()} />
+      )}
+      {!active.isPending && !active.error && !active.data?.length && (
+        <EmptyState
+          title={
+            tab === 'kardex'
+              ? 'Todavía no hay movimientos'
+              : search
+                ? 'Ningún producto coincide con la búsqueda'
+                : tab === 'batches'
+                  ? 'Ningún producto se traza por lote todavía'
+                  : 'Todavía no hay productos'
+          }
+          hint={
+            tab === 'stock' && !search
+              ? 'Agrégalos con «Producto» y después recibe la mercancía.'
+              : tab === 'kardex'
+                ? 'Cada entrada, venta y ajuste de existencias aparecerá aquí.'
+                : undefined
+          }
+        />
       )}
       <Pagination meta={active.meta} pending={active.isFetching} onPage={setPage} />
-      {action && (
+      {(action === 'product' || editing) && (
+        <ProductDialog
+          product={editing ?? undefined}
+          onClose={() => {
+            setAction(null);
+            setEditing(null);
+          }}
+          onSaved={refresh}
+        />
+      )}
+      {(action === 'receive' || action === 'adjust') && (
         <InventoryForm
           action={action}
           products={options.data ?? []}
@@ -285,61 +371,41 @@ function InventoryForm({
   onClose,
   onSaved,
 }: {
-  action: 'product' | 'receive' | 'adjust';
+  action: 'receive' | 'adjust';
   products: Product[];
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const { can } = useAccess();
-  const canSeeCosts = can('products.read-cost');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [productId, setProductId] = useState('');
+  // Recibir y ajustar solo tiene sentido en lo que lleva control de existencias.
+  const stocked = products.filter((p) => p.trackStock !== false);
+  const selected = stocked.find((p) => p.id === productId);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     const f = new FormData(e.currentTarget);
-    // Vacío no es «cuesta cero»: se omite y la primera entrada de mercancía fija el coste.
-    const costPrice = String(f.get('costPrice') ?? '').trim();
     const body: Record<string, unknown> =
-      action === 'product'
+      action === 'receive'
         ? {
-            // El dominio solo admite letras, dígitos, punto, guion y guion bajo (y debe
-            // empezar por letra o dígito). Normalizamos aquí lo que teclee la persona
-            // usuaria para que un espacio o un acento no acaben en un 400 confuso.
-            sku: String(f.get('sku') ?? '')
-              .trim()
-              .toUpperCase()
-              .replace(/[^A-Z0-9._-]+/g, '-')
-              .replace(/^-+/, ''),
-            name: f.get('name'),
-            brand: f.get('brand') || undefined,
-            price: Number(f.get('price')),
-            costPrice: costPrice ? Number(costPrice) : undefined,
-            reorderPoint: Number(f.get('reorderPoint')),
-            reorderQuantity: Number(f.get('reorderQuantity')),
+            productId: f.get('productId'),
+            quantity: Number(f.get('quantity')),
+            unitCost: Number(f.get('unitCost')),
+            batchNumber: f.get('batchNumber') || undefined,
+            expiresAt: f.get('expiresAt') || undefined,
           }
-        : action === 'receive'
-          ? {
-              productId: f.get('productId'),
-              quantity: Number(f.get('quantity')),
-              unitCost: Number(f.get('unitCost')),
-              batchNumber: f.get('batchNumber') || undefined,
-              expiresAt: f.get('expiresAt') || undefined,
-            }
-          : {
-              productId: f.get('productId'),
-              quantityDelta: Number(f.get('quantityDelta')),
-              reason: f.get('reason'),
-              type: Number(f.get('quantityDelta')) < 0 ? 'WASTE_OUT' : 'ADJUSTMENT',
-            };
-    const r = await sessionFetch(
-      `/api/inventory?resource=${action === 'product' ? 'products' : action}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      },
-    );
+        : {
+            productId: f.get('productId'),
+            quantityDelta: Number(f.get('quantityDelta')),
+            reason: f.get('reason'),
+            type: Number(f.get('quantityDelta')) < 0 ? 'WASTE_OUT' : 'ADJUSTMENT',
+          };
+    const r = await sessionFetch(`/api/inventory?resource=${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
     setBusy(false);
     if (!r.ok) {
       const p = (await r.json()) as { detail?: string };
@@ -365,102 +431,71 @@ function InventoryForm({
       >
         <div className="flex justify-between">
           <h2 className="font-display text-2xl font-semibold">
-            {action === 'product'
-              ? 'Nuevo producto'
-              : action === 'receive'
-                ? 'Recibir mercancía'
-                : 'Ajustar stock'}
+            {action === 'receive' ? 'Recibir mercancía' : 'Ajustar stock'}
           </h2>
-          <button type="button" onClick={onClose}>
-            <X />
-          </button>
+          <DialogClose onClose={onClose} />
         </div>
-        {action === 'product' ? (
-          <>
-            {[
-              ['sku', 'SKU'],
-              ['name', 'Nombre'],
-              ['brand', 'Marca (opcional)'],
-              ['price', 'Precio de venta'],
-              // Quien no puede ver el coste tampoco lo escribe: la API lo rechazaría.
-              ...(canSeeCosts ? [['costPrice', 'Costo (opcional)']] : []),
-              ['reorderPoint', 'Stock mínimo'],
-              ['reorderQuantity', 'Cantidad a reponer'],
-            ].map(([n, l]) => (
-              <label key={n} className="block text-sm font-semibold">
-                {l}
-                <input
-                  required={n !== 'brand' && n !== 'costPrice'}
-                  type={
-                    ['price', 'costPrice', 'reorderPoint', 'reorderQuantity'].includes(n)
-                      ? 'number'
-                      : 'text'
-                  }
-                  min={n === 'costPrice' ? 0 : undefined}
-                  step="0.01"
-                  name={n}
-                  placeholder={n === 'sku' ? 'Ej. SH-ARG-500' : undefined}
-                  className={input}
-                />
-                {n === 'sku' && (
-                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                    Código corto del producto: letras, números, puntos y guiones.
-                  </span>
-                )}
-                {n === 'costPrice' && (
-                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                    Solo la propietaria ve este dato. Si lo dejas vacío, se toma del costo de la
-                    primera entrada de mercancía.
-                  </span>
-                )}
-              </label>
+        <label className="block text-sm font-semibold">
+          Producto
+          <select
+            required
+            name="productId"
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+            className={input}
+          >
+            <option value="">Selecciona…</option>
+            {stocked.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({Number(p.stockOnHand)})
+              </option>
             ))}
-          </>
-        ) : (
+          </select>
+        </label>
+        <label className="block text-sm font-semibold">
+          {action === 'receive' ? 'Cantidad recibida' : 'Variación (+/-)'}
+          <input
+            required
+            name={action === 'receive' ? 'quantity' : 'quantityDelta'}
+            type="number"
+            step="0.001"
+            className={input}
+          />
+        </label>
+        {action === 'receive' ? (
           <>
             <label className="block text-sm font-semibold">
-              Producto
-              <select required name="productId" className={input}>
-                <option value="">Selecciona…</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({Number(p.stockOnHand)})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm font-semibold">
-              {action === 'receive' ? 'Cantidad recibida' : 'Variación (+/-)'}
+              Costo unitario
               <input
                 required
-                name={action === 'receive' ? 'quantity' : 'quantityDelta'}
+                name="unitCost"
                 type="number"
-                step="0.001"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
                 className={input}
               />
             </label>
-            {action === 'receive' ? (
+            {/* Lote y vencimiento solo en productos que se trazan por lote: en los demás
+                crearían un lote fantasma que nunca baja. */}
+            {selected?.tracksBatches && (
               <>
                 <label className="block text-sm font-semibold">
-                  Costo unitario
-                  <input required name="unitCost" type="number" step="0.01" className={input} />
-                </label>
-                <label className="block text-sm font-semibold">
                   Número de lote
-                  <input name="batchNumber" className={input} />
+                  <input required name="batchNumber" className={input} />
                 </label>
                 <label className="block text-sm font-semibold">
                   Vencimiento
                   <input name="expiresAt" type="date" className={input} />
                 </label>
               </>
-            ) : (
-              <label className="block text-sm font-semibold">
-                Motivo
-                <input required name="reason" className={input} />
-              </label>
             )}
           </>
+        ) : (
+          <label className="block text-sm font-semibold">
+            Motivo
+            <input required name="reason" className={input} />
+          </label>
         )}
         {error && <p className="rounded-xl bg-danger/10 p-3 text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-2">

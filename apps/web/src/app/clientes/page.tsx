@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { ClientWorkspace } from '@/features/clients/client-workspace';
 import type { ClientPage } from '@/features/clients/types';
 
-export const metadata: Metadata = { title: 'Clientes' };
+export const metadata: Metadata = { title: 'Clientas' };
 const API_URL = process.env.API_URL ?? 'http://localhost:3000/api/v1';
 
 export default async function ClientsPage() {
