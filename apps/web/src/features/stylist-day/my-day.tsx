@@ -33,6 +33,7 @@ import {
 import { sessionFetch } from '@/lib/session-fetch';
 import { cn } from '@/lib/utils';
 import { since } from './day';
+import { useIsStylist } from './my-stylist';
 import { MY_DAY_KEY, useMyDay } from './use-my-day';
 
 const time = (iso: string) =>
@@ -62,9 +63,15 @@ export function MyDay() {
   const tomorrow = addDays(startOfDay(now), 1);
   const week = useAgendaRange(tomorrow, 7, allowed && can('appointments.read.own'));
   const todayShifts = useAgendaRange(startOfDay(now), 1, allowed && can('appointments.read.own'));
-  const team = todayShifts.shifts.data ?? [];
+  // Siempre la ficha propia. Quien además tiene `appointments.read` —la propietaria que
+  // también atiende, o profesional y recepción a la vez— recibe la jornada de todo el equipo,
+  // y tomar la primera reservaba con otra profesional y mezclaba las citas del salón con
+  // las suyas en «Próximos días».
+  const me = useIsStylist().stylist;
+  const team = me ? (todayShifts.shifts.data ?? []).filter((s) => s.stylistId === me.id) : [];
   const catalog = useServiceCatalog(allowed && can('appointments.create.own'));
-  const canBook = can('appointments.create.own') && team.length > 0;
+  const canBook = can('appointments.create.own') && !!me && team.length > 0;
+  const upcoming = me ? (week.calendar.data ?? []).filter((a) => a.stylistId === me.id) : [];
 
   // Solo para poner nombre a los servicios reservados de cada cita.
   const services = useQuery({
@@ -289,7 +296,7 @@ export function MyDay() {
 
       {tab === 'next' && (
         <UpcomingDays
-          appointments={week.calendar.data ?? []}
+          appointments={upcoming}
           loading={week.calendar.isPending}
           onSelect={setSelected}
         />
@@ -301,7 +308,7 @@ export function MyDay() {
         <BookingWizard
           team={team}
           services={catalog.data ?? []}
-          ownStylistId={team[0]?.stylistId ?? null}
+          ownStylistId={me?.id ?? null}
           onClose={() => setBooking(false)}
           onSaved={async (appointment) => {
             setBooking(false);

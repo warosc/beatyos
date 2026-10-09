@@ -236,6 +236,7 @@ jobs:
             -e JWT_ACCESS_SECRET="$(openssl rand -base64 48 | tr -d '\n')" \
             -e JWT_REFRESH_SECRET="$(openssl rand -base64 48 | tr -d '\n')" \
             -e CORS_ORIGINS="https://example.com" \
+            -e PUBLIC_WEB_URL="https://example.com" \
             -e SWAGGER_ENABLED=false \
             appsalonbelleza-api:${{ github.sha }}
 

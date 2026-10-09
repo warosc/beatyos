@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { MY_DAY_KEY } from '@/features/stylist-day/use-my-day';
 import type { AgendaSignal } from './types';
 import { AGENDA_KEY } from './use-agenda';
+import { renewSession } from '@/lib/session-fetch';
 
 /**
  * Lee un flujo `text/event-stream` y entrega cada evento ya interpretado.
@@ -142,8 +143,11 @@ export function useAgendaLive({
           headers: { Accept: 'text/event-stream' },
         });
         if (response.status === 401) {
-          const renewed = await fetch('/api/auth/refresh', { method: 'POST', cache: 'no-store' });
-          if (!renewed.ok) return; // Sin sesión no hay canal; la app ya redirige al login.
+          // Con la renovación compartida, nunca con una propia: tras un despliegue todas las
+          // pestañas reconectan a la vez, y cada una renovando por su lado presentaría el
+          // mismo refresh token dos veces —la API lo toma por un robo y cierra la sesión—.
+          // Si el servicio falla al renovar, lanza y se reintenta más tarde.
+          if (!(await renewSession())) return; // Sin sesión no hay canal; la app ya lleva al login.
           response = await fetch('/api/agenda/stream', {
             signal: controller.signal,
             cache: 'no-store',

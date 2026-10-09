@@ -7,7 +7,14 @@ let renewal: Promise<boolean> | undefined;
  * `/api/auth/me` los lee de la base y la interfaz ya ofrece la acción, pero el token aún
  * lleva los de cuando se emitió. Renovarlo trae los actuales.
  */
-async function renewSession(force = false): Promise<boolean> {
+/**
+ * Renueva la sesión una sola vez aunque la pidan varias pestañas a la vez.
+ *
+ * Exportada para los canales que no pasan por `sessionFetch` —el de la agenda en vivo—:
+ * renovar por su cuenta, sin este cerrojo, haría que dos pestañas presentaran el mismo
+ * refresh token y la API cerraría la sesión por «reutilización».
+ */
+export async function renewSession(force = false): Promise<boolean> {
   // Cookies are shared by tabs. Recheck inside the cross-tab lock before rotating.
   const renew = async () => {
     if (!force) {

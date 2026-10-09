@@ -134,7 +134,8 @@ async function mockAgenda(page: Page, onWrite?: (url: string, body: unknown) => 
                         startsAt: slotStart.toISOString(),
                         endsAt: new Date(slotStart.getTime() + 45 * 60_000).toISOString(),
                         durationMinutes: 45,
-                        stylistId: stylists[0].id,
+                        // El hueco es de la profesional que se pregunta, como en la API.
+                        stylistId: url.searchParams.get('stylistId') ?? stylists[0].id,
                       },
                     ]
                   : [];
@@ -201,11 +202,14 @@ test('reserva una cita desde el acceso rápido del Home', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Nueva cita' })).toBeVisible();
   const wizard = page.getByRole('dialog', { name: 'Nueva cita' });
   const next = wizard.getByRole('button', { name: 'Siguiente' });
-  // 1. La clienta se busca en el servidor, como en el punto de venta; elegirla avanza sola.
+  // 1. La clienta se busca en el servidor, como en el punto de venta. Se pulsa de verdad:
+  //    el clic no puede caer sobre el paso siguiente y marcar un servicio sin querer.
   await expect(next).toBeDisabled();
   await wizard.getByRole('combobox', { name: 'Clienta de la cita' }).click();
-  await wizard.getByRole('option', { name: /Ana Prueba/ }).dispatchEvent('mousedown');
-  // 2. Servicios.
+  await wizard.getByRole('option', { name: /Ana Prueba/ }).click();
+  await next.click();
+  // 2. Servicios: ninguno marcado por el clic anterior.
+  await expect(next).toBeDisabled();
   await wizard.getByRole('button', { name: /Corte/ }).click();
   await expect(wizard).toContainText('45 min');
   await next.click();
@@ -246,7 +250,8 @@ test.describe('agendar desde el teléfono', () => {
     await page.goto('/agenda?new=1');
     const wizard = page.getByRole('dialog', { name: 'Nueva cita' });
     await wizard.getByRole('combobox', { name: 'Clienta de la cita' }).click();
-    await wizard.getByRole('option', { name: /Ana Prueba/ }).dispatchEvent('mousedown');
+    await wizard.getByRole('option', { name: /Ana Prueba/ }).click();
+    await wizard.getByRole('button', { name: 'Siguiente' }).click();
 
     // El último servicio está al fondo de la lista; el botón no se va con él.
     await wizard.getByRole('button', { name: /Servicio 30/ }).click();
@@ -273,15 +278,25 @@ test('cancela una cita y cambia de estilista', async ({ page }) => {
   await sheet.getByRole('option').nth(1).click();
   await sheet.getByRole('button', { name: /11:00/ }).click();
   await sheet.getByRole('button', { name: 'Mover aquí' }).click();
-  await expect.poll(() => writes.some((x) => x.url.includes('action=reschedule'))).toBeTruthy();
+  // Se mueve de verdad con Andrea, no solo «hubo un cambio».
+  await expect
+    .poll(
+      () =>
+        (
+          writes.find((x) => x.url.includes('action=reschedule'))?.body as
+            { stylistId?: string } | undefined
+        )?.stylistId,
+    )
+    .toBe(stylists[1].id);
 
   await cita.click();
   // Cancelar es irreversible: primero pide el motivo y no envía nada todavía.
   await sheet.getByRole('button', { name: 'Cancelar cita' }).click();
   await expect(sheet.getByText('¿Por qué se cancela?')).toBeVisible();
+  await expect(sheet.getByText(/no se puede deshacer/)).toBeVisible();
   expect(writes.some((x) => x.url.includes('action=cancel'))).toBe(false);
   await sheet.getByRole('button', { name: 'La clienta se enfermó' }).click();
-  await sheet.getByRole('button', { name: 'Cancelar cita' }).last().click();
+  await sheet.getByRole('button', { name: 'Sí, cancelar' }).click();
   await expect
     .poll(() =>
       writes.some(

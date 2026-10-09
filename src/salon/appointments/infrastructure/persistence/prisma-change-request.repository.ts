@@ -78,14 +78,26 @@ export class PrismaChangeRequestRepository implements ChangeRequestRepository {
     }
   }
 
+  /**
+   * Toda escritura es una decisión sobre una petición pendiente, así que solo se guarda si
+   * en la base **sigue pendiente**. Si dos encargadas responden a la vez —o la profesional la
+   * retira mientras tanto—, la segunda no encuentra fila y recibe un conflicto en lugar de
+   * dejar la cita movida con la petición marcada como rechazada.
+   */
   async update(request: AppointmentChangeRequest): Promise<AppointmentChangeRequest> {
     const result = await withMappedErrors(ENTITY, () =>
       this.prisma.client.appointmentChangeRequest.updateMany({
-        where: { id: request.id },
+        where: { id: request.id, status: 'PENDING' },
         data: this.toPersistence(request),
       }),
     );
-    if (result.count === 0) throw new EntityNotFoundError(ENTITY, request.id);
+    if (result.count === 0) {
+      await this.findByIdOrFail(request.id);
+      throw new ConflictError(
+        'CHANGE_REQUEST_ALREADY_DECIDED',
+        'Otra persona ya respondió esta petición. Actualiza la lista.',
+      );
+    }
     return this.findByIdOrFail(request.id);
   }
 

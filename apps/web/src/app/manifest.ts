@@ -16,7 +16,9 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/agenda',
     scope: '/',
     display: 'standalone',
-    orientation: 'portrait',
+    // Sin bloquear la orientación: la tablet del mostrador usa la agenda por profesional en
+    // horizontal.
+    orientation: 'any',
     background_color: '#faf8f5',
     theme_color: '#8d4635',
     lang: 'es',

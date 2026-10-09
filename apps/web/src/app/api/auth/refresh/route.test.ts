@@ -18,6 +18,8 @@ const rotated = {
     user: { id: 'u1' },
   },
 };
+const refreshRequest = (headers: Record<string, string> = {}) =>
+  new NextRequest('http://localhost/api/auth/refresh', { method: 'POST', headers });
 beforeEach(() => {
   jar.value = { beautyos_refresh: 'rt1' };
 });
@@ -28,7 +30,7 @@ describe('renovación de sesión', () => {
     jar.value = {};
     const upstream = vi.fn();
     vi.stubGlobal('fetch', upstream);
-    expect((await POST()).status).toBe(401);
+    expect((await POST(refreshRequest())).status).toBe(401);
     expect(upstream).not.toHaveBeenCalled();
   });
 
@@ -37,7 +39,7 @@ describe('renovación de sesión', () => {
       Response.json(rotated),
     );
     vi.stubGlobal('fetch', upstream);
-    const response = await POST();
+    const response = await POST(refreshRequest());
     expect(JSON.parse(upstream.mock.calls[0][1].body as string)).toEqual({
       refreshToken: 'rt1',
     });
@@ -46,12 +48,23 @@ describe('renovación de sesión', () => {
     expect(await response.json()).toEqual({ user: rotated.data.user });
   });
 
+  it('reenvía la IP real para que el límite no sea uno solo para todo el salón', async () => {
+    const upstream = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () =>
+      Response.json(rotated),
+    );
+    vi.stubGlobal('fetch', upstream);
+    await POST(refreshRequest({ 'x-forwarded-for': '203.0.113.9' }));
+    expect((upstream.mock.calls[0][1].headers as Record<string, string>)['x-forwarded-for']).toBe(
+      '203.0.113.9',
+    );
+  });
+
   it('borra las cookies cuando la API rechaza el refresh', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => Response.json({ detail: 'expirado' }, { status: 401 })),
     );
-    const response = await POST();
+    const response = await POST(refreshRequest());
     expect(response.status).toBe(401);
     expect(response.cookies.get('beautyos_access')?.value).toBe('');
     expect(response.cookies.get('beautyos_refresh')?.value).toBe('');
@@ -64,7 +77,7 @@ describe('renovación de sesión', () => {
         throw new TypeError('fetch failed');
       }),
     );
-    const response = await POST();
+    const response = await POST(refreshRequest());
     expect(response.status).toBe(503);
     expect(response.cookies.get('beautyos_refresh')).toBeUndefined();
   });

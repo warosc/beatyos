@@ -52,6 +52,7 @@ import {
   useAgendaRange,
   useServiceCatalog,
 } from './use-agenda';
+import { useIsStylist } from '@/features/stylist-day/my-stylist';
 
 type View = 'day' | 'week' | 'month' | 'list';
 
@@ -96,6 +97,7 @@ export function AgendaBoard({
   const queryClient = useQueryClient();
   const canBookAny = can('appointments.create');
   const canBookOwn = can('appointments.create.own');
+  const ownStylist = useIsStylist();
   const canApprove = can('appointments.approve-changes');
   const canManageSchedule = can('stylists.manage-schedule');
   const canUpdate = can('appointments.update');
@@ -292,7 +294,9 @@ export function AgendaBoard({
           : dayLabel(anchor);
 
   const stylistNames = new Map(team.map((member) => [member.stylistId, member]));
-  const ownStylistId = canBookOwn && !canBookAny ? (team[0]?.stylistId ?? null) : undefined;
+  // Solo puede agendar a su nombre: su ficha, no la primera del equipo (con
+  // `appointments.read` el equipo trae a todas las profesionales).
+  const ownStylistId = canBookOwn && !canBookAny ? (ownStylist.stylist?.id ?? null) : undefined;
 
   return (
     <div className="space-y-4 pb-20 lg:pb-0">
@@ -420,34 +424,37 @@ export function AgendaBoard({
           </div>
         </div>
 
-        {/* Filtro por profesional: un toque oculta o muestra su columna. */}
-        {team.length > 1 && (
+        {/* Filtro por profesional: un toque oculta o muestra su columna. El de canceladas va
+            siempre: la profesional, que solo ve su columna, también tiene que poder ver la cita
+            que una clienta canceló desde el enlace en lugar de que desaparezca sin más. */}
+        {
           <div className="flex items-center gap-2 overflow-x-auto border-b px-3 py-2">
-            {team.map((member) => {
-              const on = !hidden.has(member.stylistId);
-              return (
-                <button
-                  key={member.stylistId}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() =>
-                    setHidden((current) => {
-                      const next = new Set(current);
-                      if (next.has(member.stylistId)) next.delete(member.stylistId);
-                      else next.add(member.stylistId);
-                      return next;
-                    })
-                  }
-                  className={cn(
-                    'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm',
-                    on ? 'bg-card font-medium' : 'bg-muted text-muted-foreground line-through',
-                  )}
-                >
-                  <span className="size-2.5 rounded-full" style={{ background: member.color }} />
-                  {member.name}
-                </button>
-              );
-            })}
+            {team.length > 1 &&
+              team.map((member) => {
+                const on = !hidden.has(member.stylistId);
+                return (
+                  <button
+                    key={member.stylistId}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      setHidden((current) => {
+                        const next = new Set(current);
+                        if (next.has(member.stylistId)) next.delete(member.stylistId);
+                        else next.add(member.stylistId);
+                        return next;
+                      })
+                    }
+                    className={cn(
+                      'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm',
+                      on ? 'bg-card font-medium' : 'bg-muted text-muted-foreground line-through',
+                    )}
+                  >
+                    <span className="size-2.5 rounded-full" style={{ background: member.color }} />
+                    {member.name}
+                  </button>
+                );
+              })}
             <button
               type="button"
               onClick={() => setShowCancelled((value) => !value)}
@@ -458,7 +465,7 @@ export function AgendaBoard({
               Canceladas
             </button>
           </div>
-        )}
+        }
 
         {(view === 'day' || view === 'list') && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 border-b px-4 py-2 text-xs text-muted-foreground">

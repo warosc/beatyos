@@ -19,7 +19,9 @@ export class LoggingReminderSender implements ReminderSender {
   private readonly logger = new Logger('Recordatorios');
 
   send(reminder: OutboundReminder): Promise<{ providerId: string | null }> {
-    this.logger.log(`Recordatorio simulado para ${reminder.to}\n${reminder.body}`);
+    // Ni el teléfono ni el texto: el mensaje lleva un enlace vivo que confirma o cancela la
+    // cita, y el registro de Docker no es sitio para eso.
+    this.logger.log(`Recordatorio simulado (sin proveedor): ${reminder.body.length} caracteres`);
     return Promise.resolve({ providerId: null });
   }
 }

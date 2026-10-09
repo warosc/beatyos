@@ -195,12 +195,24 @@ export class ApproveChangeRequestUseCase implements UseCase<
     @Inject(AUDIT_RECORDER) private readonly audit: AuditRecorder,
     @Inject(UNIT_OF_WORK) private readonly unitOfWork: UnitOfWork,
     @Inject(AGENDA_EVENTS) private readonly events: AgendaEvents,
+    @Inject(APPOINTMENT_REPOSITORY) private readonly appointments: AppointmentRepository,
   ) {}
 
   async execute(input: DecideChangeInput): Promise<AppointmentChangeRequest> {
     const request = await this.requests.findByIdOrFail(input.id);
     if (!request.isPending) {
       throw new InvalidStateTransitionError('La solicitud', request.status, 'APPROVED');
+    }
+
+    // Si recepción movió la cita mientras la petición esperaba, aprobarla pisaría ese cambio
+    // con una hora pensada para otra situación.
+    const appointment = await this.appointments.findByIdOrFail(request.appointmentId);
+    if (appointment.period.startsAt.getTime() !== request.currentStartsAt.getTime()) {
+      throw new ConflictError(
+        'CHANGE_REQUEST_OUTDATED',
+        'La cita se movió después de pedir el cambio. Recházalo y, si hace falta, que la ' +
+          'profesional pida otra hora.',
+      );
     }
 
     const now = this.clock.now();

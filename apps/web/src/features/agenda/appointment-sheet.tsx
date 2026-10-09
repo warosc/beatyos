@@ -85,6 +85,9 @@ export function AppointmentSheet({
   const canApprove = can('appointments.approve-changes');
   const pendable = appointment.status === 'SCHEDULED' || appointment.status === 'CONFIRMED';
   const attendable = pendable || appointment.status === 'IN_PROGRESS';
+  // Una cita realizada también puede ir a caja —o ya haber ido—: recepción tiene que ver
+  // si se cobró, y si alguien la marcó realizada por error, todavía poder enviarla.
+  const ticketable = attendable || appointment.status === 'COMPLETED';
   const canRegister = can('service-tickets.create') || can('service-tickets.create.own');
   const stylist = team.find((member) => member.stylistId === appointment.stylistId);
   const stylistName = appointment.stylistName ?? stylist?.name ?? 'Profesional';
@@ -92,7 +95,7 @@ export function AppointmentSheet({
 
   const tickets = useQuery({
     queryKey: ['agenda-tickets', dayBounds(appointment.startsAt)],
-    enabled: attendable && (can('service-tickets.read') || can('service-tickets.read.own')),
+    enabled: ticketable && (can('service-tickets.read') || can('service-tickets.read.own')),
     queryFn: ({ signal }) =>
       loadPage<ServiceTicket>(
         `/api/service-tickets?limit=100&${dayBounds(appointment.startsAt)}`,
@@ -227,7 +230,7 @@ export function AppointmentSheet({
         )}
 
         {/* Lo que toca ahora, según el estado. */}
-        {attendable && (
+        {ticketable && (
           <div className="space-y-2">
             {ticket ? (
               <p className="flex items-center gap-2 rounded-xl bg-success/10 p-3 text-sm font-medium text-success">
@@ -236,72 +239,79 @@ export function AppointmentSheet({
               </p>
             ) : (
               canRegister &&
-              (started || appointment.status === 'IN_PROGRESS') && (
+              (started ||
+                appointment.status === 'IN_PROGRESS' ||
+                appointment.status === 'COMPLETED') && (
                 <Button className="h-12 w-full" disabled={busy} onClick={onRegister}>
                   <Scissors size={17} />
                   Registrar lo realizado
                 </Button>
               )
             )}
-            <div className="grid grid-cols-2 gap-2">
-              {canUpdate && appointment.status === 'SCHEDULED' && (
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    run(() => appointmentAction(appointment.id, 'confirm'), 'Cita confirmada.')
-                  }
-                >
-                  <CheckCircle2 size={17} />
-                  Confirmar
-                </Button>
-              )}
-              {!ticket && pendable && (canUpdate || canUpdateOwn) && (
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    run(() => appointmentAction(appointment.id, 'start'), 'Atención iniciada.')
-                  }
-                >
-                  <UserCheck size={17} />
-                  Llegó
-                </Button>
-              )}
-              {canUpdate && pendable && started && (
-                <Button
-                  variant="outline"
-                  className="text-danger"
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      () => appointmentAction(appointment.id, 'no-show'),
-                      'Marcada como «no vino».',
-                    )
-                  }
-                >
-                  <UserX size={17} />
-                  No vino
-                </Button>
-              )}
-              {/* Cerrar la cita sin enviar a caja: un retoque sin cobro, una cortesía. Lo
+            {attendable && (
+              <div className="grid grid-cols-2 gap-2">
+                {canUpdate && appointment.status === 'SCHEDULED' && (
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      run(() => appointmentAction(appointment.id, 'confirm'), 'Cita confirmada.')
+                    }
+                  >
+                    <CheckCircle2 size={17} />
+                    Confirmar
+                  </Button>
+                )}
+                {!ticket && pendable && (canUpdate || canUpdateOwn) && (
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      run(() => appointmentAction(appointment.id, 'start'), 'Atención iniciada.')
+                    }
+                  >
+                    <UserCheck size={17} />
+                    Llegó
+                  </Button>
+                )}
+                {canUpdate && pendable && started && (
+                  <Button
+                    variant="outline"
+                    className="text-danger"
+                    disabled={busy}
+                    onClick={() =>
+                      run(
+                        () => appointmentAction(appointment.id, 'no-show'),
+                        'Marcada como «no vino».',
+                      )
+                    }
+                  >
+                    <UserX size={17} />
+                    No vino
+                  </Button>
+                )}
+                {/* Cerrar la cita sin enviar a caja: un retoque sin cobro, una cortesía. Lo
                   habitual es «Registrar lo realizado», que además la cobra. */}
-              {!ticket && canUpdate && (started || appointment.status === 'IN_PROGRESS') && (
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      () => appointmentAction(appointment.id, 'complete'),
-                      'Cita marcada como realizada.',
-                    )
-                  }
-                >
-                  <CheckCircle2 size={17} />
-                  Marcar como realizada
-                </Button>
-              )}
-            </div>
+                {/* La profesional también: la API se lo permite en sus propias citas. */}
+                {!ticket &&
+                  (canUpdate || canUpdateOwn) &&
+                  (started || appointment.status === 'IN_PROGRESS') && (
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() =>
+                        run(
+                          () => appointmentAction(appointment.id, 'complete'),
+                          'Cita marcada como realizada.',
+                        )
+                      }
+                    >
+                      <CheckCircle2 size={17} />
+                      Marcar como realizada
+                    </Button>
+                  )}
+              </div>
+            )}
           </div>
         )}
 
@@ -377,7 +387,8 @@ export function AppointmentSheet({
           />
         )}
 
-        {can('appointments.cancel') && pendable && (
+        {/* También en curso: la clienta puede irse a mitad (el dominio lo admite). */}
+        {can('appointments.cancel') && attendable && (
           <CancelBlock
             open={panel === 'cancel'}
             busy={busy}
@@ -726,6 +737,10 @@ function CancelBlock({
   return (
     <div className="space-y-3 rounded-2xl border border-danger/40 p-4">
       <p className="text-sm font-semibold">¿Por qué se cancela?</p>
+      <p className="text-xs text-muted-foreground">
+        El hueco queda libre y no se puede deshacer: si la clienta vuelve a llamar, se reserva una
+        cita nueva.
+      </p>
       <div className="flex flex-wrap gap-2">
         {CANCEL_REASONS.map((item) => (
           <button
@@ -759,7 +774,7 @@ function CancelBlock({
           disabled={busy}
           onClick={() => onConfirm(reason.trim())}
         >
-          Cancelar cita
+          Sí, cancelar
         </Button>
       </div>
     </div>

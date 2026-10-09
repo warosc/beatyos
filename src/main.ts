@@ -21,7 +21,13 @@ async function bootstrap(): Promise<void> {
 
   // `bufferLogs` retiene los logs del arranque hasta que el logger está listo, de modo
   // que un fallo de configuración se vea entero en lugar de perderse a medias.
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  // `forceCloseConnections`: al apagar se cierran también las conexiones abiertas. Sin esto,
+  // un canal en vivo de la agenda —que no termina nunca— retiene el cierre hasta que Docker
+  // mata el proceso, y cada despliegue deja el sitio caído unos segundos de más.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    forceCloseConnections: true,
+  });
   app.flushLogs();
 
   const config = app.get(ConfigService<Env, true>);

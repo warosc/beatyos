@@ -146,9 +146,11 @@ export const envSchema = z
     // `log` escribe el mensaje en el registro y no envia nada: es el valor por defecto
     // mientras no se contrate un proveedor. `whatsapp` y `sms` salen por Twilio y exigen
     // sus tres credenciales.
+    // Apagado por defecto: encenderlo es una decisión de despliegue, con proveedor y coste
+    // por mensaje detrás. Con el canal `log` no se enciende aunque se pida (ver el módulo).
     REMINDERS_ENABLED: z
       .string()
-      .default('true')
+      .default('false')
       .transform((v) => v === 'true'),
     REMINDER_CHANNEL: z.enum(['log', 'whatsapp', 'sms']).default('log'),
     REMINDER_LEAD_HOURS: z.coerce.number().int().min(1).max(168).default(24),
@@ -201,6 +203,20 @@ export const envSchema = z
           code: z.ZodIssueCode.custom,
           path: ['CORS_ORIGINS'],
           message: 'En producción CORS_ORIGINS debe ser una lista blanca explícita, nunca "*"',
+        });
+      }
+      // Es la dirección que reciben las clientas en el enlace de su cita: con el valor de
+      // desarrollo les llegaría un enlace a `localhost`.
+      const publicUrl = new URL(env.PUBLIC_WEB_URL);
+      if (
+        publicUrl.protocol !== 'https:' ||
+        ['localhost', '127.0.0.1'].includes(publicUrl.hostname)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['PUBLIC_WEB_URL'],
+          message:
+            'En producción PUBLIC_WEB_URL debe ser la dirección pública del salón, con https',
         });
       }
       if (env.SWAGGER_ENABLED) {

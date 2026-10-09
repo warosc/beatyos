@@ -19,7 +19,9 @@ self.addEventListener('notificationclick', (event) => {
       // Si la app ya está abierta, se lleva allí en lugar de abrir otra ventana.
       for (const client of windows) {
         if ('focus' in client) {
-          client.navigate(url);
+          // Solo se enfoca: navegar desde aquí perdería lo que se estuviera rellenando —una
+          // reserva a medias— y falla en ventanas que este worker aún no controla. La página
+          // ya se refresca sola con el canal en vivo.
           return client.focus();
         }
       }

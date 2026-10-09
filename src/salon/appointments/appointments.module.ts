@@ -89,8 +89,11 @@ import {
       useFactory: (config: ConfigService<Env, true>): ReminderSettings => ({
         // En la suite de tests no corre el planificador: un temporizador vivo entre tests
         // solo produce envíos que nadie espera.
+        // Y sin proveedor tampoco: con el canal `log` no sale nada, y marcar las citas como
+        // recordadas haría creer a recepción que la clienta fue avisada.
         enabled:
           config.get('REMINDERS_ENABLED', { infer: true }) &&
+          config.get('REMINDER_CHANNEL', { infer: true }) !== 'log' &&
           config.get('NODE_ENV', { infer: true }) !== 'test',
         leadHours: config.get('REMINDER_LEAD_HOURS', { infer: true }),
         minimumLeadMinutes: config.get('REMINDER_MIN_LEAD_MINUTES', { infer: true }),

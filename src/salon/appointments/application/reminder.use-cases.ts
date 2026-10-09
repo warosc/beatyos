@@ -81,6 +81,15 @@ export class SendDueRemindersUseCase implements UseCase<
   ) {}
 
   async execute(input: { actorId?: string | null } = {}): Promise<ReminderRunSummary> {
+    // Sin proveedor no se «envía» nada: anotar la cita como recordada dejaría a recepción
+    // creyendo que la clienta fue avisada, y esa cita ya no se recordaría de verdad nunca.
+    if (this.sender.channel === 'LOG') {
+      throw new BusinessRuleViolationError(
+        'REMINDER_PROVIDER_NOT_CONFIGURED',
+        'Los recordatorios automáticos necesitan un proveedor de WhatsApp o SMS. Mientras ' +
+          'tanto, abre la cita y usa «Recordar por WhatsApp».',
+      );
+    }
     const now = this.clock.now();
     const due = await this.log.findDue(reminderWindow(now, this.settings), MAX_FAILURES);
     const summary = { sent: 0, failed: 0, skipped: 0 };

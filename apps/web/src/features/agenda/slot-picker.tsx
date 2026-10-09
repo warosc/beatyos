@@ -4,7 +4,7 @@ import { CalendarX2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { agendaGet } from './api';
-import { addDays, isoDay, sameDay, startOfDay, time } from './time';
+import { addDays, isoDay, parseIsoDay, sameDay, startOfDay, time } from './time';
 import type { Slot } from './types';
 import { AGENDA_KEY } from './use-agenda';
 
@@ -141,6 +141,22 @@ export function SlotPicker({
           );
         })}
       </div>
+      {/* La franja cubre cuatro semanas; para más adelante —una novia, unas vacaciones—
+          se elige la fecha a mano. */}
+      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        Otra fecha
+        <input
+          type="date"
+          min={isoDay(today)}
+          value={days.some((candidate) => sameDay(candidate, day)) ? '' : isoDay(day)}
+          onChange={(event) => {
+            if (!event.target.value) return;
+            onDayChange(parseIsoDay(event.target.value));
+            onChange(null);
+          }}
+          className="h-10 rounded-xl border bg-background px-3 text-foreground"
+        />
+      </label>
 
       {serviceIds.length === 0 ? (
         <p className="rounded-xl bg-muted p-4 text-sm text-muted-foreground">

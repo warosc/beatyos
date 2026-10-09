@@ -30,6 +30,7 @@ import {
   WithdrawChangeRequestUseCase,
 } from './change-request.use-cases';
 import { PrepareManualReminderUseCase, SendDueRemindersUseCase } from './reminder.use-cases';
+import { LoggingReminderSender } from '../infrastructure/reminders/reminder-senders';
 
 /**
  * Mejoras de la agenda: huecos con cualquier profesional, cambios de hora que aprueba la
@@ -221,6 +222,7 @@ describe('Agenda: equipo, cambios pedidos, bloqueos y recordatorios', () => {
         audit,
         passthroughUnitOfWork,
         events,
+        appointments,
       );
       reject = new RejectChangeRequestUseCase(requests, clock, audit, events);
       withdraw = new WithdrawChangeRequestUseCase(requests, clock, audit, events);
@@ -285,6 +287,17 @@ describe('Agenda: equipo, cambios pedidos, bloqueos y recordatorios', () => {
 
       await withdraw.execute({ id: first.id, actorId: 'user-sara', stylistId: 'sara' });
       await expect(ask(booked.id, fri(13))).resolves.toMatchObject({ status: 'PENDING' });
+    });
+
+    it('si recepción movió la cita mientras esperaba, aprobar no pisa ese cambio', async () => {
+      const booked = await book('sara', fri(10));
+      const request = await ask(booked.id, fri(12));
+      await reschedule.execute({ id: booked.id, startsAt: fri(11), actorId: 'recepcion' });
+
+      await expect(approve.execute({ id: request.id, actorId: 'encargada' })).rejects.toMatchObject(
+        { code: 'CHANGE_REQUEST_OUTDATED' },
+      );
+      expect((await appointments.findByIdOrFail(booked.id)).period.startsAt).toEqual(fri(11));
     });
 
     it('si el hueco se ocupó mientras esperaba, aprobar falla y la petición sigue pendiente', async () => {
@@ -362,6 +375,24 @@ describe('Agenda: equipo, cambios pedidos, bloqueos y recordatorios', () => {
       expect((await appointments.findByIdOrFail(due.id)).reminderSentAt).toEqual(NOW);
 
       await expect(sendDue.execute()).resolves.toEqual({ sent: 0, failed: 0, skipped: 0 });
+    });
+
+    it('sin proveedor no envía ni marca nada como recordado', async () => {
+      // Con el canal `log` no sale ningún mensaje: anotar la cita como recordada haría creer
+      // a recepción que la clienta fue avisada.
+      const due = await book('sara', fri(9));
+      const withoutProvider = new SendDueRemindersUseCase(
+        log,
+        new LoggingReminderSender(),
+        settings,
+        ids,
+        clock,
+        events,
+      );
+
+      await expect(withoutProvider.execute()).rejects.toThrow(/proveedor/);
+      expect((await appointments.findByIdOrFail(due.id)).reminderSentAt).toBeFalsy();
+      expect(log.attempts).toHaveLength(0);
     });
 
     it('sin teléfono se descarta una vez y no se reintenta', async () => {

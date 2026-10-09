@@ -4,14 +4,18 @@ import { apiRequest, ApiError } from '@/lib/api';
 import { safeReturnPath } from '@/lib/safe-return-path';
 import type { Session } from '@/lib/auth';
 
-async function renew(redirectTo?: URL) {
+async function renew(request: NextRequest, redirectTo?: URL) {
   const jar = await cookies();
   const refreshToken = jar.get('beautyos_refresh')?.value;
   if (!refreshToken) return NextResponse.json({ message: 'Sesión expirada.' }, { status: 401 });
+  // La IP real, como en el login: sin ella el límite de renovaciones es uno solo para todo
+  // el salón —el del contenedor web— y unas cuantas pestañas lo agotan.
+  const forwardedFor = request.headers.get('x-forwarded-for');
   try {
     const session = await apiRequest<Session>('/auth/refresh', {
       method: 'POST',
       body: JSON.stringify({ refreshToken }),
+      headers: forwardedFor ? { 'x-forwarded-for': forwardedFor } : undefined,
     });
     const response = redirectTo
       ? NextResponse.redirect(redirectTo)
@@ -47,8 +51,8 @@ async function renew(redirectTo?: URL) {
   }
 }
 
-export async function POST() {
-  return renew();
+export async function POST(request: NextRequest) {
+  return renew(request);
 }
 export async function GET(request: NextRequest) {
   const returnTo = request.nextUrl.searchParams.get('returnTo');

@@ -243,10 +243,9 @@ export function BookingWizard({
       {step === 'client' && (
         <ClientStep
           client={client}
-          onChange={(value) => {
-            setClient(value);
-            if (value) go('services');
-          }}
+          // Sin avanzar solo: la lista se elige al pulsar (`mousedown`) y el clic que sigue
+          // —o el toque, en el móvil— caería sobre el servicio que aparece debajo y lo marcaría.
+          onChange={setClient}
           canCreate={can('clients.create')}
         />
       )}

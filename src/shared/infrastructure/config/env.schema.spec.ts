@@ -101,6 +101,7 @@ describe('validateEnv', () => {
       NODE_ENV: 'production',
       CORS_ORIGINS: 'https://salon.example.com',
       SWAGGER_ENABLED: 'false',
+      PUBLIC_WEB_URL: 'https://salon.example.com',
     };
 
     it('acepta una configuración de producción correcta', () => {
@@ -132,6 +133,15 @@ describe('validateEnv', () => {
       expect(() => validateEnv({ ...productionEnv, JWT_ACCESS_SECRET: 'a'.repeat(40) })).toThrow(
         /no parece aleatorio/,
       );
+    });
+
+    it('exige la dirección pública real del salón para los enlaces de las clientas', () => {
+      // Con el valor de desarrollo, el recordatorio llevaría un enlace a `localhost`.
+      const { PUBLIC_WEB_URL: _omitted, ...withoutUrl } = productionEnv;
+      expect(() => validateEnv(withoutUrl)).toThrow(/PUBLIC_WEB_URL/);
+      expect(() =>
+        validateEnv({ ...productionEnv, PUBLIC_WEB_URL: 'http://salon.example.com' }),
+      ).toThrow(/https/);
     });
 
     it('exige una lista blanca de CORS', () => {

@@ -111,12 +111,14 @@ export class HttpLoggingInterceptor implements NestInterceptor {
     const response = context.switchToHttp().getResponse<Response>();
     const startedAt = Date.now();
     const { correlationId, userId, tenantId } = RequestContextStore.get();
+    // El enlace de la cita es la credencial de la clienta: no se escribe en el registro.
+    const url = request.originalUrl.replace(/(\/public\/appointment-links\/)[^/?]+/, '$1…');
 
     // Un canal de avisos en vivo emite durante horas: registrar cada latido llenaría el log
     // de líneas idénticas. Se registra al abrirlo, una vez.
     if (request.headers.accept?.includes('text/event-stream')) {
       this.logger.log(
-        `${request.method} ${request.originalUrl} stream abierto ` +
+        `${request.method} ${url} stream abierto ` +
           `[cid=${correlationId}${tenantId ? ` tenant=${tenantId}` : ''}${userId ? ` user=${userId}` : ''}]`,
       );
       return next.handle();
@@ -127,7 +129,7 @@ export class HttpLoggingInterceptor implements NestInterceptor {
         next: () => {
           const elapsed = Date.now() - startedAt;
           this.logger.log(
-            `${request.method} ${request.originalUrl} ${response.statusCode} ${elapsed}ms ` +
+            `${request.method} ${url} ${response.statusCode} ${elapsed}ms ` +
               `[cid=${correlationId}${tenantId ? ` tenant=${tenantId}` : ''}${userId ? ` user=${userId}` : ''}]`,
           );
         },
