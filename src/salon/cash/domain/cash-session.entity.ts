@@ -227,6 +227,9 @@ export class CashSession extends Entity {
    * El concepto es obligatorio a propósito: un movimiento de caja sin explicación es
    * indistinguible de un descuadre, y el motivo de que exista este registro es precisamente
    * poder distinguirlos.
+   *
+   * `cashSales` es lo cobrado en efectivo en esta sesión: hace falta para saber cuánto hay
+   * en el cajón antes de dejar sacar dinero.
    */
   recordMovement(params: {
     id: string;
@@ -235,6 +238,7 @@ export class CashSession extends Entity {
     concept: string;
     reference?: string | null;
     notes?: string | null;
+    cashSales: Money;
     now: Date;
     actorId: string | null;
   }): CashMovement {
@@ -272,13 +276,15 @@ export class CashSession extends Entity {
     }
 
     // Sacar más de lo que hay en el cajón es físicamente imposible: o el importe está mal
-    // o falta registrar una entrada. En cualquier caso hay que pararlo, no anotarlo.
+    // o falta registrar una entrada. En cualquier caso hay que pararlo, no anotarlo. Lo
+    // que hay incluye las ventas en efectivo: con fondo cero y Q500 vendidos, un gasto de
+    // Q50 sale de ese dinero, igual que una devolución (`recordRefund`).
     if (MOVEMENT_SIGN[params.type] === -1) {
-      const available = this.props.openingFloat.add(this.netMovements);
+      const available = this.expectedAmount(params.cashSales);
       if (params.amount.greaterThan(available)) {
         throw new BusinessRuleViolationError(
           'INSUFFICIENT_CASH',
-          `No se pueden sacar ${params.amount.toString()}: el fondo y los movimientos suman ${available.toString()}`,
+          `No se pueden sacar ${params.amount.toString()}: en la caja debería haber ${available.toString()}`,
           {
             sessionId: this.id,
             available: available.toDecimalString(),

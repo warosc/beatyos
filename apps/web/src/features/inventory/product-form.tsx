@@ -23,6 +23,10 @@ export type Product = {
   reorderPoint: string;
   reorderQuantity: string;
   stockStatus: 'AVAILABLE' | 'LOW' | 'OUT';
+  /** Sin control de existencias (un bono, un servicio) no se recibe ni se ajusta. */
+  trackStock?: boolean;
+  /** Solo estos productos llevan número de lote y vencimiento al recibirlos. */
+  tracksBatches?: boolean;
 };
 
 const cents = (value: string | number) => Math.round(Number(value) * 100);

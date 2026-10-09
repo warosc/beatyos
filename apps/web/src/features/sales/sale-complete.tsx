@@ -58,6 +58,7 @@ export function SaleComplete({
           </Button>
         )}
         <Button
+          data-autofocus
           className="h-12 w-full"
           onClick={onNext}
           onKeyDown={(event) => event.key.toLowerCase() === 'p' && onPrint?.()}

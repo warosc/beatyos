@@ -137,6 +137,7 @@ export class RecordCashMovementUseCase implements UseCase<
     input: RecordCashMovementInput,
   ): Promise<{ movement: CashMovement; view: CashSessionView }> {
     const session = await requireOpenSession(this.sessions);
+    const cashSales = await this.payments.cashTotalForSession(session.id, session.currency);
 
     const movement = session.recordMovement({
       id: this.ids.generate(),
@@ -145,6 +146,7 @@ export class RecordCashMovementUseCase implements UseCase<
       concept: input.concept,
       reference: input.reference ?? null,
       notes: input.notes ?? null,
+      cashSales,
       now: this.clock.now(),
       actorId: input.actorId,
     });

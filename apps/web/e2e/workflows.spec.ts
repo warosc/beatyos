@@ -183,9 +183,47 @@ test('cancela una cita y cambia de estilista', async ({ page }) => {
     .poll(() => writes.some((x) => (x.body as { stylistId?: string }).stylistId === stylists[1].id))
     .toBeTruthy();
   await cita.click();
-  await page.getByLabel('Motivo de cancelación').fill('Solicitud de la clienta');
+  // Cancelar es irreversible: primero pide confirmación y no envía nada todavía.
   await page.getByRole('button', { name: 'Cancelar cita' }).click();
-  await expect.poll(() => writes.some((x) => x.url.includes('action=cancel'))).toBeTruthy();
+  await expect(page.getByText(/¿Cancelar la cita de Ana Prueba\?/)).toBeVisible();
+  expect(writes.some((x) => x.url.includes('action=cancel'))).toBe(false);
+  await page.getByLabel('Motivo (opcional)').fill('Solicitud de la clienta');
+  await page.getByRole('button', { name: 'Sí, cancelar' }).click();
+  await expect
+    .poll(
+      () =>
+        writes.find((x) => x.url.includes('action=cancel'))?.body as
+          { reason?: string } | undefined,
+    )
+    .toEqual({ reason: 'Solicitud de la clienta' });
+});
+
+test('la agenda muestra el estado y deja confirmar, cerrar o marcar que no vino', async ({
+  page,
+}) => {
+  // Las 12:00 de hoy: la cita de las 10:00 ya pasó, así que «No vino» está disponible.
+  const noon = new Date();
+  noon.setHours(12, 0, 0, 0);
+  await page.clock.setFixedTime(noon);
+  const writes: { url: string; body: unknown }[] = [];
+  await authenticated(page);
+  await mockAgenda(page, (url, body) => writes.push({ url, body }));
+  await page.goto('/agenda');
+  const cita = page.getByRole('button', { name: /Ana Prueba/ });
+  const acciones = page.getByRole('dialog', { name: 'Ana Prueba' });
+
+  await cita.click();
+  await expect(acciones).toContainText('Agendada');
+  await acciones.getByRole('button', { name: 'Confirmar con la clienta' }).click();
+  await expect.poll(() => writes.some((x) => x.url.includes('action=confirm'))).toBe(true);
+
+  await cita.click();
+  await acciones.getByRole('button', { name: 'No vino' }).click();
+  await expect.poll(() => writes.some((x) => x.url.includes('action=no-show'))).toBe(true);
+
+  await cita.click();
+  await acciones.getByRole('button', { name: 'Marcar como realizada' }).click();
+  await expect.poll(() => writes.some((x) => x.url.includes('action=complete'))).toBe(true);
 });
 
 test('vende un producto en quetzales', async ({ page }) => {

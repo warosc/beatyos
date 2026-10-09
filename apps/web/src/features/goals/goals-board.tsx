@@ -40,6 +40,7 @@ export function GoalsBoard() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
+  const [cancelError, setCancelError] = useState('');
   const goals = usePagedList<GoalItem>('goals', `/api/goals?limit=20&page=${page}`);
   const stylists = useQuery({
     queryKey: ['stylists'],
@@ -55,7 +56,16 @@ export function GoalsBoard() {
 
   async function cancelGoal(id: string) {
     if (!window.confirm('¿Cancelar esta meta?')) return;
-    await sessionFetch(`/api/goals/${id}`, { method: 'DELETE' });
+    setCancelError('');
+    const response = await sessionFetch(`/api/goals/${id}`, { method: 'DELETE' });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as {
+        detail?: string;
+        message?: string;
+      };
+      setCancelError(body.detail ?? body.message ?? 'No pudimos cancelar la meta.');
+      return;
+    }
     await refresh();
   }
 
@@ -76,6 +86,11 @@ export function GoalsBoard() {
           </Button>
         )}
       </div>
+      {cancelError && (
+        <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
+          {cancelError}
+        </p>
+      )}
       {goals.isPending && <p role="status">Cargando metas…</p>}
       {goals.error && (
         <p role="alert">

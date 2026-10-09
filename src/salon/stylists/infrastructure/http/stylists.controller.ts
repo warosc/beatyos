@@ -32,6 +32,7 @@ import {
   CurrentUser,
   RequirePermissions,
 } from '../../../../shared/infrastructure/http/decorators';
+import { includeDeletedFor } from '../../../../shared/infrastructure/http/include-deleted';
 import { PageMetaResponse } from '../../../../shared/infrastructure/http/dto/pagination.dto';
 import {
   AddTimeOffUseCase,
@@ -123,6 +124,7 @@ export class StylistsController {
   })
   async list(
     @Query() query: StylistQueryDto,
+    @CurrentUser() user: AccessTokenClaims,
   ): Promise<{ data: StylistResponse[]; meta: PageMetaResponse }> {
     const page = await this.searchStylists.execute({
       filter: {
@@ -132,7 +134,7 @@ export class StylistsController {
         onlyBookable: query.onlyBookable,
       },
       page: query.toPageRequest<StylistSortField>(),
-      includeDeleted: query.includeDeleted,
+      includeDeleted: includeDeletedFor(query.includeDeleted, user, PERMISSIONS.stylists.restore),
     });
 
     return { data: page.data.map((stylist) => StylistResponse.from(stylist)), meta: page.meta };

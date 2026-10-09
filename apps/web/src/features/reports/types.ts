@@ -1,3 +1,5 @@
+import { sessionFetch } from '@/lib/session-fetch';
+
 export type ExecutiveReport = {
   period: { from: string; to: string };
   currency: 'GTQ';
@@ -27,8 +29,12 @@ export type DashboardReport = ExecutiveReport & {
   }[];
   cash: { isOpen: boolean; openedAt: string | null; expected: string };
 };
+/**
+ * `sessionFetch` y no `fetch`: renueva la sesión caducada (un iPad abierto todo el día) y
+ * convierte una respuesta que no es JSON —la API reiniciándose— en un error legible.
+ */
 export async function loadReport<T>(resource: 'executive' | 'dashboard', params = '') {
-  const response = await fetch(`/api/reports?resource=${resource}${params}`, { cache: 'no-store' });
+  const response = await sessionFetch(`/api/reports?resource=${resource}${params}`);
   const body = (await response.json()) as { data?: T; detail?: string; message?: string };
   if (!response.ok)
     throw new Error(body.detail ?? body.message ?? 'No pudimos cargar los indicadores.');

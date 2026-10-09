@@ -7,6 +7,7 @@ import {
   type ThrottlerStorage,
 } from '@nestjs/throttler';
 
+import type { TokenSigner } from '../../application/ports';
 import { APPLIED_THROTTLERS_KEY, ScopedThrottlerGuard } from './scoped-throttler.guard';
 
 /**
@@ -30,8 +31,35 @@ describe('ScopedThrottlerGuard', () => {
     const options = { throttlers: [] } as unknown as ThrottlerModuleOptions;
     const storage = {} as unknown as ThrottlerStorage;
 
-    return new ScopedThrottlerGuard(options, storage, reflector);
+    return new ScopedThrottlerGuard(options, storage, reflector, tokens);
   };
+
+  const tokens = {
+    verifyAccess: async (token: string) => {
+      if (token !== 'valido') throw new Error('firma inválida');
+      return { sub: 'user-1' };
+    },
+  } as unknown as TokenSigner;
+
+  /** Acceso al método protegido que decide a quién se cuenta cada petición. */
+  const trackerFor = (headers: Record<string, string>) =>
+    (
+      buildGuard() as unknown as { getTracker(req: Record<string, unknown>): Promise<string> }
+    ).getTracker({ headers, ip: '10.0.0.5', ips: [] });
+
+  describe('a quién se cuenta', () => {
+    it('con sesión, a la persona: el salón entero llega desde la misma IP', async () => {
+      await expect(trackerFor({ authorization: 'Bearer valido' })).resolves.toBe('user:user-1');
+    });
+
+    it('un token que no vale no da cupo propio: cuenta por IP', async () => {
+      await expect(trackerFor({ authorization: 'Bearer inventado' })).resolves.toBe('10.0.0.5');
+    });
+
+    it('sin sesión, por IP', async () => {
+      await expect(trackerFor({})).resolves.toBe('10.0.0.5');
+    });
+  });
 
   const context = {
     getHandler: () => () => undefined,

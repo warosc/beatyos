@@ -12,20 +12,21 @@ import {
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { dayRange, localDay } from '@/lib/dates';
 import { currency } from '@/lib/utils';
 import { ExecutiveReport, loadReport } from './types';
 
-const iso = (date: Date) => date.toISOString().slice(0, 10);
 export function ExecutiveReportView() {
   const now = new Date();
-  const [from, setFrom] = useState(iso(new Date(now.getTime() - 30 * 86_400_000)));
-  const [to, setTo] = useState(iso(now));
+  // Fechas en la hora del salón: con UTC, por la noche «hoy» ya sería mañana.
+  const [from, setFrom] = useState(localDay(new Date(now.getTime() - 30 * 86_400_000)));
+  const [to, setTo] = useState(localDay(now));
   const report = useQuery({
     queryKey: ['reports', from, to],
     queryFn: () =>
       loadReport<ExecutiveReport>(
         'executive',
-        `&from=${from}T00:00:00-06:00&to=${to}T23:59:59-06:00`,
+        `&from=${encodeURIComponent(dayRange(from).from.toISOString())}&to=${encodeURIComponent(dayRange(to).to.toISOString())}`,
       ),
   });
   const data = report.data;

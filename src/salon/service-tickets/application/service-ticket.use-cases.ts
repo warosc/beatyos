@@ -235,16 +235,10 @@ export class RegisterServiceTicketUseCase implements UseCase<
 }
 
 /**
- * Completa la cita recorriendo la máquina de estados normal.
- *
- * Si nadie pulsó «empezar», el inicio se fija a la hora prevista —o a ahora, si la
- * profesional adelantó la visita—, con el mismo criterio que `Appointment.complete`.
+ * Completa la cita. Si nadie pulsó «empezar», `Appointment.complete` fija el inicio a la
+ * hora prevista —o a ahora, si la profesional adelantó la visita—.
  */
 const closeAppointment = (appointment: Appointment, now: Date, actorId: string): void => {
-  if (appointment.status === 'SCHEDULED' || appointment.status === 'CONFIRMED') {
-    const plannedStart = appointment.period.startsAt;
-    appointment.start(plannedStart.getTime() < now.getTime() ? plannedStart : now, actorId);
-  }
   appointment.complete(now, actorId);
 };
 

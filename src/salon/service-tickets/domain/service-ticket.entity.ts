@@ -177,6 +177,28 @@ export class ServiceTicket extends Entity {
   }
 
   /**
+   * Devuelve a caja una comanda cuya venta se anuló (ADR-0020).
+   *
+   * El servicio se hizo igual: lo que estaba mal era el cobro (clienta equivocada, método de
+   * pago). Dejarla «cobrada» apuntando a una factura anulada haría desaparecer el servicio
+   * de caja y bloquearía volver a registrar la cita. Pendiente otra vez, se cobra bien.
+   */
+  reopen(now: Date, actorId: string | null): void {
+    if (this.props.status !== 'CHARGED') {
+      throw new InvalidStateTransitionError('Comanda', this.props.status, 'PENDING');
+    }
+
+    this.props = {
+      ...this.props,
+      status: 'PENDING',
+      invoiceId: null,
+      chargedAt: null,
+      chargedBy: null,
+      audit: { ...this.props.audit, updatedAt: now, updatedBy: actorId },
+    };
+  }
+
+  /**
    * Anula una comanda que no se va a cobrar: clienta equivocada, servicio mal elegido.
    *
    * Exige motivo porque es la única forma de que un servicio realizado salga de caja sin

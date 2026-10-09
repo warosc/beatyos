@@ -12,6 +12,7 @@ import {
   Scissors,
   TriangleAlert,
   UserCheck,
+  UserX,
   X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -22,7 +23,14 @@ import { STATUS_LABEL, type ServiceTicket } from '@/features/service-tickets/typ
 import { PendingRegisterBanner } from '@/features/stylist-day/pending-register-banner';
 import { MY_DAY_KEY } from '@/features/stylist-day/use-my-day';
 import { loadOptions, loadPage } from '@/lib/pagination';
-import type { AgendaClient, Appointment, Service, Stylist } from './types';
+import {
+  APPOINTMENT_STATUS_LABEL,
+  FINAL_APPOINTMENT_STATUSES,
+  type AgendaClient,
+  type Appointment,
+  type Service,
+  type Stylist,
+} from './types';
 
 type View = 'day' | 'week' | 'month';
 const dayMs = 86_400_000;
@@ -258,9 +266,14 @@ export function AgendaBoard({
                   ?.filter((a) => isoDay(new Date(a.startsAt)) === isoDay(day))
                   .map((a) => {
                     const stylist = stylistMap.get(a.stylistId);
+                    // Una cita cancelada o a la que no vinieron no ocupa el hueco: se ve
+                    // atenuada para que recepción no la tome por una reserva vigente.
+                    const gone = a.status === 'CANCELLED' || a.status === 'NO_SHOW';
                     return (
                       <article
-                        draggable={can('appointments.update')}
+                        draggable={
+                          can('appointments.update') && !FINAL_APPOINTMENT_STATUSES.has(a.status)
+                        }
                         role="button"
                         tabIndex={0}
                         onClick={() => setSelected(a)}
@@ -272,16 +285,21 @@ export function AgendaBoard({
                         }}
                         onDragStart={(event) => event.dataTransfer.setData('text/plain', a.id)}
                         key={a.id}
-                        className="cursor-grab rounded-xl border-l-4 bg-muted p-2 text-xs shadow-sm"
+                        className={`cursor-grab rounded-xl border-l-4 bg-muted p-2 text-xs shadow-sm ${gone ? 'opacity-60' : ''}`}
                         style={{ borderLeftColor: stylist?.color ?? 'var(--primary)' }}
                       >
-                        <p className="font-bold">
+                        <p className="flex items-center justify-between gap-1 font-bold">
                           {new Date(a.startsAt).toLocaleTimeString('es-GT', {
                             hour: '2-digit',
                             minute: '2-digit',
                           })}
+                          {a.status !== 'SCHEDULED' && (
+                            <span className="rounded-full bg-card px-1.5 py-0.5 text-[10px] font-semibold">
+                              {APPOINTMENT_STATUS_LABEL[a.status] ?? a.status}
+                            </span>
+                          )}
                         </p>
-                        <p className="mt-1 truncate font-semibold">
+                        <p className={`mt-1 truncate font-semibold ${gone ? 'line-through' : ''}`}>
                           {a.clientName ?? clientMap.get(a.clientId) ?? 'Clienta'}
                         </p>
                         <p className="truncate text-muted-foreground">
@@ -380,9 +398,16 @@ function AppointmentActions({
   const { can } = useAccess();
   const [stylistId, setStylistId] = useState(appointment.stylistId);
   const [reason, setReason] = useState('');
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const isCancelled = appointment.status === 'CANCELLED';
+  const isFinal = FINAL_APPOINTMENT_STATUSES.has(appointment.status);
+  const isUpcoming = appointment.status === 'SCHEDULED' || appointment.status === 'CONFIRMED';
+  // «No vino» solo una vez pasada la hora: antes sería prejuzgar, y la API lo rechaza.
+  // La hora se toma al abrir el diálogo, no en cada render.
+  const [openedAt] = useState(() => Date.now());
+  const hasStarted = new Date(appointment.startsAt).getTime() <= openedAt;
   const canRegister = can('service-tickets.create') || can('service-tickets.create.own');
   const canStart = can('appointments.update') || can('appointments.update.own');
   // ¿Ya se envió a caja? Se mira en las comandas del día de la cita.
@@ -399,7 +424,9 @@ function AppointmentActions({
     (item) => item.appointmentId === appointment.id && item.status !== 'CANCELLED',
   );
   const attendable = !isCancelled && appointment.status !== 'NO_SHOW';
-  async function act(action: 'reschedule' | 'cancel' | 'start') {
+  async function act(
+    action: 'reschedule' | 'cancel' | 'start' | 'confirm' | 'complete' | 'no-show',
+  ) {
     setBusy(true);
     setError('');
     const response = await sessionFetch(
@@ -409,10 +436,10 @@ function AppointmentActions({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
           action === 'cancel'
-            ? { reason: reason || undefined }
-            : action === 'start'
-              ? {}
-              : { stylistId },
+            ? { reason: reason.trim() || undefined }
+            : action === 'reschedule'
+              ? { stylistId }
+              : {},
         ),
       },
     );
@@ -449,6 +476,9 @@ function AppointmentActions({
                 minute: '2-digit',
               })}
             </p>
+            <p className="mt-1 inline-block rounded-full bg-muted px-2 py-0.5 text-xs font-semibold">
+              {APPOINTMENT_STATUS_LABEL[appointment.status] ?? appointment.status}
+            </p>
           </div>
           <button onClick={onClose} aria-label="Cerrar">
             <X />
@@ -467,68 +497,144 @@ function AppointmentActions({
                 Registrar lo realizado
               </Button>
             )}
-            {!ticket &&
-              canStart &&
-              (appointment.status === 'SCHEDULED' || appointment.status === 'CONFIRMED') && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  disabled={busy}
-                  onClick={() => act('start')}
-                >
-                  <UserCheck size={17} />
-                  Llegó: iniciar atención
-                </Button>
-              )}
+            {!ticket && canStart && isUpcoming && (
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={busy}
+                onClick={() => act('start')}
+              >
+                <UserCheck size={17} />
+                Llegó: iniciar atención
+              </Button>
+            )}
           </div>
         )}
+        {/* Cerrar la cita sin comanda: lo que se cobró directo en el punto de venta. */}
+        {!isFinal && !ticket && canStart && (
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={busy}
+            onClick={() => act('complete')}
+          >
+            <CheckCircle2 size={17} />
+            Marcar como realizada
+          </Button>
+        )}
+        <Can permission="appointments.update">
+          {(appointment.status === 'SCHEDULED' || (isUpcoming && hasStarted)) && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {appointment.status === 'SCHEDULED' && (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => act('confirm')}
+                  className={hasStarted ? '' : 'sm:col-span-2'}
+                >
+                  Confirmar con la clienta
+                </Button>
+              )}
+              {isUpcoming && hasStarted && (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => act('no-show')}
+                  className={appointment.status === 'SCHEDULED' ? '' : 'sm:col-span-2'}
+                >
+                  <UserX size={17} />
+                  No vino
+                </Button>
+              )}
+            </div>
+          )}
+        </Can>
         {/* Cada bloque entero va tras su permiso: un selector sin botón no sirve a nadie. */}
         <Can permission="appointments.update">
-          <label className="block text-sm font-semibold">
-            Cambiar estilista
-            <select
-              aria-label="Cambiar estilista"
-              value={stylistId}
-              onChange={(e) => setStylistId(e.target.value)}
-              className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
-            >
-              {stylists
-                .filter((x) => x.isBookable)
-                .map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.displayName}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <Button
-            className="w-full"
-            disabled={busy || stylistId === appointment.stylistId}
-            onClick={() => act('reschedule')}
-          >
-            Guardar estilista
-          </Button>
+          {!isFinal && (
+            <>
+              <label className="block text-sm font-semibold">
+                Cambiar estilista
+                <select
+                  aria-label="Cambiar estilista"
+                  value={stylistId}
+                  onChange={(e) => setStylistId(e.target.value)}
+                  className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
+                >
+                  {stylists
+                    .filter((x) => x.isBookable)
+                    .map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.displayName}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <Button
+                className="w-full"
+                disabled={busy || stylistId === appointment.stylistId}
+                onClick={() => act('reschedule')}
+              >
+                Guardar estilista
+              </Button>
+            </>
+          )}
         </Can>
+        {/* Cancelar es irreversible: pide confirmar, como anular una venta. */}
         <Can permission="appointments.cancel">
-          <div className="border-t pt-5">
-            <label className="block text-sm font-semibold">
-              Motivo de cancelación
-              <input
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
-              />
-            </label>
-            <Button
-              variant="outline"
-              className="mt-3 w-full text-danger"
-              disabled={busy || isCancelled}
-              onClick={() => act('cancel')}
-            >
-              {isCancelled ? 'Cita ya cancelada' : 'Cancelar cita'}
-            </Button>
-          </div>
+          {!isFinal &&
+            (confirmingCancel ? (
+              <div className="space-y-3 rounded-xl border border-danger/40 bg-danger/5 p-4">
+                <p className="text-sm font-semibold">
+                  ¿Cancelar la cita de {clientName}? Se libera el hueco y no se puede deshacer: si
+                  vuelve a llamar, se reserva una nueva.
+                </p>
+                <label className="block text-sm font-semibold">
+                  Motivo (opcional)
+                  <input
+                    autoFocus
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => setConfirmingCancel(false)}
+                  >
+                    Volver
+                  </Button>
+                  <Button
+                    className="bg-danger text-white hover:bg-danger/90"
+                    disabled={busy}
+                    onClick={() => act('cancel')}
+                  >
+                    Sí, cancelar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="border-t pt-5">
+                <Button
+                  variant="outline"
+                  className="w-full text-danger"
+                  disabled={busy}
+                  onClick={() => setConfirmingCancel(true)}
+                >
+                  Cancelar cita
+                </Button>
+              </div>
+            ))}
         </Can>
+        {isFinal && (
+          <p className="text-sm text-muted-foreground">
+            {isCancelled
+              ? 'La cita está cancelada. Si la clienta vuelve a llamar, reserva una nueva.'
+              : 'La cita ya terminó: no admite más cambios.'}
+          </p>
+        )}
         {error && (
           <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
             {error}

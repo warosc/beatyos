@@ -103,7 +103,9 @@ export class ResetPasswordUseCase implements UseCase<{ token: string; newPasswor
     @Inject(USER_REPOSITORY) private readonly users: UserRepository,
     @Inject(PASSWORD_RESET_REPOSITORY) private readonly resets: PasswordResetRepository,
     @Inject(PASSWORD_HASHER) private readonly hasher: PasswordHasher,
+    @Inject(REFRESH_TOKEN_REPOSITORY) private readonly refreshTokens: RefreshTokenRepository,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(AUDIT_RECORDER) private readonly audit: AuditRecorder,
   ) {}
 
   async execute(input: { token: string; newPassword: string }): Promise<void> {
@@ -119,6 +121,16 @@ export class ResetPasswordUseCase implements UseCase<{ token: string; newPasswor
     const hash = await this.hasher.hash(input.newPassword);
     user.changePassword(hash, now, user.id);
     await this.users.update(user);
+
+    // Recuperar la contraseña es, muchas veces, la reacción a que otra persona la conocía:
+    // sus sesiones abiertas tienen que caer aquí, igual que al cambiarla desde el perfil.
+    await this.refreshTokens.revokeAllForUser(user.id, 'PASSWORD_RESET', now);
+    await this.audit.record({
+      action: 'UPDATE',
+      entityType: 'User',
+      entityId: user.id,
+      metadata: { field: 'password', resetByLink: true, sessionsRevoked: true },
+    });
   }
 }
 

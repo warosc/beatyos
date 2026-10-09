@@ -31,6 +31,7 @@ import { PERMISSIONS } from '../../../../core/permissions/domain/permission-cata
 import type { AccessTokenClaims } from '../../../../shared/application/ports';
 import type { Env } from '../../../../shared/infrastructure/config/env.schema';
 import { CurrentUser, RequirePermissions } from '../../../../shared/infrastructure/http/decorators';
+import { includeDeletedFor } from '../../../../shared/infrastructure/http/include-deleted';
 import { PageMetaResponse } from '../../../../shared/infrastructure/http/dto/pagination.dto';
 import {
   CreateCategoryUseCase,
@@ -135,6 +136,7 @@ export class ServicesController {
   })
   async list(
     @Query() query: ServiceQueryDto,
+    @CurrentUser() user: AccessTokenClaims,
   ): Promise<{ data: ServiceResponse[]; meta: PageMetaResponse }> {
     const page = await this.searchServices.execute({
       filter: {
@@ -145,7 +147,7 @@ export class ServicesController {
         maxDurationMinutes: query.maxDurationMinutes,
       },
       page: query.toPageRequest<ServiceSortField>(),
-      includeDeleted: query.includeDeleted,
+      includeDeleted: includeDeletedFor(query.includeDeleted, user, PERMISSIONS.services.restore),
     });
 
     return { data: page.data.map((service) => ServiceResponse.from(service)), meta: page.meta };
@@ -284,11 +286,12 @@ export class CategoriesController {
   })
   async list(
     @Query() query: CategoryQueryDto,
+    @CurrentUser() user: AccessTokenClaims,
   ): Promise<{ data: CategoryResponse[]; meta: PageMetaResponse }> {
     const page = await this.searchCategories.execute({
       filter: { kind: query.kind, search: query.search, isActive: query.isActive },
       page: query.toPageRequest<CategorySortField>(),
-      includeDeleted: query.includeDeleted,
+      includeDeleted: includeDeletedFor(query.includeDeleted, user, PERMISSIONS.categories.restore),
     });
 
     return { data: page.data.map((c) => CategoryResponse.from(c)), meta: page.meta };

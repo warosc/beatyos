@@ -486,6 +486,23 @@ describe('Ventas y caja (integración)', () => {
       expect(response.body.detail).toMatch(/No se pueden sacar/);
     });
 
+    it('un gasto puede salir de lo vendido en efectivo aunque el fondo sea cero', async () => {
+      await openCash(0).expect(201);
+      const total = Number(await totalFor(salonA.serviceId));
+      await sell({
+        lines: [{ kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1 }],
+        payments: [{ method: 'CASH', amount: total }],
+      }).expect(201);
+
+      const gasto = await request(server())
+        .post(api('/cash/movements'))
+        .set(auth())
+        .send({ type: 'EXPENSE', amount: 10, concept: 'Café' })
+        .expect(201);
+
+      expect(gasto.body.data.session.expectedAmount).toBe((total - 10).toFixed(2));
+    });
+
     it('cierra cuadrando cuando el recuento coincide', async () => {
       await openCash(500).expect(201);
       const total = Number(await totalFor(salonA.serviceId));

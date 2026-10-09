@@ -90,6 +90,19 @@ class InMemoryServiceTicketRepository implements ServiceTicketRepository {
     this.persistedStatus.set(ticket.id, ticket.status);
     return ticket;
   }
+  async findChargedByInvoiceId(invoiceId: string) {
+    return [...this.items.values()].filter(
+      (t) => t.invoiceId === invoiceId && t.status === 'CHARGED',
+    );
+  }
+  async reopen(ticket: ServiceTicket) {
+    if (this.persistedStatus.get(ticket.id) !== 'CHARGED') {
+      throw new ConflictError('SERVICE_TICKET_NOT_CHARGED', 'Ya no está cobrada');
+    }
+    this.items.set(ticket.id, ticket);
+    this.persistedStatus.set(ticket.id, ticket.status);
+    return ticket;
+  }
   async save(ticket: ServiceTicket) {
     return this.update(ticket);
   }

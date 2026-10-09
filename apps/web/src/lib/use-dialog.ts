@@ -1,7 +1,13 @@
 'use client';
 import { useEffect, useRef } from 'react';
 
-/** Focus containment, Escape, and restoration for existing modal forms. */
+/**
+ * Focus containment, Escape, and restoration for existing modal forms.
+ *
+ * Al abrir, el foco va al elemento marcado con `data-autofocus` si lo hay; si no, al
+ * primero que se pueda enfocar. La marca existe porque el primero no siempre es el que
+ * toca: tras cobrar, Enter tiene que empezar la venta siguiente, no imprimir.
+ */
 export function useDialog(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -18,7 +24,7 @@ export function useDialog(onClose: () => void) {
       Array.from(root.querySelectorAll<HTMLElement>(selector)).filter(
         (el) => el.getClientRects().length > 0,
       );
-    (elements()[0] ?? root).focus();
+    (root.querySelector<HTMLElement>('[data-autofocus]') ?? elements()[0] ?? root).focus();
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();

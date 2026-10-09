@@ -13,21 +13,20 @@ import {
 import Link from 'next/link';
 import { buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { dayRange, localDay } from '@/lib/dates';
 import { cn, currency } from '@/lib/utils';
 import { DashboardReport, loadReport } from './types';
 
 export function DashboardView() {
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
-  const from = `${today.toISOString().slice(0, 10)}T00:00:00-06:00`;
-  const to = `${tomorrow.toISOString().slice(0, 10)}T00:00:00-06:00`;
+  // El día del salón, no el de UTC: a las 18:00 en Guatemala UTC ya va por mañana.
+  const day = localDay();
+  const { from, to } = dayRange(day);
   const report = useQuery({
-    queryKey: ['dashboard', from],
+    queryKey: ['dashboard', day],
     queryFn: () =>
       loadReport<DashboardReport>(
         'dashboard',
-        `&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        `&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`,
       ),
     refetchInterval: 60_000,
   });
@@ -61,7 +60,7 @@ export function DashboardView() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="mb-1 text-sm font-medium text-primary">
-            {today.toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long' })}
+            {from.toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
           <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
             Panel de operación

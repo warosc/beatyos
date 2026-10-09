@@ -25,6 +25,9 @@ export interface ServiceTicketRepository extends SearchableRepository<
   /** Comanda no anulada de una cita. Una cita se declara realizada una sola vez. */
   findActiveByAppointmentId(appointmentId: string): Promise<ServiceTicket | null>;
 
+  /** Comandas cobradas con una factura: las que hay que reabrir si se anula. */
+  findChargedByInvoiceId(invoiceId: string): Promise<ServiceTicket[]>;
+
   search(
     filter: ServiceTicketFilter,
     page: PageRequest<ServiceTicketSortField>,
@@ -41,6 +44,12 @@ export interface ServiceTicketRepository extends SearchableRepository<
    * `SERVICE_TICKET_NOT_PENDING`, lo que revierte también su factura.
    */
   update(ticket: ServiceTicket): Promise<ServiceTicket>;
+
+  /**
+   * Persiste una comanda reabierta **solo si seguía cobrada** en la base: si otra anulación
+   * ya la reabrió, no hay nada que hacer dos veces.
+   */
+  reopen(ticket: ServiceTicket): Promise<ServiceTicket>;
 }
 
 export const SERVICE_TICKET_REPOSITORY = Symbol('ServiceTicketRepository');

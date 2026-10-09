@@ -4,6 +4,7 @@ import { CashModule } from '../cash/cash.module';
 import { CatalogModule } from '../catalog/catalog.module';
 import { ClientsModule } from '../clients/clients.module';
 import { InventoryModule } from '../inventory/inventory.module';
+import { ServiceTicketsPersistenceModule } from '../service-tickets/service-tickets-persistence.module';
 import { StylistsModule } from '../stylists/stylists.module';
 import {
   GetInvoiceUseCase,
@@ -36,6 +37,8 @@ import { SalesPersistenceModule } from './sales-persistence.module';
     CashModule,
     ClientsModule,
     StylistsModule,
+    // Solo la persistencia: anular una venta reabre su comanda (ADR-0020).
+    ServiceTicketsPersistenceModule,
   ],
   controllers: [SalesController],
   providers: [

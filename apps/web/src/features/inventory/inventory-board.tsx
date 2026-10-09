@@ -313,6 +313,10 @@ function InventoryForm({
 }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [productId, setProductId] = useState('');
+  // Recibir y ajustar solo tiene sentido en lo que lleva control de existencias.
+  const stocked = products.filter((p) => p.trackStock !== false);
+  const selected = stocked.find((p) => p.id === productId);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -370,9 +374,15 @@ function InventoryForm({
         </div>
         <label className="block text-sm font-semibold">
           Producto
-          <select required name="productId" className={input}>
+          <select
+            required
+            name="productId"
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+            className={input}
+          >
             <option value="">Selecciona…</option>
-            {products.map((p) => (
+            {stocked.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} ({Number(p.stockOnHand)})
               </option>
@@ -395,14 +405,20 @@ function InventoryForm({
               Costo unitario
               <input required name="unitCost" type="number" step="0.01" className={input} />
             </label>
-            <label className="block text-sm font-semibold">
-              Número de lote
-              <input name="batchNumber" className={input} />
-            </label>
-            <label className="block text-sm font-semibold">
-              Vencimiento
-              <input name="expiresAt" type="date" className={input} />
-            </label>
+            {/* Lote y vencimiento solo en productos que se trazan por lote: en los demás
+                crearían un lote fantasma que nunca baja. */}
+            {selected?.tracksBatches && (
+              <>
+                <label className="block text-sm font-semibold">
+                  Número de lote
+                  <input required name="batchNumber" className={input} />
+                </label>
+                <label className="block text-sm font-semibold">
+                  Vencimiento
+                  <input name="expiresAt" type="date" className={input} />
+                </label>
+              </>
+            )}
           </>
         ) : (
           <label className="block text-sm font-semibold">

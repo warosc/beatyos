@@ -15,6 +15,31 @@ test('valida las credenciales antes de enviarlas', async ({ page }) => {
   await expect(page.getByText('Ingresa tu contraseña.')).toBeVisible();
 });
 
+test.describe('el panel del día en Guatemala', () => {
+  test.use({ timezoneId: 'America/Guatemala' });
+
+  test('a las 18:30 sigue pidiendo el día de hoy, no el de mañana', async ({ context, page }) => {
+    // A las 18:30 de Guatemala en UTC ya es el día siguiente: el panel mostraba Q0.
+    await page.clock.setFixedTime(new Date('2026-10-08T18:30:00-06:00'));
+    await context.addCookies([
+      { name: 'beautyos_access', value: 'e2e-token', domain: '127.0.0.1', path: '/' },
+    ]);
+    const requested: string[] = [];
+    await page.route('**/api/reports?**', (route) => {
+      requested.push(route.request().url());
+      return route.fulfill({ status: 503, json: { detail: 'Informe no disponible.' } });
+    });
+
+    await page.goto('/');
+
+    await expect.poll(() => requested.length).toBeGreaterThan(0);
+    const params = new URL(requested[0]).searchParams;
+    // Medianoche del 8 de octubre en Guatemala es 06:00 UTC del mismo día.
+    expect(params.get('from')).toBe('2026-10-08T06:00:00.000Z');
+    expect(params.get('to')).toBe('2026-10-09T05:59:59.999Z');
+  });
+});
+
 test('permite completar el alta de una clienta', async ({ context, page }) => {
   await context.addCookies([
     { name: 'beautyos_access', value: 'e2e-token', domain: '127.0.0.1', path: '/' },

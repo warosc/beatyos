@@ -40,6 +40,10 @@ import {
 } from '../../inventory/domain/inventory.repositories';
 import type { Product } from '../../inventory/domain/product.entity';
 import {
+  SERVICE_TICKET_REPOSITORY,
+  type ServiceTicketRepository,
+} from '../../service-tickets/domain/service-ticket.repository';
+import {
   STYLIST_REPOSITORY,
   type StylistRepository,
 } from '../../stylists/domain/stylist.repository';
@@ -522,6 +526,7 @@ export class VoidInvoiceUseCase implements UseCase<VoidInvoiceInput, VoidInvoice
     @Inject(PAYMENT_REPOSITORY) private readonly payments: PaymentRepository,
     @Inject(CASH_SESSION_REPOSITORY) private readonly sessions: CashSessionRepository,
     @Inject(CLIENT_REPOSITORY) private readonly clients: ClientRepository,
+    @Inject(SERVICE_TICKET_REPOSITORY) private readonly tickets: ServiceTicketRepository,
     @Inject(ID_GENERATOR) private readonly ids: IdGenerator,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(UNIT_OF_WORK) private readonly uow: UnitOfWork,
@@ -605,12 +610,21 @@ export class VoidInvoiceUseCase implements UseCase<VoidInvoiceInput, VoidInvoice
         await this.clients.update(client);
       }
 
+      // Si la venta cobró comandas, vuelven a caja: el servicio se hizo igual y hay que
+      // cobrarlo bien. Cobradas contra una factura anulada desaparecerían de caja.
+      const charged = await this.tickets.findChargedByInvoiceId(voided.id);
+      for (const ticket of charged) {
+        ticket.reopen(now, input.actorId);
+        await this.tickets.reopen(ticket);
+      }
+
       return {
         invoice: voided,
         payments,
         cashRefunded,
         sessionId: session?.id ?? null,
         appointmentId,
+        reopenedTicketIds: charged.map((ticket) => ticket.id),
         restocked: restocked.map((movement) => ({
           productId: movement.productId,
           batchId: movement.batchId,
@@ -635,6 +649,7 @@ export class VoidInvoiceUseCase implements UseCase<VoidInvoiceInput, VoidInvoice
         cashRefunded: result.cashRefunded.toDecimalString(),
         cashSessionId: result.sessionId,
         releasedAppointmentId: result.appointmentId,
+        reopenedServiceTicketIds: result.reopenedTicketIds,
         restocked: result.restocked,
       },
     });

@@ -518,14 +518,18 @@ function UserDialog({
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<UserValues>({ resolver: zodResolver(userSchema), defaultValues: { roleIds: [] } });
+  // El error va dentro del diálogo: el aviso de la página queda tapado por el fondo oscuro
+  // y parecería que no pasó nada.
+  const [error, setError] = useState('');
   const submit = handleSubmit(async (values) => {
+    setError('');
     const response = await sessionFetch('/api/admin?resource=users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(values),
     });
     if (!response.ok) {
-      setNotice({ kind: 'error', text: problemText((await response.json()) as Problem) });
+      setError(problemText((await response.json()) as Problem));
       return;
     }
     setNotice({ kind: 'success', text: 'Usuario creado correctamente.' });
@@ -567,6 +571,11 @@ function UserDialog({
             ))}
           </select>
         </Field>
+        {error && (
+          <p role="alert" className="sm:col-span-2 rounded-xl bg-danger/10 p-3 text-sm text-danger">
+            {error}
+          </p>
+        )}
         <Button className="sm:col-span-2" disabled={isSubmitting}>
           {isSubmitting ? 'Creando…' : 'Crear usuario'}
         </Button>
@@ -594,14 +603,16 @@ function RoleDialog({
     defaultValues: { permissionCodes: [] },
   });
   const groups = Map.groupBy(permissions, (permission) => permission.resource);
+  const [error, setError] = useState('');
   const submit = handleSubmit(async (values) => {
+    setError('');
     const response = await sessionFetch('/api/admin?resource=roles', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(values),
     });
     if (!response.ok) {
-      setNotice({ kind: 'error', text: problemText((await response.json()) as Problem) });
+      setError(problemText((await response.json()) as Problem));
       return;
     }
     setNotice({ kind: 'success', text: 'Rol creado correctamente.' });
@@ -648,6 +659,11 @@ function RoleDialog({
             ))}
           </div>
         </fieldset>
+        {error && (
+          <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
+            {error}
+          </p>
+        )}
         <Button className="w-full" disabled={isSubmitting}>
           {isSubmitting ? 'Creando…' : 'Crear rol'}
         </Button>

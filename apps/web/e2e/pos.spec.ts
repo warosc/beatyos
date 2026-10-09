@@ -234,6 +234,21 @@ test('imprime el comprobante al cobrar, con lo recibido y el vuelto', async ({ p
   await expect(page.getByRole('combobox', { name: 'Buscar servicio o producto' })).toBeFocused();
 });
 
+test('tras cobrar, Enter empieza la venta siguiente', async ({ page }) => {
+  await openPos(page);
+  await addCorte(page);
+  await page.keyboard.press('F2');
+  await page.getByLabel('Efectivo recibido').fill('50');
+  await page.getByLabel('Efectivo recibido').press('Enter');
+  await expect(page.getByText('Venta F-2026-000007 completada')).toBeVisible();
+
+  // El foco está en «Nueva venta», no en «Imprimir comprobante».
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog', { name: 'Venta completada' })).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Venta F-2026-000007' })).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'Buscar servicio o producto' })).toBeFocused();
+});
+
 test('con la caja cerrada no deja cobrar en efectivo', async ({ page }) => {
   await openPos(page, { cashOpen: false });
   await addCorte(page);
