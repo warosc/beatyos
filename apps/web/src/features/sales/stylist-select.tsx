@@ -52,7 +52,7 @@ export function StylistSelect({
         className,
       )}
     >
-      <option value="">Sin estilista</option>
+      <option value="">Sin profesional</option>
       {others.length ? (
         <>
           <optgroup label="Hacen este servicio">{able.map(option)}</optgroup>
