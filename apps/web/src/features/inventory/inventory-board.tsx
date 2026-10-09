@@ -12,16 +12,18 @@ import {
   Plus,
   Search,
   Truck,
-  X,
 } from 'lucide-react';
 import { usePagedList } from '@/lib/use-paged-list';
-import { loadOptions } from '@/lib/pagination';
+import { loadOptions, loadPage } from '@/lib/pagination';
+import { EmptyState, LoadError } from '@/components/ui/states';
 import { Pagination } from '@/components/ui/pagination';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { money } from '@/lib/utils';
 import { ProductDialog, type Product } from './product-form';
+import { label, MOVEMENT_TYPE_LABEL } from '@/lib/labels';
+import { DialogClose } from '@/components/ui/dialog-close';
 type Move = {
   id: string;
   type: string;
@@ -76,10 +78,46 @@ export function InventoryBoard() {
   });
   const active = tab === 'stock' ? products : tab === 'kardex' ? moves : batches;
   const filtered = products.data ?? [];
+  // Los contadores son de todo el inventario, no de la página de 20 que se está viendo.
+  const counts = useQuery({
+    queryKey: ['products', 'counts', search],
+    enabled: tab === 'stock',
+    queryFn: ({ signal }) =>
+      Promise.all(
+        (['available', 'low', 'out'] as const).map((stock) =>
+          loadPage<Product>(
+            `/api/inventory?resource=products&limit=1&stock=${stock}&search=${encodeURIComponent(search)}`,
+            signal,
+          ).then((page) => page.meta?.total ?? page.data.length),
+        ),
+      ),
+  });
   const groups = [
-    { key: 'AVAILABLE', label: 'Disponible', icon: PackageCheck, tone: 'text-success' },
-    { key: 'LOW', label: 'Bajo', icon: AlertTriangle, tone: 'text-warning' },
-    { key: 'OUT', label: 'Agotado', icon: PackageX, tone: 'text-danger' },
+    // En pantallas estrechas las columnas se apilan: lo que pide atención va primero.
+    {
+      key: 'AVAILABLE',
+      label: 'Disponible',
+      icon: PackageCheck,
+      tone: 'text-success',
+      order: 'order-last xl:order-none',
+      count: counts.data?.[0],
+    },
+    {
+      key: 'LOW',
+      label: 'Bajo',
+      icon: AlertTriangle,
+      tone: 'text-warning',
+      order: '',
+      count: counts.data?.[1],
+    },
+    {
+      key: 'OUT',
+      label: 'Agotado',
+      icon: PackageX,
+      tone: 'text-danger',
+      order: '',
+      count: counts.data?.[2],
+    },
   ] as const;
   const refresh = async () => {
     setAction(null);
@@ -98,7 +136,7 @@ export function InventoryBoard() {
           <p className="text-sm font-medium text-primary">Existencias</p>
           <h1 className="mt-1 font-display text-4xl font-semibold">Inventario</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Stock, lotes y trazabilidad en tiempo real.
+            Existencias, lotes y movimientos al día.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -123,11 +161,15 @@ export function InventoryBoard() {
         </div>
       </div>
       <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="flex rounded-xl bg-muted p-1">
+        <div
+          role="tablist"
+          aria-label="Vista del inventario"
+          className="flex rounded-xl bg-muted p-1"
+        >
           {(
             [
-              ['stock', 'Stock'],
-              ['kardex', 'Kardex'],
+              ['stock', 'Existencias'],
+              ['kardex', 'Movimientos'],
               ['batches', 'Lotes'],
             ] as const
           )
@@ -135,6 +177,8 @@ export function InventoryBoard() {
             .map(([k, l]) => (
               <button
                 key={k}
+                role="tab"
+                aria-selected={tab === k}
                 onClick={() => {
                   setTab(k);
                   setPage(1);
@@ -145,29 +189,33 @@ export function InventoryBoard() {
               </button>
             ))}
         </div>
-        <label className="flex h-11 flex-1 items-center gap-2 rounded-xl border bg-card px-3">
-          <Search size={17} />
-          <input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="w-full bg-transparent text-sm outline-none"
-            aria-label="Buscar producto"
-            placeholder="Buscar producto…"
-          />
-        </label>
+        {/* El kardex no se busca por nombre: mostrar el buscador ahí sería un campo que no
+            hace nada. */}
+        {tab !== 'kardex' && (
+          <label className="flex h-11 flex-1 items-center gap-2 rounded-xl border bg-card px-3">
+            <Search size={17} />
+            <input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="w-full bg-transparent text-sm outline-none"
+              aria-label="Buscar producto"
+              placeholder="Buscar producto…"
+            />
+          </label>
+        )}
       </div>
       {tab === 'stock' && (
         <div className="grid gap-4 xl:grid-cols-3">
           {groups.map((g) => (
-            <section key={g.key} className="rounded-2xl bg-muted/60 p-3">
+            <section key={g.key} className={`rounded-2xl bg-muted/60 p-3 ${g.order}`}>
               <h2 className="mb-3 flex items-center gap-2 px-1 font-semibold">
                 <g.icon className={g.tone} size={19} />
                 {g.label}
                 <span className="ml-auto rounded-full bg-card px-2 py-1 text-xs">
-                  {filtered.filter((p) => p.stockStatus === g.key).length}
+                  {g.count ?? filtered.filter((p) => p.stockStatus === g.key).length}
                 </span>
               </h2>
               <div className="space-y-3">
@@ -230,7 +278,7 @@ export function InventoryBoard() {
                       {m.product.sku}
                     </small>
                   </td>
-                  <td className="p-4">{m.type}</td>
+                  <td className="p-4">{label(MOVEMENT_TYPE_LABEL, m.type)}</td>
                   <td
                     className={`p-4 font-bold ${Number(m.quantityDelta) >= 0 ? 'text-success' : 'text-danger'}`}
                   >
@@ -273,10 +321,27 @@ export function InventoryBoard() {
       )}
       {active.isPending && <p role="status">Cargando inventario…</p>}
       {active.error && (
-        <p role="alert">
-          No se pudo cargar el inventario.{' '}
-          <button onClick={() => active.refetch()}>Reintentar</button>
-        </p>
+        <LoadError message="No se pudo cargar el inventario." onRetry={() => active.refetch()} />
+      )}
+      {!active.isPending && !active.error && !active.data?.length && (
+        <EmptyState
+          title={
+            tab === 'kardex'
+              ? 'Todavía no hay movimientos'
+              : search
+                ? 'Ningún producto coincide con la búsqueda'
+                : tab === 'batches'
+                  ? 'Ningún producto se traza por lote todavía'
+                  : 'Todavía no hay productos'
+          }
+          hint={
+            tab === 'stock' && !search
+              ? 'Agrégalos con «Producto» y después recibe la mercancía.'
+              : tab === 'kardex'
+                ? 'Cada entrada, venta y ajuste de existencias aparecerá aquí.'
+                : undefined
+          }
+        />
       )}
       <Pagination meta={active.meta} pending={active.isFetching} onPage={setPage} />
       {(action === 'product' || editing) && (
@@ -368,9 +433,7 @@ function InventoryForm({
           <h2 className="font-display text-2xl font-semibold">
             {action === 'receive' ? 'Recibir mercancía' : 'Ajustar stock'}
           </h2>
-          <button type="button" onClick={onClose}>
-            <X />
-          </button>
+          <DialogClose onClose={onClose} />
         </div>
         <label className="block text-sm font-semibold">
           Producto
@@ -403,7 +466,15 @@ function InventoryForm({
           <>
             <label className="block text-sm font-semibold">
               Costo unitario
-              <input required name="unitCost" type="number" step="0.01" className={input} />
+              <input
+                required
+                name="unitCost"
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                className={input}
+              />
             </label>
             {/* Lote y vencimiento solo en productos que se trazan por lote: en los demás
                 crearían un lote fantasma que nunca baja. */}

@@ -1,12 +1,13 @@
 'use client';
 import { useState, type FormEvent } from 'react';
-import { X } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { useAccess } from '@/components/session-access';
 import { sessionFetch } from '@/lib/session-fetch';
 import { IVA_RATE, includedTax } from '@/lib/tax';
 import { useDialog } from '@/lib/use-dialog';
 import { money } from '@/lib/utils';
+import { DialogClose } from '@/components/ui/dialog-close';
 
 export type Product = {
   id: string;
@@ -136,9 +137,7 @@ export function ProductDialog({
           <h2 className="font-display text-2xl font-semibold">
             {product ? 'Editar producto' : 'Nuevo producto'}
           </h2>
-          <button type="button" aria-label="Cerrar" onClick={onClose}>
-            <X />
-          </button>
+          <DialogClose onClose={onClose} />
         </div>
         {product ? (
           <p className="text-sm text-muted-foreground">
@@ -188,12 +187,13 @@ export function ProductDialog({
         {/* Quien no puede ver el coste tampoco lo escribe: la API lo rechazaría. */}
         {canSeeCosts && (
           <label className="block text-sm font-semibold">
-            Costo (opcional)
+            Costo sin IVA (opcional)
             <input
               name="costPrice"
               type="number"
               min={0}
               step="0.01"
+              inputMode="decimal"
               defaultValue={product?.costPrice ? Number(product.costPrice) : undefined}
               className={input}
             />
@@ -205,7 +205,7 @@ export function ProductDialog({
           </label>
         )}
         <label className="block text-sm font-semibold">
-          Stock mínimo
+          Existencia mínima
           <input
             required
             name="reorderPoint"

@@ -63,6 +63,8 @@ const appointmentEnd = new Date(appointmentStart.getTime() + 45 * 60_000);
 const appointment = {
   id: '01900000-0000-7000-8000-000000000020',
   clientId: client.id,
+  // La API resuelve el nombre: la agenda ya no descarga todas las clientas.
+  clientName: client.fullName,
   stylistId: stylists[0].id,
   startsAt: appointmentStart.toISOString(),
   endsAt: appointmentEnd.toISOString(),
@@ -161,8 +163,10 @@ test('reserva una cita desde el acceso rápido del Home', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('link', { name: 'Nueva cita' }).click();
   await expect(page.getByRole('heading', { name: 'Nueva cita' })).toBeVisible();
-  await page.getByLabel('Clienta').selectOption(client.id);
-  await page.getByLabel('Estilista').selectOption(stylists[0].id);
+  // La clienta se busca en el servidor, como en el punto de venta.
+  await page.getByRole('combobox', { name: 'Clienta' }).click();
+  await page.getByRole('option', { name: /Ana Prueba/ }).click();
+  await page.getByLabel('Profesional').selectOption(stylists[0].id);
   await page.getByLabel('Fecha y hora').fill('2026-09-03T10:00');
   await page.locator('input[name="serviceIds"]').check();
   await page.getByRole('button', { name: 'Reservar cita' }).click();
@@ -177,8 +181,8 @@ test('cancela una cita y cambia de estilista', async ({ page }) => {
   // La tarjeta de la cita, no el título del diálogo, que ahora también lleva el nombre.
   const cita = page.getByRole('button', { name: /Ana Prueba/ });
   await cita.click();
-  await page.getByLabel('Cambiar estilista').selectOption(stylists[1].id);
-  await page.getByRole('button', { name: 'Guardar estilista' }).click();
+  await page.getByLabel('Cambiar profesional').selectOption(stylists[1].id);
+  await page.getByRole('button', { name: 'Guardar profesional' }).click();
   await expect
     .poll(() => writes.some((x) => (x.body as { stylistId?: string }).stylistId === stylists[1].id))
     .toBeTruthy();
@@ -196,6 +200,34 @@ test('cancela una cita y cambia de estilista', async ({ page }) => {
           { reason?: string } | undefined,
     )
     .toEqual({ reason: 'Solicitud de la clienta' });
+});
+
+test('mueve una cita a otra hora con los huecos libres de la profesional', async ({ page }) => {
+  const writes: { url: string; body: unknown }[] = [];
+  await authenticated(page);
+  await mockAgenda(page, (url, body) => writes.push({ url, body }));
+  const slot = new Date(appointmentStart.getTime() + 4 * 60 * 60_000);
+  // La ruta más reciente gana: solo cambia la respuesta de los huecos.
+  await page.route('**/api/agenda?resource=availability**', (route) =>
+    route.fulfill({
+      json: {
+        data: [{ startsAt: slot.toISOString(), endsAt: slot.toISOString(), durationMinutes: 45 }],
+      },
+    }),
+  );
+  await page.goto('/agenda');
+  await page.getByRole('button', { name: /Ana Prueba/ }).click();
+  const hora = slot.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
+
+  await page
+    .getByRole('group', { name: 'Horas libres' })
+    .getByRole('button', { name: hora })
+    .click();
+  await page.getByRole('button', { name: `Mover a las ${hora}` }).click();
+
+  await expect
+    .poll(() => writes.find((x) => !x.url.includes('action='))?.body)
+    .toEqual({ startsAt: slot.toISOString() });
 });
 
 test('la agenda muestra el estado y deja confirmar, cerrar o marcar que no vino', async ({
@@ -471,7 +503,7 @@ test('crea proveedor, orden de compra y recibe mercancía', async ({ page }) => 
   await page.getByRole('button', { name: 'Enviar' }).click();
   await page.getByRole('button', { name: 'Recibir' }).click();
   await page.getByRole('button', { name: 'Confirmar recepción' }).click();
-  await expect(page.getByText('RECEIVED')).toBeVisible();
+  await expect(page.getByText('Recibida', { exact: true })).toBeVisible();
 });
 
 test('administra usuarios y roles del equipo', async ({ page }) => {
@@ -564,8 +596,8 @@ test('administra usuarios y roles del equipo', async ({ page }) => {
   await page.getByLabel('Contraseña temporal').fill('Temporal2026A');
   await page
     .getByRole('dialog', { name: 'Nuevo usuario' })
-    .locator('select[name="roleIds"]')
-    .selectOption([receptionistRole.id]);
+    .getByRole('checkbox', { name: receptionistRole.name })
+    .check();
   await page.getByRole('button', { name: 'Crear usuario' }).click();
   await expect(page.getByText('María López')).toBeVisible();
   expect((createdPayload as { roleIds: string[] }).roleIds).toEqual([receptionistRole.id]);
@@ -598,9 +630,13 @@ test('la propietaria atiende una solicitud de contraseña desde Equipo', async (
   });
 
   await page.goto('/configuracion');
-  // El aviso llega también al menú, para verlo desde cualquier pantalla.
+  // El aviso llega también al menú, para verlo desde cualquier pantalla. En el iPad, Equipo
+  // va en «Más», y el botón suma los avisos de lo que guarda.
   await expect(
-    page.getByLabel('1 solicitudes de contraseña').filter({ visible: true }),
+    page
+      .getByLabel('1 solicitudes de contraseña')
+      .or(page.getByLabel('1 avisos en otras secciones'))
+      .filter({ visible: true }),
   ).toBeVisible();
   await expect(page.getByText('1 persona no puede entrar')).toBeVisible();
   await page.getByRole('button', { name: 'Asignar contraseña' }).click();
@@ -787,7 +823,7 @@ test('la dueña da de alta un producto con lo que cobra y lo corrige después', 
   await alta.getByLabel('Nombre').fill('Champú de argán');
   await alta.getByLabel('Precio de venta (Q)').fill('100');
   await expect(alta.getByRole('status')).toContainText(/Q\s?100\.00.*Q\s?10\.71 de IVA/);
-  await alta.getByLabel('Stock mínimo').fill('2');
+  await alta.getByLabel('Existencia mínima').fill('2');
   await alta.getByLabel('Cantidad a reponer').fill('6');
   await alta.getByRole('button', { name: 'Guardar' }).click();
   await expect(alta).toBeHidden();

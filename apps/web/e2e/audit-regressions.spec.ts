@@ -51,6 +51,10 @@ test('cambiar de cuenta descarta los datos de la sesión anterior', async ({ pag
   await page.locator('#password').fill('ClaveDePrueba2026');
   await page.getByRole('button', { name: 'Ingresar', exact: true }).click();
   await expect(page).toHaveURL('/');
+  // En el iPad, Inventario va en «Más»: la barra inferior solo lleva las secciones diarias.
+  if ((page.viewportSize()?.width ?? 1280) < 1024) {
+    await page.getByRole('button', { name: 'Más' }).click();
+  }
   await page.locator('a[href="/inventario"]:visible').click();
   await expect(page.getByText('Privado B', { exact: true })).toBeVisible();
   await expect(page.getByText('Privado A', { exact: true })).toHaveCount(0);

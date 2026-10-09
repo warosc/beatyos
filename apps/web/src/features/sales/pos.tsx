@@ -160,8 +160,8 @@ export function Pos() {
           <BellRing size={16} className="shrink-0 text-primary" />
           <span>
             {pending === 1
-              ? 'Hay 1 servicio de estilista por cobrar.'
-              : `Hay ${pending} servicios de estilistas por cobrar.`}
+              ? 'Hay 1 servicio de una profesional por cobrar.'
+              : `Hay ${pending} servicios de profesionales por cobrar.`}
           </span>
           <strong className="ml-auto text-primary">Ir a Caja →</strong>
         </Link>
@@ -189,7 +189,7 @@ export function Pos() {
       {paying && (
         <PaymentDialog
           title="Cobrar venta"
-          subtitle={`${client?.fullName ?? 'Cliente ocasional'} · ${lines.length} ${lines.length === 1 ? 'línea' : 'líneas'}`}
+          subtitle={`${client?.fullName ?? 'Clienta ocasional'} · ${lines.length} ${lines.length === 1 ? 'línea' : 'líneas'}`}
           totalCents={cartTotals(lines).totalCents}
           cashOpen={cashOpen}
           onClose={() => setPaying(false)}

@@ -104,7 +104,7 @@ const addCorte = (page: Page) => page.getByRole('option', { name: /Corte de dama
 
 test('atribuye cada línea a su estilista, aunque sea el mismo servicio', async ({ page }) => {
   const sales = await openPos(page);
-  const atiende = page.getByLabel('Estilista de las líneas nuevas');
+  const atiende = page.getByLabel('Profesional de las líneas nuevas');
 
   await atiende.selectOption({ label: 'Sofía' });
   await addCorte(page);

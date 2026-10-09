@@ -99,7 +99,7 @@ export function CartPanel({
               stylists={stylists}
               value={defaultStylistId}
               onChange={onDefaultStylist}
-              label="Estilista de las líneas nuevas"
+              label="Profesional de las líneas nuevas"
               className="flex-1"
             />
           </label>
@@ -146,7 +146,7 @@ export function CartPanel({
         </dl>
         {unassigned && stylists && (
           <p className="text-xs text-warning">
-            Hay servicios sin estilista: no sumarán comisión a nadie.
+            Hay servicios sin profesional: no sumarán comisión a nadie.
           </p>
         )}
         {notice && (
@@ -242,7 +242,7 @@ function LineEditor({
             value={line.stylistId}
             onChange={(id) => onLines(setStylist(lines, line.key, id))}
             serviceId={line.item.kind === 'SERVICE' ? line.item.id : undefined}
-            label={`Estilista de ${line.item.name}`}
+            label={`Profesional de ${line.item.name}`}
             className="min-w-[8rem] flex-1"
           />
         )}

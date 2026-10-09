@@ -283,14 +283,14 @@ function ServiceFields({
       />
       <Field
         label="Comisión especial (%, opcional)"
-        hint="Déjalo vacío para que cada estilista gane su porcentaje de siempre."
+        hint="Déjalo vacío para que cada profesional gane su porcentaje de siempre."
         {...form.field('commission')}
         type="number"
         min="0"
         max="100"
         step="0.01"
         inputMode="decimal"
-        placeholder="La de cada estilista"
+        placeholder="La de cada profesional"
       />
 
       {split && (
@@ -312,7 +312,7 @@ function ServiceFields({
           <p>
             Comisión:{' '}
             {commissionRate === null
-              ? 'la de cada estilista.'
+              ? 'la de cada profesional.'
               : `${commissionRate} % = ${quetzales(commissionOf(split.base, commissionRate))} por servicio (sobre el precio sin IVA).`}
           </p>
         </div>

@@ -257,7 +257,7 @@ export function SalesHistory() {
                           </span>
                         )}
                       </td>
-                      <td className="p-3">{sale.clientName ?? 'Cliente ocasional'}</td>
+                      <td className="p-3">{sale.clientName ?? 'Clienta ocasional'}</td>
                       <td className="p-3">{sale.createdByName ?? '—'}</td>
                       <td className="p-3">
                         {[

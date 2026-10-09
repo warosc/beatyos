@@ -92,7 +92,7 @@ export function ClientForm({
       <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-card p-6 shadow-2xl sm:max-w-2xl sm:rounded-2xl">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-primary">CRM</p>
+            <p className="text-sm font-medium text-primary">Ficha</p>
             <h2 id="client-form-title" className="font-display text-2xl font-semibold">
               {client ? 'Editar clienta' : 'Nueva clienta'}
             </h2>
@@ -119,7 +119,15 @@ export function ClientForm({
               <label htmlFor={name} className="text-sm font-semibold">
                 {label}
               </label>
-              <input id={name} className={input} {...register(name)} />
+              <input
+                id={name}
+                // El teclado adecuado en el teléfono: números para el teléfono, @ para el correo.
+                type={name === 'email' ? 'email' : name === 'phone' ? 'tel' : 'text'}
+                inputMode={name === 'phone' ? 'tel' : undefined}
+                autoComplete={name === 'email' ? 'email' : name === 'phone' ? 'tel' : undefined}
+                className={input}
+                {...register(name)}
+              />
               {errors[name] && <p className="mt-1 text-xs text-danger">{errors[name]?.message}</p>}
             </div>
           ))}

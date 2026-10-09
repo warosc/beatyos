@@ -11,6 +11,8 @@ import { Can } from '@/components/session-access';
 import { Pagination } from '@/components/ui/pagination';
 import type { ClientPage } from './types';
 import { ClientForm } from './client-form';
+import { money } from '@/lib/utils';
+import { CLIENT_STATUS_LABEL, label } from '@/lib/labels';
 
 export function ClientWorkspace({
   initial,
@@ -41,8 +43,8 @@ export function ClientWorkspace({
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <p className="text-sm font-medium text-primary">CRM</p>
-          <h1 className="mt-1 font-display text-3xl font-semibold sm:text-4xl">Clientes</h1>
+          <p className="text-sm font-medium text-primary">Fichas</p>
+          <h1 className="mt-1 font-display text-3xl font-semibold sm:text-4xl">Clientas</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {data?.meta.total ?? 0} fichas en tu salón
           </p>
@@ -75,7 +77,7 @@ export function ClientWorkspace({
       {unavailable && clients.length === 0 ? (
         <Card className="flex items-center gap-3 border-warning/30 bg-warning/10 p-5 text-sm">
           <AlertCircle className="shrink-0 text-warning" />
-          No fue posible conectar con la API. La pantalla se actualizará al reintentar la búsqueda.
+          No pudimos cargar las clientas. La lista se actualizará al reintentar la búsqueda.
         </Card>
       ) : null}
       <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
@@ -94,8 +96,10 @@ export function ClientWorkspace({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <h2 className="truncate font-semibold">{client.fullName}</h2>
-                    <span className="rounded-full bg-success/10 px-2 py-1 text-[10px] font-bold text-success">
-                      ACTIVA
+                    <span
+                      className={`rounded-full px-2 py-1 text-[10px] font-bold ${client.status === 'ACTIVE' ? 'bg-success/10 text-success' : client.status === 'BLOCKED' ? 'bg-danger/10 text-danger' : 'bg-muted text-muted-foreground'}`}
+                    >
+                      {label(CLIENT_STATUS_LABEL, client.status)}
                     </span>
                   </div>
                   <div className="mt-3 space-y-2 text-xs text-muted-foreground">
@@ -137,8 +141,10 @@ export function ClientWorkspace({
                 )}
                 {client.totalSpent && (
                   <span>
-                    <strong className="block text-base text-foreground">{client.totalSpent}</strong>
-                    {client.currency}
+                    <strong className="block text-base text-foreground">
+                      {money(client.totalSpent)}
+                    </strong>
+                    Gastado
                   </span>
                 )}
               </div>

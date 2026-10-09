@@ -18,7 +18,7 @@ export type PosClient = {
  * Clienta de la venta, buscada en el servidor por nombre, teléfono o correo.
  *
  * Un `<select>` con todas las clientas deja de servir en cuanto el salón pasa de unas
- * decenas. Sin elegir a nadie, la venta es de «Cliente ocasional».
+ * decenas. Sin elegir a nadie, la venta es de «Clienta ocasional».
  *
  * Al enfocarlo ya lista las primeras clientas: un campo que no muestra nada hasta que se
  * escribe parece roto, y quien busca a una clienta habitual la encuentra sin teclear.
@@ -26,11 +26,14 @@ export type PosClient = {
 export function ClientCombobox({
   value,
   onChange,
-  placeholder = 'Cliente ocasional · buscar por nombre o teléfono',
+  placeholder = 'Clienta ocasional · buscar por nombre o teléfono',
+  label = 'Clienta de la venta',
 }: {
   value: PosClient | null;
   onChange: (client: PosClient | null) => void;
   placeholder?: string;
+  /** Nombre accesible del buscador. */
+  label?: string;
 }) {
   const listId = useId();
   const [text, setText] = useState('');
@@ -94,7 +97,8 @@ export function ClientCombobox({
         {value.allergies && (
           <p
             role="note"
-            className="flex items-start gap-2 rounded-lg bg-warning/15 p-2 text-xs text-warning"
+            // En rojo, como en la ficha: es lo que no se puede pasar por alto antes de atender.
+            className="flex items-start gap-2 rounded-lg bg-danger/10 p-2 text-xs font-medium text-danger"
           >
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             <span>
@@ -122,7 +126,7 @@ export function ClientCombobox({
         aria-expanded={open && options.length > 0}
         aria-controls={listId}
         aria-activedescendant={open && options[active] ? `${listId}-${active}` : undefined}
-        aria-label="Cliente de la venta"
+        aria-label={label}
         placeholder={placeholder}
         className="h-11 w-full rounded-xl border bg-background px-3 text-sm"
       />

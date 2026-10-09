@@ -58,7 +58,7 @@ export function Receipt({
       <dl className="space-y-0.5">
         <Pair label="No." value={sale.number} />
         <Pair label="Fecha" value={dateTime(sale.issuedAt)} />
-        <Pair label="Clienta" value={sale.clientName ?? 'Cliente ocasional'} />
+        <Pair label="Clienta" value={sale.clientName ?? 'Clienta ocasional'} />
         {sale.createdByName && <Pair label="Atendió" value={sale.createdByName} />}
       </dl>
 

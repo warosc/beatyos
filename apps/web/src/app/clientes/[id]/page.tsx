@@ -24,7 +24,9 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     return (
       <div className="rounded-2xl border bg-card p-8 text-center">
         <h1 className="font-display text-2xl font-semibold">No pudimos cargar la ficha</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Comprueba la conexión con la API.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Recarga la página; si sigue igual, vuelve a la lista de clientas.
+        </p>
       </div>
     );
   return <ClientDetail client={client} />;

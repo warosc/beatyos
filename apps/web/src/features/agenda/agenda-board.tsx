@@ -13,11 +13,11 @@ import {
   TriangleAlert,
   UserCheck,
   UserX,
-  X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ClientCombobox, type PosClient } from '@/features/sales/client-combobox';
 import { RegisterServiceDialog } from '@/features/service-tickets/register-service-dialog';
 import { STATUS_LABEL, type ServiceTicket } from '@/features/service-tickets/types';
 import { PendingRegisterBanner } from '@/features/stylist-day/pending-register-banner';
@@ -26,11 +26,13 @@ import { loadOptions, loadPage } from '@/lib/pagination';
 import {
   APPOINTMENT_STATUS_LABEL,
   FINAL_APPOINTMENT_STATUSES,
-  type AgendaClient,
   type Appointment,
   type Service,
   type Stylist,
 } from './types';
+import { money } from '@/lib/utils';
+import { LoadError } from '@/components/ui/states';
+import { DialogClose } from '@/components/ui/dialog-close';
 
 type View = 'day' | 'week' | 'month';
 const dayMs = 86_400_000;
@@ -113,12 +115,6 @@ export function AgendaBoard({
     enabled: can('services.read'),
     queryFn: ({ signal }) => loadOptions<Service>('/api/agenda?resource=services', signal),
   });
-  const clients = useQuery({
-    queryKey: ['agenda-clients'],
-    enabled: can('clients.read'),
-    queryFn: ({ signal }) =>
-      loadOptions<AgendaClient>('/api/agenda?resource=clients&sort=name:asc', signal),
-  });
   // Con ámbito propio no hay `stylists.read`: la ficha propia se resuelve aparte, sin traer
   // el equipo entero.
   const myStylist = useQuery({
@@ -130,7 +126,6 @@ export function AgendaBoard({
       return body.data;
     },
   });
-  const clientMap = new Map(clients.data?.map((item) => [item.id, item.fullName]));
   const stylistMap = new Map(stylists.data?.map((item) => [item.id, item]));
   const shift = (direction: number) =>
     setAnchor(
@@ -195,11 +190,16 @@ export function AgendaBoard({
         </p>
       )}
       {appointments.isPending && <p role="status">Cargando agenda…</p>}
-      {(appointments.error || clients.error || services.error || stylists.error) && (
-        <p role="alert">
-          No se pudo cargar la agenda completa.{' '}
-          <button onClick={() => queryClient.invalidateQueries()}>Reintentar</button>
-        </p>
+      {(appointments.error || services.error || stylists.error) && (
+        <LoadError
+          message="No se pudo cargar la agenda completa."
+          // Solo lo de la agenda: invalidar todo recargaría también caja, ventas y demás.
+          onRetry={() => {
+            void appointments.refetch();
+            void services.refetch();
+            void stylists.refetch();
+          }}
+        />
       )}
       <Card className="overflow-x-auto">
         <div className="flex items-center justify-between border-b p-3">
@@ -300,10 +300,10 @@ export function AgendaBoard({
                           )}
                         </p>
                         <p className={`mt-1 truncate font-semibold ${gone ? 'line-through' : ''}`}>
-                          {a.clientName ?? clientMap.get(a.clientId) ?? 'Clienta'}
+                          {a.clientName ?? 'Clienta'}
                         </p>
                         <p className="truncate text-muted-foreground">
-                          {stylist?.displayName ?? 'Estilista'}
+                          {stylist?.displayName ?? 'Profesional'}
                         </p>
                       </article>
                     );
@@ -316,7 +316,6 @@ export function AgendaBoard({
       {creating && (canBookAny || canBookOwn) && (
         <BookingForm
           initialClientId={initialClientId}
-          clients={clients.data ?? []}
           stylists={stylists.data ?? []}
           services={services.data ?? []}
           ownStylist={canBookOwn && !canBookAny ? myStylist.data : undefined}
@@ -330,7 +329,7 @@ export function AgendaBoard({
       {selected && (
         <AppointmentActions
           appointment={selected}
-          clientName={selected.clientName ?? clientMap.get(selected.clientId) ?? 'Clienta'}
+          clientName={selected.clientName ?? 'Clienta'}
           stylists={stylists.data ?? []}
           onClose={() => setSelected(null)}
           onRegister={() => {
@@ -426,6 +425,7 @@ function AppointmentActions({
   const attendable = !isCancelled && appointment.status !== 'NO_SHOW';
   async function act(
     action: 'reschedule' | 'cancel' | 'start' | 'confirm' | 'complete' | 'no-show',
+    startsAt?: string,
   ) {
     setBusy(true);
     setError('');
@@ -438,7 +438,9 @@ function AppointmentActions({
           action === 'cancel'
             ? { reason: reason.trim() || undefined }
             : action === 'reschedule'
-              ? { stylistId }
+              ? startsAt
+                ? { startsAt }
+                : { stylistId }
               : {},
         ),
       },
@@ -461,7 +463,7 @@ function AppointmentActions({
       aria-modal="true"
       aria-labelledby="appointment-actions-title"
     >
-      <div className="w-full max-w-md space-y-5 rounded-2xl bg-card p-6">
+      <div className="max-h-[92dvh] w-full max-w-md space-y-5 overflow-y-auto rounded-2xl bg-card p-6">
         <div className="flex items-center justify-between">
           <div className="min-w-0">
             <h2 id="appointment-actions-title" className="font-display text-2xl font-semibold">
@@ -480,9 +482,7 @@ function AppointmentActions({
               {APPOINTMENT_STATUS_LABEL[appointment.status] ?? appointment.status}
             </p>
           </div>
-          <button onClick={onClose} aria-label="Cerrar">
-            <X />
-          </button>
+          <DialogClose onClose={onClose} />
         </div>
         {attendable && canRegister && (
           <div className="space-y-2">
@@ -554,9 +554,9 @@ function AppointmentActions({
           {!isFinal && (
             <>
               <label className="block text-sm font-semibold">
-                Cambiar estilista
+                Cambiar profesional
                 <select
-                  aria-label="Cambiar estilista"
+                  aria-label="Cambiar profesional"
                   value={stylistId}
                   onChange={(e) => setStylistId(e.target.value)}
                   className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
@@ -575,8 +575,13 @@ function AppointmentActions({
                 disabled={busy || stylistId === appointment.stylistId}
                 onClick={() => act('reschedule')}
               >
-                Guardar estilista
+                Guardar profesional
               </Button>
+              <RescheduleSection
+                appointment={appointment}
+                busy={busy}
+                onMove={(startsAt) => act('reschedule', startsAt)}
+              />
             </>
           )}
         </Can>
@@ -645,9 +650,99 @@ function AppointmentActions({
   );
 }
 
+type Slot = { startsAt: string; endsAt: string; durationMinutes: number };
+
+const hourOf = (iso: string) =>
+  new Date(iso).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
+
+/**
+ * Mover la cita a otro día u otra hora con la misma profesional.
+ *
+ * Ofrece los huecos que calcula la API —horario, ausencias, otras citas y limpieza—, para
+ * que recepción no tenga que adivinar a prueba y error. Arrastrar en el calendario cambia
+ * el día pero no la hora, y en un teléfono no se puede arrastrar.
+ */
+function RescheduleSection({
+  appointment,
+  busy,
+  onMove,
+}: {
+  appointment: Appointment;
+  busy: boolean;
+  onMove: (startsAt: string) => void;
+}) {
+  const [day, setDay] = useState(() => isoDay(new Date(appointment.startsAt)));
+  const [chosen, setChosen] = useState<string | null>(null);
+  const serviceIds = appointment.services.map((item) => item.serviceId).join(',');
+  const slots = useQuery({
+    queryKey: ['availability', appointment.stylistId, day, serviceIds],
+    enabled: Boolean(day && serviceIds),
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        resource: 'availability',
+        stylistId: appointment.stylistId,
+        date: day,
+        serviceIds,
+      });
+      const response = await sessionFetch(`/api/agenda?${params}`);
+      if (!response.ok) throw new Error('No pudimos consultar los huecos libres.');
+      return ((await response.json()) as { data: Slot[] }).data;
+    },
+  });
+  return (
+    <div className="space-y-3 border-t pt-5">
+      <label className="block text-sm font-semibold">
+        Cambiar fecha y hora
+        <input
+          type="date"
+          value={day}
+          onChange={(e) => {
+            setDay(e.target.value);
+            setChosen(null);
+          }}
+          className="mt-1.5 h-11 w-full rounded-xl border bg-background px-3"
+        />
+      </label>
+      {slots.isPending ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Buscando horas libres…
+        </p>
+      ) : slots.error ? (
+        <p role="alert" className="text-sm text-danger">
+          {slots.error.message}
+        </p>
+      ) : slots.data?.length ? (
+        <div role="group" aria-label="Horas libres" className="flex flex-wrap gap-2">
+          {slots.data.map((slot) => (
+            <button
+              key={slot.startsAt}
+              type="button"
+              aria-pressed={chosen === slot.startsAt}
+              onClick={() => setChosen(slot.startsAt)}
+              className={`h-10 rounded-lg border px-3 text-sm font-semibold tabular-nums ${chosen === slot.startsAt ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+            >
+              {hourOf(slot.startsAt)}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Ese día no hay horas libres con esta profesional.
+        </p>
+      )}
+      <Button
+        className="w-full"
+        disabled={busy || !chosen}
+        onClick={() => chosen && onMove(chosen)}
+      >
+        {chosen ? `Mover a las ${hourOf(chosen)}` : 'Elige una hora'}
+      </Button>
+    </div>
+  );
+}
+
 function BookingForm({
   initialClientId,
-  clients,
   stylists,
   services,
   ownStylist,
@@ -655,7 +750,6 @@ function BookingForm({
   onSaved,
 }: {
   initialClientId?: string;
-  clients: AgendaClient[];
   stylists: Stylist[];
   services: Service[];
   /** Con ámbito propio: la ficha a bloquear, `null` si no tiene una vinculada, `undefined` si no aplica. */
@@ -665,18 +759,32 @@ function BookingForm({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // La clienta se busca en el servidor, como en el punto de venta: cargarlas todas para un
+  // `<select>` deja de servir en cuanto el salón pasa de unas decenas. Si se llega desde
+  // la ficha de una clienta, viene ya elegida; `undefined` es «aún no la tocaron».
+  const [picked, setPicked] = useState<PosClient | null | undefined>(undefined);
+  const initialClient = useQuery({
+    queryKey: ['booking-client', initialClientId],
+    enabled: Boolean(initialClientId),
+    queryFn: async () => {
+      const response = await sessionFetch(`/api/clients/${encodeURIComponent(initialClientId!)}`);
+      if (!response.ok) return null;
+      return ((await response.json()) as { data: PosClient }).data;
+    },
+  });
+  const client = picked === undefined ? (initialClient.data ?? null) : picked;
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError('');
     const data = new FormData(event.currentTarget);
-    const clientId = String(data.get('clientId') ?? '');
+    const clientId = client?.id ?? '';
     const stylistId = String(data.get('stylistId') ?? '');
     const serviceIds = data.getAll('serviceIds');
     if (!uuidPattern.test(clientId) || !uuidPattern.test(stylistId)) {
       setBusy(false);
       setError(
-        'Selecciona una clienta y una estilista válidas. Recarga la página si el problema continúa.',
+        client ? 'Selecciona la profesional que la atenderá.' : 'Busca y elige a la clienta.',
       );
       return;
     }
@@ -727,38 +835,25 @@ function BookingForm({
       <form
         onSubmit={submit}
         onChange={() => error && setError('')}
-        className="w-full max-w-xl space-y-4 rounded-t-3xl bg-card p-6 sm:rounded-2xl"
+        // Con muchos servicios el formulario no cabe en un teléfono: se desplaza dentro.
+        className="max-h-[92dvh] w-full max-w-xl space-y-4 overflow-y-auto rounded-t-3xl bg-card p-6 sm:rounded-2xl"
       >
         <div className="flex justify-between">
           <h2 className="font-display text-2xl font-semibold">Nueva cita</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar">
-            <X />
-          </button>
+          <DialogClose onClose={onClose} />
         </div>
-        <label className="block text-sm font-semibold">
-          Clienta
-          <select
-            // Las opciones llegan de una consulta aparte y no están listas en el primer
-            // render: sin la `key`, React aplica `defaultValue` contra una lista vacía y no
-            // vuelve a intentarlo cuando las clientas llegan, dejando el selector en
-            // "Selecciona…" pese a venir de la ficha de una clienta concreta.
-            key={clients.length}
-            required
-            defaultValue={initialClientId ?? ''}
-            name="clientId"
-            className={`${field} mt-1.5`}
-          >
-            <option value="">Selecciona…</option>
-            {clients.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.fullName}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="space-y-1.5 text-sm font-semibold">
+          <span>Clienta</span>
+          <ClientCombobox
+            value={client}
+            onChange={setPicked}
+            label="Clienta"
+            placeholder="Buscar por nombre o teléfono"
+          />
+        </div>
         {ownStylist !== undefined ? (
           <label className="block text-sm font-semibold">
-            Estilista
+            Profesional
             {ownStylist ? (
               <>
                 <p className={`${field} mt-1.5 flex items-center bg-muted text-muted-foreground`}>
@@ -775,7 +870,7 @@ function BookingForm({
           </label>
         ) : (
           <label className="block text-sm font-semibold">
-            Estilista
+            Profesional
             <select required name="stylistId" className={`${field} mt-1.5`}>
               <option value="">Selecciona…</option>
               {stylists
@@ -803,7 +898,7 @@ function BookingForm({
                   <span>
                     {x.name}
                     <small className="block text-muted-foreground">
-                      {x.blockedMinutes} min · {x.priceWithTax} {x.currency}
+                      {x.blockedMinutes} min · {money(x.priceWithTax)}
                     </small>
                   </span>
                 </label>

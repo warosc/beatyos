@@ -23,6 +23,7 @@ import { PAYMENT_LABEL } from '@/features/sales/types';
 import { money } from '@/lib/utils';
 import { CashReport } from './cash-report';
 import { methodTotal, ShiftSummary, useShiftSummary } from './shift-summary';
+import { LoadError } from '@/components/ui/states';
 type Session = {
   id: string;
   status: string;
@@ -88,11 +89,7 @@ export function CashDesk() {
   };
   if (current.isPending) return <p role="status">Cargando caja…</p>;
   if (current.error)
-    return (
-      <p role="alert">
-        No se pudo consultar la caja. <button onClick={() => current.refetch()}>Reintentar</button>
-      </p>
-    );
+    return <LoadError message="No se pudo consultar la caja." onRetry={() => current.refetch()} />;
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -190,7 +187,7 @@ export function CashDesk() {
                       </p>
                     </div>
                     <strong>
-                      {m.type === 'CASH_IN' ? '+' : '-'} Q {m.amount}
+                      {m.type === 'CASH_IN' ? '+' : '−'} {money(m.amount)}
                     </strong>
                   </div>
                 ))}
@@ -255,14 +252,14 @@ export function CashDesk() {
                     <td className="p-4">{new Date(item.openedAt).toLocaleString('es-GT')}</td>
                     <td className="p-4">{item.status === 'OPEN' ? 'Abierta' : 'Cerrada'}</td>
                     {can('users.read') && <td className="p-4">{userName(item.openedById)}</td>}
-                    <td className="p-4 text-right">Q {item.expectedAmount}</td>
+                    <td className="p-4 text-right">{money(item.expectedAmount)}</td>
                     <td className="p-4 text-right">
-                      {item.countedAmount ? `Q ${item.countedAmount}` : '—'}
+                      {item.countedAmount ? money(item.countedAmount) : '—'}
                     </td>
                     <td
                       className={`p-4 text-right font-semibold ${Number(item.difference) < 0 ? 'text-danger' : Number(item.difference) > 0 ? 'text-warning' : ''}`}
                     >
-                      {item.difference ? `Q ${item.difference}` : '—'}
+                      {item.difference ? money(item.difference) : '—'}
                     </td>
                     <td className="p-2 text-right">
                       <Button
@@ -291,7 +288,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <Card className="p-5">
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-3 text-3xl font-bold">Q {value}</p>
+      <p className="mt-3 text-3xl font-bold">{money(value)}</p>
     </Card>
   );
 }
@@ -340,7 +337,10 @@ function CashForm({
       aria-label="Caja"
       className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
     >
-      <form onSubmit={submit} className="w-full max-w-md space-y-4 rounded-2xl bg-card p-6">
+      <form
+        onSubmit={submit}
+        className="max-h-[92dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-card p-6"
+      >
         <h2 className="font-display text-2xl font-semibold">
           {action === 'open'
             ? 'Abrir caja'
@@ -351,8 +351,8 @@ function CashForm({
         {action === 'close' && (
           <div className="space-y-2 rounded-xl bg-secondary p-3 text-sm">
             <p>
-              El sistema espera <strong>Q {expected}</strong> en efectivo. Cuéntalo antes de
-              continuar.
+              El sistema espera <strong>{money(expected ?? 0)}</strong> en efectivo. Cuéntalo antes
+              de continuar.
             </p>
             {shift.data &&
               (['CARD', 'TRANSFER'] as const).map((method) => {
@@ -387,8 +387,10 @@ function CashForm({
             required
             name="amount"
             type="number"
-            min="0"
+            // Cero no es un movimiento: la API lo rechazaría.
+            min={action === 'close' ? '0' : '0.01'}
             step="0.01"
+            inputMode="decimal"
             className="mt-1 h-12 w-full rounded-xl border bg-background px-3"
           />
         </label>

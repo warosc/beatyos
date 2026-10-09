@@ -2,13 +2,14 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   CalendarDays,
   ChartNoAxesCombined,
   CircleDollarSign,
   CircleHelp,
   LayoutDashboard,
+  Menu,
   Package,
   Percent,
   Scissors,
@@ -21,6 +22,8 @@ import {
   Users,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { Button } from '@/components/ui/button';
+import { useDialog } from '@/lib/use-dialog';
 import { LogoutButton } from '@/components/logout-button';
 import { SessionContext } from '@/components/session-access';
 import { fetchTenantProfile, TENANT_PROFILE_KEY } from '@/features/sales/types';
@@ -39,7 +42,7 @@ const nav = [
   ['Inicio', '/', LayoutDashboard, ['reports.read']],
   ['Mi día', MY_DAY, Sun, ['service-tickets.create.own']],
   ['Agenda', '/agenda', CalendarDays, ['appointments.read', 'appointments.read.own']],
-  ['Clientes', '/clientes', Users, ['clients.read']],
+  ['Clientas', '/clientes', Users, ['clients.read']],
   ['Inventario', '/inventario', Package, ['products.read']],
   ['Compras', '/compras', Truck, ['purchases.read']],
   ['Ventas', '/ventas', ShoppingBag, ['invoices.create']],
@@ -50,8 +53,18 @@ const nav = [
   ['Equipo', '/configuracion', Settings, ['users.read', 'roles.read']],
   ['Ayuda', '/ayuda', CircleHelp, []],
 ] as const;
+/**
+ * Lo que va en la barra inferior del teléfono, por orden de uso en el día. El resto queda
+ * en «Más»: catorce iconos con desplazamiento lateral escondían Ayuda y Perfil sin avisar.
+ */
+const MOBILE_PRIORITY = [MY_DAY, '/', '/agenda', '/ventas', '/caja', '/clientes'];
+const MOBILE_SLOTS = 4;
+/** La sección está activa también en sus subpáginas: el historial es parte de Ventas. */
+const isActive = (pathname: string, href: string) =>
+  href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/');
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
   const isPublic = ['/login', '/forgot-password', '/reset-password', '/session'].includes(pathname);
   const profile = useQuery({
     queryKey: ['session-user'],
@@ -96,11 +109,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     !!profile.data &&
     (profile.data.permissions.includes('*') || profile.data.permissions.includes('reports.read'));
   // Quien no ve el panel de reportes no aterriza en una página vacía: la profesional va a su
-  // día, que es donde trabaja.
+  // día, que es donde trabaja, y recepción a la agenda.
+  const canSeeAgenda =
+    !!profile.data &&
+    ['*', 'appointments.read', 'appointments.read.own'].some((p) =>
+      profile.data.permissions.includes(p),
+    );
   useEffect(() => {
     if (isPublic || pathname !== '/' || !profile.data || canSeeDashboard || stylist.pending) return;
     if (stylist.isStylist) router.replace(MY_DAY);
+    else if (canSeeAgenda) router.replace('/agenda');
   }, [
+    canSeeAgenda,
     isPublic,
     pathname,
     profile.data,
@@ -131,7 +151,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="p-8">
         <p role="alert">No se pudo comprobar tu sesión.</p>
-        <button onClick={() => profile.refetch()}>Reintentar</button>
+        <Button variant="outline" className="my-3" onClick={() => profile.refetch()}>
+          Reintentar
+        </Button>
         <LogoutButton />
       </div>
     );
@@ -158,17 +180,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <Link
       key={href}
       href={href}
-      aria-current={pathname === href ? 'page' : undefined}
+      onClick={() => setMoreOpen(false)}
+      aria-current={isActive(pathname, href) ? 'page' : undefined}
       className={
         'flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium hover:bg-muted ' +
-        (pathname === href ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground')
+        (isActive(pathname, href)
+          ? 'bg-secondary text-secondary-foreground'
+          : 'text-muted-foreground')
       }
     >
-      <Icon size={19} className={pathname === href ? 'text-primary' : undefined} />
+      <Icon size={19} className={isActive(pathname, href) ? 'text-primary' : undefined} />
       {label}
       <Badge {...badges[href]} />
     </Link>
   ));
+  // Con pocas secciones caben todas; con más, las de uso diario y el resto en «Más».
+  const ranked = [...visible].sort(
+    (a, b) => (MOBILE_PRIORITY.indexOf(a[1]) + 1 || 99) - (MOBILE_PRIORITY.indexOf(b[1]) + 1 || 99),
+  );
+  const crowded = visible.length > MOBILE_SLOTS + 1;
+  const primary = crowded ? ranked.slice(0, MOBILE_SLOTS) : visible;
+  const secondary = crowded ? visible.filter((item) => !primary.includes(item)) : [];
+  const moreBadge = secondary.reduce((sum, [, href]) => sum + (badges[href]?.count ?? 0), 0);
+  const moreActive =
+    secondary.some(([, href]) => isActive(pathname, href)) || onProfileRoute(pathname);
   const onProfile = pathname === '/perfil';
   return (
     <SessionContext.Provider value={user}>
@@ -194,7 +229,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               }
             >
               <UserRound size={19} className={onProfile ? 'text-primary' : undefined} />
-              Perfil y ajustes
+              Mi cuenta
             </Link>
             <LogoutButton />
           </div>
@@ -232,14 +267,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           aria-label="Navegación móvil"
           className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
         >
-          {visible.map(([label, href, Icon]) => (
+          {primary.map(([label, href, Icon]) => (
             <Link
               key={href}
               href={href}
-              aria-current={pathname === href ? 'page' : undefined}
+              aria-current={isActive(pathname, href) ? 'page' : undefined}
               className={
-                'flex min-h-16 min-w-20 shrink-0 flex-col items-center justify-center gap-1 text-xs ' +
-                (pathname === href ? 'text-primary' : 'text-muted-foreground')
+                'flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 text-xs ' +
+                (isActive(pathname, href) ? 'text-primary' : 'text-muted-foreground')
               }
             >
               <span className="relative">
@@ -249,22 +284,97 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {label}
             </Link>
           ))}
-          <Link
-            href="/perfil"
-            aria-current={onProfile ? 'page' : undefined}
-            className={
-              'flex min-h-16 min-w-20 shrink-0 flex-col items-center justify-center gap-1 text-xs ' +
-              (onProfile ? 'text-primary' : 'text-muted-foreground')
-            }
-          >
-            <UserRound size={20} />
-            Perfil
-          </Link>
+          {crowded ? (
+            <button
+              type="button"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen(true)}
+              className={
+                'flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 text-xs ' +
+                (moreActive ? 'text-primary' : 'text-muted-foreground')
+              }
+            >
+              <span className="relative">
+                <Menu size={20} />
+                <Badge count={moreBadge} label="avisos en otras secciones" floating />
+              </span>
+              Más
+            </button>
+          ) : (
+            <Link
+              href="/perfil"
+              aria-current={onProfile ? 'page' : undefined}
+              className={
+                'flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 text-xs ' +
+                (onProfile ? 'text-primary' : 'text-muted-foreground')
+              }
+            >
+              <UserRound size={20} />
+              Mi cuenta
+            </Link>
+          )}
         </nav>
+        {moreOpen && (
+          <MoreSheet onClose={() => setMoreOpen(false)}>
+            {visible
+              .filter((item) => secondary.includes(item))
+              .map(([label, href, Icon]) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMoreOpen(false)}
+                  aria-current={isActive(pathname, href) ? 'page' : undefined}
+                  className={
+                    'flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium hover:bg-muted ' +
+                    (isActive(pathname, href)
+                      ? 'bg-secondary text-secondary-foreground'
+                      : 'text-muted-foreground')
+                  }
+                >
+                  <Icon size={19} />
+                  {label}
+                  <Badge {...badges[href]} />
+                </Link>
+              ))}
+            <Link
+              href="/perfil"
+              onClick={() => setMoreOpen(false)}
+              className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted-foreground hover:bg-muted"
+            >
+              <UserRound size={19} />
+              Mi cuenta
+            </Link>
+          </MoreSheet>
+        )}
       </div>
     </SessionContext.Provider>
   );
 }
+const onProfileRoute = (pathname: string) => pathname === '/perfil';
+
+/** Hoja inferior con las secciones que no caben en la barra del teléfono. */
+function MoreSheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  const ref = useDialog(onClose);
+  return (
+    <div
+      ref={ref}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Más secciones"
+      onClick={(event) => event.target === event.currentTarget && onClose()}
+      className="fixed inset-0 z-40 flex items-end bg-black/40 lg:hidden"
+    >
+      <nav
+        aria-label="Más secciones"
+        className="max-h-[80dvh] w-full space-y-1 overflow-y-auto rounded-t-3xl bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+      >
+        {children}
+      </nav>
+    </div>
+  );
+}
+
 function Badge({
   count,
   label,

@@ -16,10 +16,12 @@ import { temporaryPassword } from '@/lib/temporary-password';
 import { usePagedList } from '@/lib/use-paged-list';
 import { Pagination } from '@/components/ui/pagination';
 import { useMemo, useState, useSyncExternalStore } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { label, PERMISSION_RESOURCE_LABEL, USER_STATUS_LABEL } from '@/lib/labels';
+import { EmptyState } from '@/components/ui/states';
 
 type Role = {
   id: string;
@@ -180,7 +182,11 @@ export function TeamAdministration() {
         </Button>
       </header>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat icon={UsersRound} label="Usuarios" value={users.data?.length ?? 0} />
+        <Stat
+          icon={UsersRound}
+          label="Usuarios"
+          value={users.meta?.total ?? users.data?.length ?? 0}
+        />
         <Stat icon={ShieldCheck} label="Roles" value={roles.data?.length ?? 0} />
         <Stat icon={KeyRound} label="Permisos" value={permissions.data?.length ?? 0} />
       </div>
@@ -237,6 +243,12 @@ export function TeamAdministration() {
               className="w-full bg-transparent outline-none"
             />
           </label>
+          {users.data && visible.length === 0 && (
+            <EmptyState
+              title={search ? 'Nadie coincide con la búsqueda' : 'Todavía no hay usuarios'}
+              hint={search ? undefined : 'Crea a tu equipo con «Nuevo usuario».'}
+            />
+          )}
           <div className="grid gap-4 xl:grid-cols-2">
             {visible.map((user) => (
               <UserCard
@@ -260,7 +272,9 @@ export function TeamAdministration() {
             <Card key={role.id} className="p-5">
               <div className="flex justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold text-primary">{role.code}</p>
+                  <p className="text-xs font-bold text-primary">
+                    {role.isSystem ? 'Rol del sistema' : 'Rol propio del salón'}
+                  </p>
                   <h2 className="mt-1 text-lg font-semibold">{role.name}</h2>
                 </div>
                 <span className="h-fit rounded-full bg-muted px-2 py-1 text-xs font-semibold">
@@ -369,27 +383,34 @@ function UserCard({
         <span
           className={`h-fit rounded-full px-2 py-1 text-xs font-bold ${active ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}
         >
-          {user.deletedAt ? 'ELIMINADO' : user.status}
+          {user.deletedAt ? 'Eliminado' : label(USER_STATUS_LABEL, user.status)}
         </span>
       </div>
-      <label className="mt-4 block text-xs font-semibold">
-        Roles
-        <select
-          multiple
-          aria-label={`Roles de ${user.fullName}`}
-          value={selected}
-          onChange={(event) =>
-            setSelected(Array.from(event.currentTarget.selectedOptions, (option) => option.value))
-          }
-          className="mt-1 min-h-24 w-full rounded-xl border bg-background p-2 text-sm"
-        >
+      {/* Casillas y no un `<select multiple>`: en el ordenador este exige Ctrl+clic, y quien
+          no lo sabe le quita a alguien los demás roles al elegir uno. */}
+      <fieldset className="mt-4" aria-label={`Roles de ${user.fullName}`}>
+        <legend className="text-xs font-semibold">Roles</legend>
+        <div className="mt-1 flex flex-wrap gap-2">
           {roles.map((role) => (
-            <option value={role.id} key={role.id}>
+            <label
+              key={role.id}
+              className="flex min-h-10 items-center gap-2 rounded-xl border bg-background px-3 text-sm font-medium"
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(role.id)}
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
+                  setSelected((current) =>
+                    checked ? [...current, role.id] : current.filter((id) => id !== role.id),
+                  );
+                }}
+              />
               {role.name}
-            </option>
+            </label>
           ))}
-        </select>
-      </label>
+        </div>
+      </fieldset>
       <div className="mt-3 flex flex-wrap gap-2">
         <Can permission="users.assign-roles">
           <Button
@@ -515,6 +536,7 @@ function UserDialog({
 }) {
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<UserValues>({ resolver: zodResolver(userSchema), defaultValues: { roleIds: [] } });
@@ -558,19 +580,37 @@ function UserDialog({
             {...register('password')}
           />
         </Field>
-        <Field label="Roles" error={errors.roleIds?.message}>
-          <select
-            multiple
-            className="mt-1 min-h-28 w-full rounded-xl border bg-background p-2"
-            {...register('roleIds')}
-          >
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <fieldset className="sm:col-span-2">
+          <legend className="text-sm font-semibold">Roles</legend>
+          <Controller
+            control={control}
+            name="roleIds"
+            render={({ field }) => (
+              <div className="mt-1 flex flex-wrap gap-2">
+                {roles.map((role) => (
+                  <label
+                    key={role.id}
+                    className="flex min-h-10 items-center gap-2 rounded-xl border bg-background px-3 text-sm font-medium"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={field.value.includes(role.id)}
+                      onChange={(event) =>
+                        field.onChange(
+                          event.currentTarget.checked
+                            ? [...field.value, role.id]
+                            : field.value.filter((id) => id !== role.id),
+                        )
+                      }
+                    />
+                    {role.name}
+                  </label>
+                ))}
+              </div>
+            )}
+          />
+          {errors.roleIds && <p className="mt-1 text-xs text-danger">{errors.roleIds.message}</p>}
+        </fieldset>
         {error && (
           <p role="alert" className="sm:col-span-2 rounded-xl bg-danger/10 p-3 text-sm text-danger">
             {error}
@@ -643,7 +683,9 @@ function RoleDialog({
           <div className="mt-2 grid max-h-72 gap-3 overflow-y-auto rounded-xl border p-3 sm:grid-cols-2">
             {Array.from(groups).map(([resource, entries]) => (
               <section key={resource}>
-                <h3 className="mb-1 text-xs font-bold uppercase text-primary">{resource}</h3>
+                <h3 className="mb-1 text-xs font-bold uppercase text-primary">
+                  {label(PERMISSION_RESOURCE_LABEL, resource)}
+                </h3>
                 {entries.map((permission) => (
                   <label className="flex min-h-9 items-start gap-2 text-xs" key={permission.code}>
                     <input
