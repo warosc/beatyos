@@ -11,6 +11,8 @@ import {
   callNext,
   fetchQueue,
   isActive,
+  minutesLabel,
+  minutesSince,
   QUEUE_KEY,
   queueAction,
   waitedLabel,
@@ -108,6 +110,11 @@ export function MyQueueCard({
         <p className="mt-1 text-sm text-muted-foreground">
           {mine.serviceNames.join(' · ') || 'Sin servicio anotado'}
           {mine.notes && ` · ${mine.notes}`}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {called
+            ? `Esperó ${minutesLabel(minutesSince(mine.createdAt, new Date(mine.firstCalledAt ?? now)))} · la llamaste hace ${minutesLabel(minutesSince(mine.calledAt ?? now.toISOString(), now))}`
+            : `En el sillón desde hace ${minutesLabel(minutesSince(mine.startedAt ?? now.toISOString(), now))}`}
         </p>
         {alert && <div className="mt-3">{alert}</div>}
         {called && (

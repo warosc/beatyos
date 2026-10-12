@@ -480,6 +480,65 @@ describe('Fila de espera (integración)', () => {
     expect(screenB.body.data).toMatchObject({ salonName: 'Salón salon-b', waitingCount: 0 });
   });
 
+  it('los indicadores cuentan espera, abandono y lo cobrado, solo para quien ve informes', async () => {
+    const served = (await walkIn({ clientId: salonA.clientId }).expect(201)).body.data;
+    const gone = (await walkIn({ clientName: 'Se cansó' }).expect(201)).body.data;
+    await walkIn({ clientName: 'Sigue esperando' }).expect(201);
+
+    const called = (await next().expect(200)).body.data.turn;
+    expect(called.firstCalledAt).toBe(called.calledAt);
+    const ticket = (
+      await act(served.id, 'finish', stylistToken, { serviceIds: [salonA.serviceId] }).expect(200)
+    ).body.data.ticket;
+    await request(server())
+      .post(api(`/service-tickets/${ticket.id}/charge`))
+      .set(auth(receptionToken))
+      .send({ payments: [{ method: 'CARD', amount: Number(TOTAL) }] })
+      .expect(201);
+    await act(gone.id, 'cancel', receptionToken, { reason: 'No podía esperar' }).expect(200);
+
+    // Recepción opera la fila, pero las cifras del negocio son de quien ve informes.
+    await request(server()).get(api('/queue/stats')).set(auth(receptionToken)).expect(403);
+
+    const stats = (
+      await request(server()).get(api('/queue/stats')).set(auth(ownerToken)).expect(200)
+    ).body.data;
+    expect(stats).toMatchObject({
+      arrivals: 3,
+      attended: 1,
+      left: 1,
+      pending: 1,
+      abandoned: 1,
+      abandonmentRate: 50,
+      revenue: TOTAL,
+      currency: 'GTQ',
+      chargedTurns: 1,
+      wait: { samples: 1 },
+      byService: [{ serviceId: salonA.serviceId, name: 'Corte de señora', requests: 3 }],
+      byStylist: [{ stylistId: salonA.stylistId, name: 'Sara', attended: 1 }],
+    });
+    expect(stats.byDay.at(-1)).toMatchObject({ arrivals: 3, attended: 1, abandoned: 1 });
+
+    const board = (await request(server()).get(api('/queue')).set(auth(receptionToken))).body.data;
+    expect(board).toMatchObject({ waitSamples: 1 });
+
+    // El otro salón no ve nada de esto.
+    const ownerB = await loginAs(salonB.ownerEmail);
+    const statsB = (await request(server()).get(api('/queue/stats')).set(auth(ownerB)).expect(200))
+      .body.data;
+    expect(statsB).toMatchObject({ arrivals: 0, revenue: '0.00' });
+  });
+
+  it('los indicadores rechazan fechas mal escritas o un periodo al revés', async () => {
+    const stats = (query: string) =>
+      request(server())
+        .get(api(`/queue/stats${query}`))
+        .set(auth(ownerToken));
+    await stats('?from=12-10-2026').expect(400);
+    await stats('?from=2026-10-12&to=2026-10-01').expect(400);
+    await stats('?from=2026-10-01&to=2026-10-07').expect(200);
+  });
+
   it('el canal de la pantalla avisa cuando cambia la fila, y solo de su salón', async () => {
     await issueDisplayLink();
     const controller = app.get(PublicQueueDisplayController);

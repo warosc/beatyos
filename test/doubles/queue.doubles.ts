@@ -121,6 +121,7 @@ const clone = (turn: QueueTurn): QueueTurn =>
     notes: turn.notes,
     callCount: turn.callCount,
     calledAt: turn.calledAt,
+    firstCalledAt: turn.firstCalledAt,
     startedAt: turn.startedAt,
     closedAt: turn.closedAt,
     serviceTicketId: turn.serviceTicketId,

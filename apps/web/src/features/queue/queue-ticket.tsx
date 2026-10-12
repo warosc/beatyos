@@ -1,5 +1,5 @@
 'use client';
-import type { QueueTurn } from './types';
+import { approximateWait, type QueueTurn } from './types';
 
 /**
  * Ticket del turno para la clienta, en columna de impresora de tickets.
@@ -8,7 +8,16 @@ import type { QueueTurn } from './types';
  * el número bien grande —es lo que la clienta mira cuando suena la pantalla— y nada de
  * datos que no necesite: ni teléfono ni ficha.
  */
-export function QueueTicket({ turn, salonName }: { turn: QueueTurn; salonName: string }) {
+export function QueueTicket({
+  turn,
+  salonName,
+  estimatedWait = null,
+}: {
+  turn: QueueTurn;
+  salonName: string;
+  /** Espera media de hoy, si ya hay llamadas suficientes para decirla. */
+  estimatedWait?: number | null;
+}) {
   const issued = new Date(turn.createdAt).toLocaleString('es-GT', {
     day: '2-digit',
     month: '2-digit',
@@ -27,6 +36,9 @@ export function QueueTicket({ turn, salonName }: { turn: QueueTurn; salonName: s
         <p className="mt-1">
           {turn.position === 1 ? 'Eres la siguiente' : `Hay ${turn.position - 1} antes que tú`}
         </p>
+      )}
+      {estimatedWait !== null && turn.position && turn.position > 1 && (
+        <p>Espera aproximada: {approximateWait(estimatedWait)}</p>
       )}
       <p className="mt-2 border-t border-dashed border-black pt-1 text-[10px]">
         {issued} · Te llamaremos en la pantalla

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { readSignals } from '@/features/agenda/live';
 import { problem } from '@/features/service-tickets/types';
 import { cn } from '@/lib/utils';
-import { announcement, callKey, type QueueDisplay } from './types';
+import { announcement, approximateWait, callKey, type QueueDisplay } from './types';
 
 /** Cuánto se destaca una llamada nueva antes de quedar como las demás. */
 const HIGHLIGHT_MS = 12_000;
@@ -179,6 +179,15 @@ export function QueueDisplayScreen({ token }: { token: string }) {
               y {data.waitingCount - data.waiting.length} más
             </p>
           )}
+          {/* Solo con varias llamadas de hoy detrás: con una sería una promesa, no una media. */}
+          {data?.estimatedWaitMinutes != null && data.waitingCount > 0 && (
+            <p className="rounded-2xl bg-card p-6 text-2xl">
+              Espera aproximada
+              <strong className="mt-1 block text-5xl">
+                {approximateWait(data.estimatedWaitMinutes)}
+              </strong>
+            </p>
+          )}
         </section>
       </div>
 
@@ -186,7 +195,7 @@ export function QueueDisplayScreen({ token }: { token: string }) {
         <button
           type="button"
           onClick={() => void activate()}
-          className="fixed right-8 bottom-8 inline-flex items-center gap-3 rounded-2xl bg-primary px-8 py-5 text-2xl font-semibold text-primary-foreground shadow-lg"
+          className="fixed bottom-8 left-8 inline-flex items-center gap-3 rounded-2xl bg-primary px-8 py-5 text-2xl font-semibold text-primary-foreground shadow-lg"
         >
           <Volume2 size={28} />
           Activar sonido

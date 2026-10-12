@@ -9,7 +9,7 @@ import { ClientCombobox, type PosClient } from '@/features/sales/client-combobox
 import { canPerform, type PosStylist } from '@/features/sales/stylist-select';
 import { cn } from '@/lib/utils';
 import { QueueTicket } from './queue-ticket';
-import { queueSend, type QueueTurn } from './types';
+import { approximateWait, queueSend, type QueueTurn } from './types';
 
 /**
  * Recepción anota a una clienta que llega sin cita (ADR-0024).
@@ -22,12 +22,15 @@ export function WalkInDialog({
   services,
   stylists,
   salonName,
+  estimatedWait,
   onClose,
   onSaved,
 }: {
   services: readonly Service[];
   stylists: readonly PosStylist[];
   salonName: string;
+  /** Espera media de hoy, si ya hay llamadas suficientes para decirla. */
+  estimatedWait: number | null;
   onClose: () => void;
   onSaved: (turn: QueueTurn) => void;
 }) {
@@ -96,7 +99,8 @@ export function WalkInDialog({
         description={
           saved.position === 1
             ? `${saved.clientName} es la siguiente.`
-            : `${saved.clientName} tiene ${(saved.position ?? 1) - 1} por delante.`
+            : `${saved.clientName} tiene ${(saved.position ?? 1) - 1} por delante` +
+              (estimatedWait === null ? '.' : `: hoy se espera ${approximateWait(estimatedWait)}.`)
         }
         onClose={onClose}
         footer={
@@ -115,7 +119,7 @@ export function WalkInDialog({
           </div>
         }
       >
-        <QueueTicket turn={saved} salonName={salonName} />
+        <QueueTicket turn={saved} salonName={salonName} estimatedWait={estimatedWait} />
       </Sheet>
     );
   }

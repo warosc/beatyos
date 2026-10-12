@@ -7054,6 +7054,61 @@
         ]
       }
     },
+    "/api/v1/queue/stats": {
+      "get": {
+        "description": "Por días del salón, ambos incluidos. Sin fechas, los últimos 30 días hasta hoy. Máximo un año.",
+        "operationId": "queue_stats",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Primer día del salón, incluido",
+            "schema": {
+              "example": "2026-09-13",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Último día del salón, incluido",
+            "schema": {
+              "example": "2026-10-12",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueStatsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: reports.read"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Indicadores de la fila: espera, abandono, horas y días con más gente",
+        "tags": [
+          "Fila de espera"
+        ]
+      }
+    },
     "/api/v1/queue/next": {
       "post": {
         "description": "Por orden de llegada, saltando a quien pidió a otra profesional o un servicio que ella no hace. Devuelve `turn: null` si no queda nadie para ella.",
@@ -13453,6 +13508,11 @@
             "type": "string",
             "nullable": true
           },
+          "firstCalledAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "Primera llamada: fin de la espera"
+          },
           "startedAt": {
             "type": "string",
             "nullable": true
@@ -13489,6 +13549,7 @@
           "callCount",
           "createdAt",
           "calledAt",
+          "firstCalledAt",
           "startedAt",
           "closedAt",
           "serviceTicketId",
@@ -13508,11 +13569,371 @@
             "items": {
               "$ref": "#/components/schemas/QueueTurnResponse"
             }
+          },
+          "averageWaitMinutes": {
+            "type": "number",
+            "nullable": true,
+            "description": "Espera media de hoy hasta la primera llamada, en minutos"
+          },
+          "waitSamples": {
+            "type": "number",
+            "description": "Llamadas de hoy con las que se calculó la media"
           }
         },
         "required": [
           "businessDate",
-          "turns"
+          "turns",
+          "averageWaitMinutes",
+          "waitSamples"
+        ]
+      },
+      "MinutesSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "average": {
+            "type": "number",
+            "nullable": true
+          },
+          "median": {
+            "type": "number",
+            "nullable": true
+          },
+          "p90": {
+            "type": "number",
+            "nullable": true,
+            "description": "9 de cada 10, esto o menos"
+          },
+          "max": {
+            "type": "number",
+            "nullable": true
+          },
+          "samples": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "average",
+          "median",
+          "p90",
+          "max",
+          "samples"
+        ]
+      },
+      "QueueHourStatResponse": {
+        "type": "object",
+        "properties": {
+          "hour": {
+            "type": "number",
+            "description": "Hora local de llegada, 0–23"
+          },
+          "arrivals": {
+            "type": "number"
+          },
+          "abandoned": {
+            "type": "number"
+          },
+          "averageWait": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "hour",
+          "arrivals",
+          "abandoned",
+          "averageWait"
+        ]
+      },
+      "QueueWeekdayStatResponse": {
+        "type": "object",
+        "properties": {
+          "weekday": {
+            "type": "number",
+            "description": "0 = domingo"
+          },
+          "arrivals": {
+            "type": "number"
+          },
+          "arrivalsPerDay": {
+            "type": "number",
+            "description": "Llegadas por cada día de ese tipo del periodo"
+          },
+          "averageWait": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "weekday",
+          "arrivals",
+          "arrivalsPerDay",
+          "averageWait"
+        ]
+      },
+      "QueueDayStatResponse": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-10-12"
+          },
+          "arrivals": {
+            "type": "number"
+          },
+          "attended": {
+            "type": "number"
+          },
+          "abandoned": {
+            "type": "number"
+          },
+          "averageWait": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "date",
+          "arrivals",
+          "attended",
+          "abandoned",
+          "averageWait"
+        ]
+      },
+      "QueueStylistStatResponse": {
+        "type": "object",
+        "properties": {
+          "stylistId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "attended": {
+            "type": "number"
+          },
+          "requested": {
+            "type": "number",
+            "description": "Cuántas la pidieron por su nombre"
+          },
+          "averageService": {
+            "type": "number",
+            "nullable": true,
+            "description": "Minutos de sillón, de media"
+          }
+        },
+        "required": [
+          "stylistId",
+          "name",
+          "attended",
+          "requested",
+          "averageService"
+        ]
+      },
+      "QueueServiceDemandResponse": {
+        "type": "object",
+        "properties": {
+          "serviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "serviceId",
+          "name",
+          "requests"
+        ]
+      },
+      "QueueInsightResponse": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "peak-hour",
+              "slowest-hour",
+              "leave-after",
+              "busiest-weekday",
+              "most-requested"
+            ]
+          },
+          "hour": {
+            "type": "number"
+          },
+          "arrivals": {
+            "type": "number"
+          },
+          "averageWait": {
+            "type": "number"
+          },
+          "minutes": {
+            "type": "number"
+          },
+          "samples": {
+            "type": "number"
+          },
+          "weekday": {
+            "type": "number"
+          },
+          "arrivalsPerDay": {
+            "type": "number"
+          },
+          "stylistId": {
+            "type": "string"
+          },
+          "stylistName": {
+            "type": "string"
+          },
+          "requested": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "QueueStatsResponse": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "example": "2026-09-13"
+          },
+          "to": {
+            "type": "string",
+            "example": "2026-10-12"
+          },
+          "arrivals": {
+            "type": "number",
+            "description": "Clientas que llegaron sin cita"
+          },
+          "attended": {
+            "type": "number"
+          },
+          "left": {
+            "type": "number",
+            "description": "Se fueron o las sacaron de la fila"
+          },
+          "noShow": {
+            "type": "number",
+            "description": "Las llamaron y no aparecieron"
+          },
+          "unattended": {
+            "type": "number",
+            "description": "Seguían en la fila al terminar su día"
+          },
+          "pending": {
+            "type": "number",
+            "description": "Hoy, todavía en la fila o en atención"
+          },
+          "abandoned": {
+            "type": "number"
+          },
+          "abandonmentRate": {
+            "type": "number",
+            "nullable": true,
+            "description": "% de perdidas sobre las resueltas"
+          },
+          "wait": {
+            "description": "De la llegada a la primera llamada",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MinutesSummaryResponse"
+              }
+            ]
+          },
+          "waitBeforeLeaving": {
+            "description": "Cuánto aguantaron las que se fueron sin que las llamaran",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MinutesSummaryResponse"
+              }
+            ]
+          },
+          "service": {
+            "description": "Del sillón al final",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MinutesSummaryResponse"
+              }
+            ]
+          },
+          "revenue": {
+            "type": "string",
+            "description": "Cobrado por las comandas de la fila, IVA incluido"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "chargedTurns": {
+            "type": "number"
+          },
+          "byHour": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueueHourStatResponse"
+            }
+          },
+          "byWeekday": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueueWeekdayStatResponse"
+            }
+          },
+          "byDay": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueueDayStatResponse"
+            }
+          },
+          "byStylist": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueueStylistStatResponse"
+            }
+          },
+          "byService": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueueServiceDemandResponse"
+            }
+          },
+          "insights": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueueInsightResponse"
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "arrivals",
+          "attended",
+          "left",
+          "noShow",
+          "unattended",
+          "pending",
+          "abandoned",
+          "abandonmentRate",
+          "wait",
+          "waitBeforeLeaving",
+          "service",
+          "revenue",
+          "currency",
+          "chargedTurns",
+          "byHour",
+          "byWeekday",
+          "byDay",
+          "byStylist",
+          "byService",
+          "insights"
         ]
       },
       "RegisterWalkInDto": {
@@ -13716,13 +14137,19 @@
           },
           "waitingCount": {
             "type": "number"
+          },
+          "estimatedWaitMinutes": {
+            "type": "number",
+            "nullable": true,
+            "description": "Espera aproximada (media de hoy), solo con llamadas suficientes"
           }
         },
         "required": [
           "salonName",
           "called",
           "waiting",
-          "waitingCount"
+          "waitingCount",
+          "estimatedWaitMinutes"
         ]
       }
     }

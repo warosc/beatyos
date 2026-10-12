@@ -23,6 +23,8 @@ export interface QueueTurn {
   callCount: number;
   createdAt: string;
   calledAt: string | null;
+  /** Primera llamada: el final de su espera. */
+  firstCalledAt: string | null;
   startedAt: string | null;
   closedAt: string | null;
   serviceTicketId: string | null;
@@ -32,6 +34,9 @@ export interface QueueTurn {
 export interface QueueBoard {
   businessDate: string;
   turns: QueueTurn[];
+  /** Espera media de hoy hasta la primera llamada. */
+  averageWaitMinutes: number | null;
+  waitSamples: number;
 }
 
 /** Lo que enseña la pantalla de la sala. Nada más que esto sale de la API pública. */
@@ -47,6 +52,8 @@ export interface QueueDisplay {
   }[];
   waiting: number[];
   waitingCount: number;
+  /** Media de hoy; solo cuando ya hay varias llamadas. */
+  estimatedWaitMinutes: number | null;
 }
 
 export const QUEUE_STATUS_LABEL: Record<QueueTurnStatus, string> = {
@@ -105,13 +112,11 @@ export const finishTurn = (id: string, serviceIds: string[], notes?: string) =>
     'No pudimos registrar el servicio.',
   );
 
-/** «Hace 12 min»: cuánto lleva esperando, para que recepción vea a quién atender antes. */
+/** «Espera 12 min»: cuánto lleva esperando, para que recepción vea a quién atender antes. */
 export function waitedLabel(since: string, now: Date): string {
-  const minutes = Math.max(0, Math.floor((now.getTime() - new Date(since).getTime()) / 60_000));
+  const minutes = minutesSince(since, now);
   if (minutes < 1) return 'recién llegada';
-  if (minutes < 60) return `espera ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  return `espera ${hours} h ${minutes % 60} min`;
+  return `espera ${minutesLabel(minutes)}`;
 }
 
 /**
@@ -123,3 +128,34 @@ export const callKey = (call: QueueDisplay['called'][number]) => `${call.id}:${c
 /** Lo que dice la voz de la pantalla. Los números se leen mejor en cifras que deletreados. */
 export const announcement = (call: QueueDisplay['called'][number]) =>
   `Turno ${call.number}. ${call.publicName}, pase con ${call.stylistName}.`;
+
+/** Con menos llamadas, una media es la anécdota de una clienta: no se promete nada. */
+export const MIN_WAIT_SAMPLES = 3;
+
+/** «12 min», «1 h 25 min». */
+export function minutesLabel(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const rest = minutes % 60;
+  return `${Math.floor(minutes / 60)} h${rest ? ` ${rest} min` : ''}`;
+}
+
+/**
+ * Espera aproximada para decírsela a la clienta. Por debajo de 5 minutos, «0 min» sonaría
+ * a promesa: se dice «menos de 5 min».
+ */
+export const approximateWait = (minutes: number) =>
+  minutes < 5 ? 'menos de 5 min' : minutesLabel(minutes);
+
+/** Minutos enteros transcurridos, nunca negativos (un reloj adelantado en el equipo). */
+export const minutesSince = (since: string, now: Date) =>
+  Math.max(0, Math.floor((now.getTime() - new Date(since).getTime()) / 60_000));
+
+/**
+ * Cómo de larga es una espera, para pintarla: a partir de 15 minutos conviene mirarla y a
+ * partir de 30 es de las que acaban yéndose.
+ */
+export function waitTone(minutes: number): 'calm' | 'attention' | 'late' {
+  if (minutes >= 30) return 'late';
+  if (minutes >= 15) return 'attention';
+  return 'calm';
+}

@@ -1379,6 +1379,9 @@ model QueueTurn {
   /// Veces que se la ha llamado. La pantalla anuncia de nuevo cada vez que sube.
   callCount          Int             @default(0)
   calledAt           DateTime?       @db.Timestamptz(3)
+  /// Primera vez que la llamaron. No cambia al volver a llamarla ni al devolverla a la fila:
+  /// es el final de su espera, y de ella salen los indicadores de espera (ADR-0025).
+  firstCalledAt      DateTime?       @db.Timestamptz(3)
   startedAt          DateTime?       @db.Timestamptz(3)
   /// Cuándo salió de la fila: atendida, no se presentó o se fue.
   closedAt           DateTime?       @db.Timestamptz(3)

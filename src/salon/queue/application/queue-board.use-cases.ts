@@ -18,6 +18,7 @@ import {
   STYLIST_REPOSITORY,
   type StylistRepository,
 } from '../../stylists/domain/stylist.repository';
+import { MIN_SAMPLES, summarizeMinutes, waitMinutes } from '../domain/queue-stats';
 import { businessDateOf, byArrival, type QueueTurn } from '../domain/queue-turn.entity';
 import {
   QUEUE_DISPLAY_LINKS,
@@ -44,7 +45,22 @@ export interface QueueTurnView {
 export interface QueueBoard {
   readonly businessDate: string;
   readonly turns: readonly QueueTurnView[];
+  /** Espera media de hoy, de la llegada a la primera llamada. `null` si aún no llamaron a nadie. */
+  readonly averageWaitMinutes: number | null;
+  readonly waitSamples: number;
 }
+
+/**
+ * Espera media de hoy. Es lo que se le puede decir a quien llega —«ahora mismo se espera
+ * unos 20 minutos»—, que es más honesto que prometer una hora calculada.
+ */
+const todaysWait = (turns: readonly QueueTurn[], businessDate: string) =>
+  summarizeMinutes(
+    turns
+      .filter((turn) => turn.businessDate === businessDate)
+      .map(waitMinutes)
+      .filter((value): value is number => value !== null),
+  );
 
 export interface GetQueueBoardInput {
   /**
@@ -85,9 +101,12 @@ export class GetQueueBoardUseCase implements UseCase<GetQueueBoardInput, QueueBo
       ? await this.ownView(all, input.restrictToStylistId)
       : all;
 
+    const wait = todaysWait(all, businessDate);
     return {
       businessDate,
       turns: await this.describe(visible, positions),
+      averageWaitMinutes: wait.average,
+      waitSamples: wait.samples,
     };
   }
 
@@ -168,6 +187,11 @@ export interface QueueDisplay {
   readonly called: readonly QueueDisplayCall[];
   readonly waiting: readonly number[];
   readonly waitingCount: number;
+  /**
+   * Espera aproximada que enseña la sala: la media de hoy. Solo con varias llamadas: con una,
+   * sería la anécdota de una clienta y no una referencia.
+   */
+  readonly estimatedWaitMinutes: number | null;
 }
 
 /**
@@ -197,6 +221,7 @@ export class GetQueueDisplayUseCase implements UseCase<{ salonName: string }, Qu
       .sort((a, b) => b.calledAt!.getTime() - a.calledAt!.getTime())
       .slice(0, DISPLAY_CALLED);
     const waiting = today.filter((turn) => turn.status === 'WAITING').sort(byArrival);
+    const wait = todaysWait(today, businessDate);
 
     const names = new Map(
       (await Promise.all(called.map((turn) => this.stylists.findById(turn.stylistId!))))
@@ -216,6 +241,7 @@ export class GetQueueDisplayUseCase implements UseCase<{ salonName: string }, Qu
       })),
       waiting: waiting.slice(0, DISPLAY_WAITING).map((turn) => turn.number),
       waitingCount: waiting.length,
+      estimatedWaitMinutes: wait.samples >= MIN_SAMPLES ? wait.average : null,
     };
   }
 }

@@ -1,3 +1,4 @@
+import type { QueueTurnFact } from './queue-stats';
 import type { QueueTurn, QueueTurnStatusValue } from './queue-turn.entity';
 
 // ---------------------------------------------------------------------------
@@ -65,12 +66,25 @@ export interface QueueDisplayLinks {
 export const QUEUE_DISPLAY_LINKS = Symbol('QueueDisplayLinks');
 
 // ---------------------------------------------------------------------------
+// Indicadores (ADR-0025)
+// ---------------------------------------------------------------------------
+
+export interface QueueStatsReader {
+  /** Turnos cuyo día del salón cae entre `from` y `to`, ambos incluidos. */
+  factsBetween(from: string, to: string): Promise<QueueTurnFact[]>;
+}
+
+export const QUEUE_STATS_READER = Symbol('QueueStatsReader');
+
+// ---------------------------------------------------------------------------
 // Configuración
 // ---------------------------------------------------------------------------
 
 export interface QueueSettings {
   /** Zona del salón: decide a qué día pertenece un turno y cuándo empieza la fila nueva. */
   readonly timeZone: string;
+  /** Moneda de lo cobrado a las clientas de la fila, en los indicadores. */
+  readonly currency: string;
 }
 
 export const QUEUE_SETTINGS = Symbol('QueueSettings');

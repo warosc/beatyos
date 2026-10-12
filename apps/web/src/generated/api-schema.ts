@@ -1975,6 +1975,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/queue/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Indicadores de la fila: espera, abandono, horas y días con más gente
+         * @description Por días del salón, ambos incluidos. Sin fechas, los últimos 30 días hasta hoy. Máximo un año.
+         */
+        get: operations["queue_stats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/queue/next": {
         parameters: {
             query?: never;
@@ -4075,6 +4095,8 @@ export interface components {
             /** @description Llegada a la fila */
             createdAt: string;
             calledAt: string | null;
+            /** @description Primera llamada: fin de la espera */
+            firstCalledAt: string | null;
             startedAt: string | null;
             closedAt: string | null;
             /** Format: uuid */
@@ -4088,6 +4110,107 @@ export interface components {
              */
             businessDate: string;
             turns: components["schemas"]["QueueTurnResponse"][];
+            /** @description Espera media de hoy hasta la primera llamada, en minutos */
+            averageWaitMinutes: number | null;
+            /** @description Llamadas de hoy con las que se calculó la media */
+            waitSamples: number;
+        };
+        MinutesSummaryResponse: {
+            average: number | null;
+            median: number | null;
+            /** @description 9 de cada 10, esto o menos */
+            p90: number | null;
+            max: number | null;
+            samples: number;
+        };
+        QueueHourStatResponse: {
+            /** @description Hora local de llegada, 0–23 */
+            hour: number;
+            arrivals: number;
+            abandoned: number;
+            averageWait: number | null;
+        };
+        QueueWeekdayStatResponse: {
+            /** @description 0 = domingo */
+            weekday: number;
+            arrivals: number;
+            /** @description Llegadas por cada día de ese tipo del periodo */
+            arrivalsPerDay: number;
+            averageWait: number | null;
+        };
+        QueueDayStatResponse: {
+            /** @example 2026-10-12 */
+            date: string;
+            arrivals: number;
+            attended: number;
+            abandoned: number;
+            averageWait: number | null;
+        };
+        QueueStylistStatResponse: {
+            /** Format: uuid */
+            stylistId: string;
+            name: string;
+            attended: number;
+            /** @description Cuántas la pidieron por su nombre */
+            requested: number;
+            /** @description Minutos de sillón, de media */
+            averageService: number | null;
+        };
+        QueueServiceDemandResponse: {
+            /** Format: uuid */
+            serviceId: string;
+            name: string;
+            requests: number;
+        };
+        QueueInsightResponse: {
+            /** @enum {string} */
+            kind: "peak-hour" | "slowest-hour" | "leave-after" | "busiest-weekday" | "most-requested";
+            hour?: number;
+            arrivals?: number;
+            averageWait?: number;
+            minutes?: number;
+            samples?: number;
+            weekday?: number;
+            arrivalsPerDay?: number;
+            stylistId?: string;
+            stylistName?: string;
+            requested?: number;
+        };
+        QueueStatsResponse: {
+            /** @example 2026-09-13 */
+            from: string;
+            /** @example 2026-10-12 */
+            to: string;
+            /** @description Clientas que llegaron sin cita */
+            arrivals: number;
+            attended: number;
+            /** @description Se fueron o las sacaron de la fila */
+            left: number;
+            /** @description Las llamaron y no aparecieron */
+            noShow: number;
+            /** @description Seguían en la fila al terminar su día */
+            unattended: number;
+            /** @description Hoy, todavía en la fila o en atención */
+            pending: number;
+            abandoned: number;
+            /** @description % de perdidas sobre las resueltas */
+            abandonmentRate: number | null;
+            /** @description De la llegada a la primera llamada */
+            wait: components["schemas"]["MinutesSummaryResponse"];
+            /** @description Cuánto aguantaron las que se fueron sin que las llamaran */
+            waitBeforeLeaving: components["schemas"]["MinutesSummaryResponse"];
+            /** @description Del sillón al final */
+            service: components["schemas"]["MinutesSummaryResponse"];
+            /** @description Cobrado por las comandas de la fila, IVA incluido */
+            revenue: string;
+            currency: string;
+            chargedTurns: number;
+            byHour: components["schemas"]["QueueHourStatResponse"][];
+            byWeekday: components["schemas"]["QueueWeekdayStatResponse"][];
+            byDay: components["schemas"]["QueueDayStatResponse"][];
+            byStylist: components["schemas"]["QueueStylistStatResponse"][];
+            byService: components["schemas"]["QueueServiceDemandResponse"][];
+            insights: components["schemas"]["QueueInsightResponse"][];
         };
         RegisterWalkInDto: {
             /**
@@ -4163,6 +4286,8 @@ export interface components {
             /** @description Siguientes números en espera */
             waiting: number[];
             waitingCount: number;
+            /** @description Espera aproximada (media de hoy), solo con llamadas suficientes */
+            estimatedWaitMinutes: number | null;
         };
     };
     responses: never;
@@ -9245,6 +9370,44 @@ export interface operations {
                 content?: never;
             };
             /** @description Requiere el permiso: queue.create */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_stats: {
+        parameters: {
+            query?: {
+                /** @description Primer día del salón, incluido */
+                from?: string;
+                /** @description Último día del salón, incluido */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueStatsResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: reports.read */
             403: {
                 headers: {
                     [name: string]: unknown;

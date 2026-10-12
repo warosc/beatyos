@@ -12,6 +12,7 @@ import {
   GetQueueDisplayUseCase,
   IssueQueueDisplayLinkUseCase,
 } from './application/queue-board.use-cases';
+import { GetQueueStatsUseCase } from './application/queue-stats.use-cases';
 import {
   CallNextUseCase,
   CallTurnUseCase,
@@ -22,6 +23,7 @@ import {
 import {
   QUEUE_DISPLAY_LINKS,
   QUEUE_SETTINGS,
+  QUEUE_STATS_READER,
   QUEUE_TURN_REPOSITORY,
   type QueueSettings,
 } from './domain/queue.ports';
@@ -29,6 +31,7 @@ import { PublicQueueDisplayController } from './infrastructure/http/public-queue
 import { QueueController } from './infrastructure/http/queue.controller';
 import {
   PrismaQueueDisplayLinks,
+  PrismaQueueStatsReader,
   PrismaQueueTurnRepository,
 } from './infrastructure/persistence/prisma-queue.repositories';
 
@@ -51,14 +54,17 @@ import {
     GetQueueBoardUseCase,
     GetQueueDisplayUseCase,
     IssueQueueDisplayLinkUseCase,
+    GetQueueStatsUseCase,
     { provide: QUEUE_TURN_REPOSITORY, useClass: PrismaQueueTurnRepository },
     { provide: QUEUE_DISPLAY_LINKS, useClass: PrismaQueueDisplayLinks },
+    { provide: QUEUE_STATS_READER, useClass: PrismaQueueStatsReader },
     {
       provide: QUEUE_SETTINGS,
       // Misma zona que la agenda: hoy sale de la configuración global y no de
       // `Tenant.timezone`, deuda anotada en el README para todo el sistema.
       useFactory: (config: ConfigService<Env, true>): QueueSettings => ({
         timeZone: config.get('DEFAULT_TIMEZONE', { infer: true }),
+        currency: config.get('DEFAULT_CURRENCY', { infer: true }),
       }),
       inject: [ConfigService],
     },

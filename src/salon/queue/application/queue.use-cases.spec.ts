@@ -25,6 +25,7 @@ import type { RegisterServiceTicketUseCase } from '@salon/service-tickets/applic
 import { ServiceTicket } from '@salon/service-tickets/domain/service-ticket.entity';
 import { Stylist } from '@salon/stylists/domain/stylist.entity';
 
+import type { QueueTurnFact } from '../domain/queue-stats';
 import { QueueTurn } from '../domain/queue-turn.entity';
 import {
   displayTokenDigest,
@@ -32,6 +33,7 @@ import {
   GetQueueDisplayUseCase,
   IssueQueueDisplayLinkUseCase,
 } from './queue-board.use-cases';
+import { GetQueueStatsUseCase } from './queue-stats.use-cases';
 import {
   CallNextUseCase,
   CallTurnUseCase,
@@ -68,7 +70,7 @@ describe('Casos de uso de la fila de espera', () => {
   let board: GetQueueBoardUseCase;
   let display: GetQueueDisplayUseCase;
 
-  const settings = { timeZone: 'America/Guatemala' };
+  const settings = { timeZone: 'America/Guatemala', currency: 'GTQ' };
 
   const buildStylist = (id: string, name: string) =>
     Stylist.create({
@@ -659,6 +661,90 @@ describe('Casos de uso de la fila de espera', () => {
         serviceNames: ['Servicio retirado'],
         preferredStylistName: 'Profesional',
       });
+    });
+  });
+
+  describe('espera de hoy', () => {
+    /** Anota y llama a una clienta que esperó `minutes`. */
+    const waited = async (minutes: number, stylistId: string) => {
+      const turn = await walkIn({ clientName: `Esperó ${minutes}` });
+      clock.advanceBy(minutes * 60_000);
+      await callTurn.execute({ turnId: turn.id, stylistId, actorId: 'reception' });
+      const called = await turns.findByIdOrFail(turn.id);
+      // Se cierra para dejar libre a la profesional; la espera ya quedó medida.
+      await change.execute({
+        turnId: called.id,
+        action: 'no-show',
+        actorId: 'reception',
+        restrictToStylistId: null,
+      });
+    };
+
+    it('el tablero da la media de hoy en cuanto llaman a alguien', async () => {
+      expect(await board.execute({ restrictToStylistId: null })).toMatchObject({
+        averageWaitMinutes: null,
+        waitSamples: 0,
+      });
+
+      await waited(10, SARA);
+      await waited(20, SARA);
+
+      expect(await board.execute({ restrictToStylistId: null })).toMatchObject({
+        averageWaitMinutes: 15,
+        waitSamples: 2,
+      });
+    });
+
+    it('la pantalla solo da una espera aproximada con varias llamadas', async () => {
+      await waited(10, SARA);
+      await waited(20, SARA);
+      expect((await display.execute({ salonName: 'Salón' })).estimatedWaitMinutes).toBeNull();
+
+      await waited(30, VALERIA);
+      expect((await display.execute({ salonName: 'Salón' })).estimatedWaitMinutes).toBe(20);
+    });
+  });
+
+  describe('indicadores', () => {
+    const fact = (overrides: Partial<QueueTurnFact>): QueueTurnFact => ({
+      businessDate: '2026-10-11',
+      status: 'DONE',
+      createdAt: new Date('2026-10-11T15:00:00.000Z'),
+      firstCalledAt: new Date('2026-10-11T15:10:00.000Z'),
+      startedAt: new Date('2026-10-11T15:10:00.000Z'),
+      closedAt: new Date('2026-10-11T15:40:00.000Z'),
+      stylistId: SARA,
+      preferredStylistId: null,
+      serviceIds: [CUT],
+      charged: null,
+      ...overrides,
+    });
+
+    it('pide el último mes por defecto y pone nombre a profesionales y servicios', async () => {
+      const reader = {
+        factsBetween: jest.fn(async (_from: string, _to: string) => [
+          fact({}),
+          fact({ stylistId: 'stylist-gone', serviceIds: ['retired'] }),
+        ]),
+      };
+      const stats = new GetQueueStatsUseCase(reader, stylists, services, settings, clock);
+
+      const view = await stats.execute({});
+
+      expect(reader.factsBetween).toHaveBeenCalledWith('2026-09-13', TODAY);
+      expect(view.stats).toMatchObject({ arrivals: 2, attended: 2 });
+      expect(view.stylistNames.get(SARA)).toBe('Sara');
+      expect(view.stylistNames.has('stylist-gone')).toBe(false);
+      expect(view.serviceNames.get(CUT)).toBe('Corte');
+    });
+
+    it('respeta el periodo pedido', async () => {
+      const reader = { factsBetween: jest.fn(async (_from: string, _to: string) => []) };
+      const stats = new GetQueueStatsUseCase(reader, stylists, services, settings, clock);
+
+      await stats.execute({ from: '2026-10-01', to: '2026-10-07' });
+
+      expect(reader.factsBetween).toHaveBeenCalledWith('2026-10-01', '2026-10-07');
     });
   });
 

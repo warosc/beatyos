@@ -8,6 +8,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -32,6 +33,7 @@ import {
   GetQueueBoardUseCase,
   IssueQueueDisplayLinkUseCase,
 } from '../../application/queue-board.use-cases';
+import { GetQueueStatsUseCase } from '../../application/queue-stats.use-cases';
 import {
   CallNextUseCase,
   CallTurnUseCase,
@@ -52,6 +54,8 @@ import {
   QueueBoardResponse,
   QueueDisplayLinkResponse,
   QueueDisplayLinkStatusResponse,
+  QueueStatsQueryDto,
+  QueueStatsResponse,
   QueueTurnResponse,
   RegisterWalkInDto,
 } from './queue.dto';
@@ -83,6 +87,7 @@ export class QueueController {
     private readonly changeTurn: ChangeQueueTurnUseCase,
     private readonly finishTurn: FinishQueueTurnUseCase,
     private readonly issueDisplayLink: IssueQueueDisplayLinkUseCase,
+    private readonly stats: GetQueueStatsUseCase,
     private readonly tickets: ListServiceTicketsUseCase,
     @Inject(STYLIST_REPOSITORY) private readonly stylists: StylistRepository,
     @Inject(QUEUE_DISPLAY_LINKS) private readonly displayLinks: QueueDisplayLinks,
@@ -123,7 +128,26 @@ export class QueueController {
     return {
       businessDate: board.businessDate,
       turns: board.turns.map((view) => QueueTurnResponse.from(view)),
+      averageWaitMinutes: board.averageWaitMinutes,
+      waitSamples: board.waitSamples,
     };
+  }
+
+  @Get('stats')
+  // Son cifras del negocio para decidir, como los informes: no hace falta ver la fila.
+  @RequirePermissions(PERMISSIONS.reports.read)
+  @ApiOperation({
+    operationId: 'queue_stats',
+    summary: 'Indicadores de la fila: espera, abandono, horas y días con más gente',
+    description:
+      'Por días del salón, ambos incluidos. Sin fechas, los últimos 30 días hasta hoy. ' +
+      'Máximo un año.',
+  })
+  @ApiOkResponse({ type: QueueStatsResponse })
+  async statistics(@Query() query: QueueStatsQueryDto): Promise<QueueStatsResponse> {
+    return QueueStatsResponse.from(
+      await this.stats.execute({ from: query.from ?? null, to: query.to ?? null }),
+    );
   }
 
   @Post()

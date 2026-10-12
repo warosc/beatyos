@@ -188,6 +188,19 @@ describe('QueueTurn (fila de espera)', () => {
       expect(turn.callCount).toBe(2);
     });
 
+    it('la primera llamada marca el final de la espera y no cambia después', () => {
+      const turn = register();
+      expect(turn.firstCalledAt).toBeNull();
+
+      turn.call('sara', later(5), 'sara');
+      turn.recall(later(7), 'sara');
+      turn.requeue(later(8), 'sara');
+      turn.call('valeria', later(12), 'valeria');
+
+      expect(turn.firstCalledAt).toEqual(later(5));
+      expect(turn.calledAt).toEqual(later(12));
+    });
+
     it('cancelar guarda el motivo si lo hay', () => {
       const waiting = register();
       waiting.cancel('  Se fue  ', later(3), 'reception');

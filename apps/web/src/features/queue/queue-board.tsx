@@ -1,6 +1,8 @@
 'use client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  AlertTriangle,
+  BarChart3,
   BellRing,
   CheckCircle2,
   Megaphone,
@@ -13,7 +15,8 @@ import {
   UserX,
   XCircle,
 } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useAccess } from '@/components/session-access';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -32,10 +35,14 @@ import {
   callTurn,
   fetchQueue,
   isActive,
+  MIN_WAIT_SAMPLES,
+  minutesLabel,
+  minutesSince,
   QUEUE_KEY,
   QUEUE_STATUS_LABEL,
   queueAction,
   waitedLabel,
+  waitTone,
   type QueueAction,
   type QueueTurn,
 } from './types';
@@ -60,7 +67,6 @@ export function QueueBoard() {
   const [showLink, setShowLink] = useState(false);
   const [printing, setPrinting] = useState<QueueTurn | null>(null);
   const [finishing, setFinishing] = useState<QueueTurn | null>(null);
-  const [freeStylist, setFreeStylist] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -95,7 +101,9 @@ export function QueueBoard() {
   const closed = turns.filter((turn) => !isActive(turn) && turn.status !== 'WAITING');
   const team = stylists.data ?? [];
   const busyIds = new Set(active.map((turn) => turn.stylistId));
-  const free = team.filter((stylist) => !busyIds.has(stylist.id));
+  // La espera aproximada solo se dice con varias llamadas de hoy detrás.
+  const estimatedWait =
+    queue.data && queue.data.waitSamples >= MIN_WAIT_SAMPLES ? queue.data.averageWaitMinutes : null;
 
   const refresh = () => qc.invalidateQueries({ queryKey: QUEUE_KEY });
 
@@ -114,18 +122,14 @@ export function QueueBoard() {
     return outcome;
   }
 
-  async function next(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!freeStylist) return;
-    const name =
-      team.find((stylist) => stylist.id === freeStylist)?.displayName ?? 'La profesional';
-    const outcome = await run(() => callNext(freeStylist));
+  async function nextFor(stylist: PosStylist) {
+    const outcome = await run(() => callNext(stylist.id));
     if (outcome.ok) {
       const turn = (outcome.data as { turn: QueueTurn | null }).turn;
-      if (turn) setNotice(`Turno ${turn.number}: ${turn.clientName} pasa con ${name}.`);
-      else setError(`No queda nadie en la fila que ${name} pueda atender.`);
+      if (turn)
+        setNotice(`Turno ${turn.number}: ${turn.clientName} pasa con ${stylist.displayName}.`);
+      else setError(`No queda nadie en la fila que ${stylist.displayName} pueda atender.`);
     }
-    setFreeStylist('');
   }
 
   if (queue.error) {
@@ -148,6 +152,15 @@ export function QueueBoard() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {can('reports.read') && (
+            <Link
+              href="/turnos/estadisticas"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border bg-card px-4 text-sm font-semibold hover:bg-muted"
+            >
+              <BarChart3 size={18} />
+              Estadísticas
+            </Link>
+          )}
           {can('queue.manage-display') && (
             <Button variant="outline" onClick={() => setShowLink(true)}>
               <Tv size={18} />
@@ -178,32 +191,22 @@ export function QueueBoard() {
         </p>
       )}
 
-      {canAttend && waiting.length > 0 && (
-        <Card className="p-4">
-          <form onSubmit={next} className="flex flex-wrap items-center gap-2">
-            <BellRing size={18} className="text-primary" />
-            <label htmlFor="free-stylist" className="text-sm font-semibold">
-              Quedó libre
-            </label>
-            <select
-              id="free-stylist"
-              value={freeStylist}
-              onChange={(event) => setFreeStylist(event.target.value)}
-              className="h-11 min-w-0 flex-1 basis-40 rounded-xl border bg-background px-3 text-sm"
-            >
-              <option value="">Elige la profesional…</option>
-              {free.map((stylist) => (
-                <option key={stylist.id} value={stylist.id}>
-                  {stylist.displayName}
-                </option>
-              ))}
-            </select>
-            <Button className="w-full sm:w-auto" disabled={busy || !freeStylist}>
-              Llamar a la siguiente
-            </Button>
-          </form>
-        </Card>
-      )}
+      <TodaySummary
+        waiting={waiting}
+        turns={turns.filter((turn) => turn.businessDate === queue.data?.businessDate)}
+        averageWait={queue.data?.averageWaitMinutes ?? null}
+        now={now}
+      />
+
+      <TeamPanel
+        team={team}
+        active={active}
+        waiting={waiting}
+        now={now}
+        busy={busy}
+        canAttend={canAttend}
+        onCallNext={(stylist) => void nextFor(stylist)}
+      />
 
       <section className="space-y-3">
         <h2 className="font-display text-xl font-semibold">Llamadas y en el sillón</h2>
@@ -301,6 +304,7 @@ export function QueueBoard() {
           services={services.data ?? []}
           stylists={team}
           salonName={salonName}
+          estimatedWait={estimatedWait}
           onClose={() => setAdding(false)}
           onSaved={() => void refresh()}
         />
@@ -317,7 +321,7 @@ export function QueueBoard() {
             </Button>
           }
         >
-          <QueueTicket turn={printing} salonName={salonName} />
+          <QueueTicket turn={printing} salonName={salonName} estimatedWait={estimatedWait} />
         </Sheet>
       )}
       {finishing && finishing.stylistId && (
@@ -336,6 +340,139 @@ export function QueueBoard() {
         />
       )}
     </div>
+  );
+}
+
+/** Lo de hoy de un vistazo: lo que recepción mira antes de decir «hay unos 20 minutos». */
+function TodaySummary({
+  waiting,
+  turns,
+  averageWait,
+  now,
+}: {
+  waiting: readonly QueueTurn[];
+  turns: readonly QueueTurn[];
+  averageWait: number | null;
+  now: Date;
+}) {
+  const longest = Math.max(0, ...waiting.map((turn) => minutesSince(turn.createdAt, now)));
+  const tone = waiting.length ? waitTone(longest) : 'calm';
+  const attended = turns.filter((turn) => turn.status === 'DONE').length;
+  const lost = turns.filter(
+    (turn) => turn.status === 'CANCELLED' || turn.status === 'NO_SHOW',
+  ).length;
+  const tiles: { label: string; value: string; className?: string; icon?: ReactNode }[] = [
+    { label: 'Esperan ahora', value: String(waiting.length) },
+    {
+      label: 'Espera más larga',
+      value: waiting.length ? minutesLabel(longest) : '—',
+      className: tone === 'late' ? 'text-danger' : tone === 'attention' ? 'text-warning' : '',
+      icon: tone === 'calm' ? undefined : <AlertTriangle size={16} aria-label="Espera larga" />,
+    },
+    { label: 'Espera media hoy', value: averageWait === null ? '—' : minutesLabel(averageWait) },
+    { label: 'Atendidas hoy', value: String(attended) },
+    { label: 'Se perdieron hoy', value: String(lost) },
+  ];
+  return (
+    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      {tiles.map((tile, index) => (
+        <div
+          key={tile.label}
+          className={cn(
+            'rounded-2xl border bg-card p-4',
+            // Cinco en dos columnas dejarían una sola: la primera ocupa la fila entera.
+            index === 0 && 'col-span-2 sm:col-span-1',
+          )}
+        >
+          <dt className="text-xs text-muted-foreground">{tile.label}</dt>
+          <dd className={cn('mt-1 flex items-center gap-1.5 text-2xl font-bold', tile.className)}>
+            {tile.icon}
+            {tile.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * El equipo de un vistazo: quién está libre y a cuántas de la fila puede atender, y quién
+ * está ocupada, con quién y desde cuándo. Llamar por una profesional libre es un toque.
+ */
+function TeamPanel({
+  team,
+  active,
+  waiting,
+  now,
+  busy,
+  canAttend,
+  onCallNext,
+}: {
+  team: readonly PosStylist[];
+  active: readonly QueueTurn[];
+  waiting: readonly QueueTurn[];
+  now: Date;
+  busy: boolean;
+  canAttend: boolean;
+  onCallNext: (stylist: PosStylist) => void;
+}) {
+  if (!team.length) return null;
+  return (
+    <section className="space-y-3">
+      <h2 className="font-display text-xl font-semibold">Equipo</h2>
+      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {team.map((stylist) => {
+          const turn = active.find((candidate) => candidate.stylistId === stylist.id);
+          const attendable = waiting.filter(
+            (candidate) =>
+              (!candidate.preferredStylistId || candidate.preferredStylistId === stylist.id) &&
+              candidate.serviceIds.every((serviceId) => canPerform(stylist, serviceId)),
+          ).length;
+          return (
+            <li
+              key={stylist.id}
+              className={cn(
+                'flex items-center gap-3 rounded-2xl border bg-card p-3',
+                turn && 'bg-muted/60',
+              )}
+            >
+              <span
+                aria-hidden
+                className="size-2.5 shrink-0 rounded-full"
+                style={{ background: stylist.color ?? 'var(--primary-ink)' }}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{stylist.displayName}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {turn
+                    ? `${turn.status === 'CALLED' ? 'Llamó a' : 'Con'} ${turn.clientName} · ${minutesLabel(
+                        minutesSince(
+                          (turn.status === 'CALLED' ? turn.calledAt : turn.startedAt) ??
+                            turn.createdAt,
+                          now,
+                        ),
+                      )}`
+                    : attendable
+                      ? `Libre · puede atender a ${attendable}`
+                      : 'Libre'}
+                </p>
+              </div>
+              {!turn && canAttend && (
+                <Button
+                  variant="outline"
+                  className="min-h-10 px-3"
+                  disabled={busy || attendable === 0}
+                  onClick={() => onCallNext(stylist)}
+                >
+                  <BellRing size={16} />
+                  Siguiente
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -458,9 +595,8 @@ function WaitingTurn({
           <p className="text-sm text-muted-foreground">
             {turn.serviceNames.join(' · ') || 'Por decidir'}
             {turn.preferredStylistName && ` · pide a ${turn.preferredStylistName}`}
-            {' · '}
-            {waitedLabel(turn.createdAt, now)}
           </p>
+          <WaitBadge since={turn.createdAt} now={now} />
           {turn.notes && <p className="text-sm text-muted-foreground italic">{turn.notes}</p>}
         </div>
         {canAttend && (
@@ -469,9 +605,9 @@ function WaitingTurn({
             value=""
             disabled={busy || team.length === 0}
             onChange={(event) => event.target.value && onCall(event.target.value)}
-            className="h-11 rounded-xl border bg-background px-3 text-sm"
+            className="h-11 w-44 rounded-xl border bg-background px-3 text-sm"
           >
-            <option value="">{team.length ? 'Llamar con…' : 'Nadie libre que lo haga'}</option>
+            <option value="">{team.length ? 'Llamar con…' : 'Nadie libre'}</option>
             {team.map((stylist) => (
               <option key={stylist.id} value={stylist.id}>
                 {stylist.displayName}
@@ -520,5 +656,28 @@ function WaitingTurn({
         </form>
       )}
     </li>
+  );
+}
+
+/**
+ * Cuánto lleva esperando, con color a partir de los 15 minutos. El color acompaña al texto,
+ * nunca lo sustituye: la cifra está siempre escrita.
+ */
+function WaitBadge({ since, now }: { since: string; now: Date }) {
+  const tone = waitTone(minutesSince(since, now));
+  return (
+    <span
+      className={cn(
+        'mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+        tone === 'late'
+          ? 'bg-danger/10 text-danger'
+          : tone === 'attention'
+            ? 'bg-warning/15 text-warning'
+            : 'bg-muted text-muted-foreground',
+      )}
+    >
+      {tone !== 'calm' && <AlertTriangle size={12} aria-hidden />}
+      {waitedLabel(since, now)}
+    </span>
   );
 }

@@ -54,6 +54,8 @@ export interface QueueTurnProps {
   readonly notes: string | null;
   readonly callCount: number;
   readonly calledAt: Date | null;
+  /** Primera llamada: el final de su espera. No cambia al volver a llamarla (ADR-0025). */
+  readonly firstCalledAt: Date | null;
   readonly startedAt: Date | null;
   readonly closedAt: Date | null;
   readonly serviceTicketId: string | null;
@@ -118,6 +120,7 @@ export class QueueTurn extends Entity {
       notes: params.notes?.trim() || null,
       callCount: 0,
       calledAt: null,
+      firstCalledAt: null,
       startedAt: null,
       closedAt: null,
       serviceTicketId: null,
@@ -170,6 +173,9 @@ export class QueueTurn extends Entity {
   }
   get calledAt(): Date | null {
     return this.props.calledAt;
+  }
+  get firstCalledAt(): Date | null {
+    return this.props.firstCalledAt;
   }
   get startedAt(): Date | null {
     return this.props.startedAt;
@@ -246,6 +252,7 @@ export class QueueTurn extends Entity {
       stylistId,
       callCount: this.props.callCount + 1,
       calledAt: now,
+      firstCalledAt: this.props.firstCalledAt ?? now,
       ...this.touched(now, actorId),
     };
   }

@@ -62,6 +62,13 @@ const guides = [
     permissions: ['queue.manage-display'],
   },
   {
+    image: '/help/caja.svg',
+    title: 'Decide con las cifras de la fila',
+    text: 'En Turnos → Estadísticas ves cuánto esperan las clientas sin cita, cuántas se van y cuánto aguantan antes de irse, a qué horas y qué días llegan más, a quién piden por su nombre y cuánto se cobró. Arriba, «Lo que dicen los datos» resume lo importante en una frase.',
+    href: '/turnos/estadisticas',
+    permissions: ['reports.read'],
+  },
+  {
     image: '/help/agenda.svg',
     title: 'Llama a la siguiente de la fila',
     text: 'En Mi día, la tarjeta «Fila de espera» te dice cuántas clientas puedes atender. Pulsa «Llamar siguiente» y aparecerá en la pantalla de la sala. Cuando se siente contigo, «Ya está conmigo»; si no aparece, «No vino». Al terminar, «Registrar lo que le hice» la envía a caja.',

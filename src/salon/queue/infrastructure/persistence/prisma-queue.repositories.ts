@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type InvoiceStatus } from '@prisma/client';
 
 import { ConflictError, EntityNotFoundError } from '../../../../shared/domain/errors';
 import { RequestContextStore } from '../../../../shared/infrastructure/context/request-context';
@@ -10,6 +10,8 @@ import {
   withMappedErrors,
 } from '../../../../shared/infrastructure/persistence/prisma/prisma-error.mapper';
 import { PrismaService } from '../../../../shared/infrastructure/persistence/prisma/prisma.service';
+import { Money } from '../../../../shared/domain/value-objects/money.vo';
+import type { QueueTurnFact } from '../../domain/queue-stats';
 import {
   ACTIVE_QUEUE_STATUSES,
   QueueTurn,
@@ -18,6 +20,7 @@ import {
 import type {
   QueueDisplayLinks,
   QueueDisplaySalon,
+  QueueStatsReader,
   QueueTurnRepository,
 } from '../../domain/queue.ports';
 
@@ -167,6 +170,7 @@ export class PrismaQueueTurnRepository implements QueueTurnRepository {
       status: turn.status,
       callCount: turn.callCount,
       calledAt: turn.calledAt,
+      firstCalledAt: turn.firstCalledAt,
       startedAt: turn.startedAt,
       closedAt: turn.closedAt,
       serviceTicketId: turn.serviceTicketId,
@@ -190,6 +194,7 @@ export class PrismaQueueTurnRepository implements QueueTurnRepository {
       notes: row.notes,
       callCount: row.callCount,
       calledAt: row.calledAt,
+      firstCalledAt: row.firstCalledAt,
       startedAt: row.startedAt,
       closedAt: row.closedAt,
       serviceTicketId: row.serviceTicketId,
@@ -240,5 +245,63 @@ export class PrismaQueueDisplayLinks implements QueueDisplayLinks {
       }),
     );
     return row ? { tenantId: row.id, name: row.name } : null;
+  }
+}
+
+/** Lo cobrado es lo cobrado, aunque quede saldo: mismo criterio que los informes. */
+const PAID_STATUSES: InvoiceStatus[] = ['PAID', 'PARTIALLY_PAID'];
+
+/**
+ * Lectura de los turnos para los indicadores (ADR-0025).
+ *
+ * Pide solo las columnas que los cálculos usan y, de cada turno atendido, el total de la
+ * factura con la que se cobró su comanda, en la misma consulta.
+ */
+@Injectable()
+export class PrismaQueueStatsReader implements QueueStatsReader {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async factsBetween(from: string, to: string): Promise<QueueTurnFact[]> {
+    const rows = await withMappedErrors('Indicadores de la fila', () =>
+      this.prisma.client.queueTurn.findMany({
+        where: { businessDate: { gte: toDate(from), lte: toDate(to) } },
+        select: {
+          businessDate: true,
+          status: true,
+          createdAt: true,
+          firstCalledAt: true,
+          startedAt: true,
+          closedAt: true,
+          stylistId: true,
+          preferredStylistId: true,
+          serviceIds: true,
+          serviceTicket: {
+            select: {
+              status: true,
+              invoice: { select: { total: true, currency: true, status: true } },
+            },
+          },
+        },
+      }),
+    );
+
+    return rows.map((row) => {
+      const invoice = row.serviceTicket?.status === 'CHARGED' ? row.serviceTicket.invoice : null;
+      return {
+        businessDate: fromDate(row.businessDate),
+        status: row.status,
+        createdAt: row.createdAt,
+        firstCalledAt: row.firstCalledAt,
+        startedAt: row.startedAt,
+        closedAt: row.closedAt,
+        stylistId: row.stylistId,
+        preferredStylistId: row.preferredStylistId,
+        serviceIds: row.serviceIds,
+        charged:
+          invoice && PAID_STATUSES.includes(invoice.status)
+            ? Money.fromDecimal(invoice.total.toFixed(2), invoice.currency)
+            : null,
+      };
+    });
   }
 }
