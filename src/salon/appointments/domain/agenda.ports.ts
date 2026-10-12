@@ -86,7 +86,8 @@ export const AGENDA_DIRECTORY = Symbol('AgendaDirectory');
 // Avisos en tiempo real
 // ---------------------------------------------------------------------------
 
-export type AgendaEventKind = 'appointment' | 'change-request' | 'block' | 'reminder';
+/** `queue` es la fila de espera (ADR-0024): comparte canal con la agenda del día. */
+export type AgendaEventKind = 'appointment' | 'change-request' | 'block' | 'reminder' | 'queue';
 
 /**
  * Algo cambió en la agenda de un salón.
@@ -99,7 +100,10 @@ export interface AgendaEvent {
   readonly tenantId: string;
   readonly kind: AgendaEventKind;
   readonly stylistIds: readonly string[];
-  /** Para `change-request`: en qué quedó. Lo usa el aviso a la profesional o a la encargada. */
+  /**
+   * Para `change-request`: en qué quedó. Lo usa el aviso a la profesional o a la encargada.
+   * Para `queue`: el estado del turno, que dice a la profesional si la acaban de llamar.
+   */
   readonly status?: string;
   readonly at: Date;
 }

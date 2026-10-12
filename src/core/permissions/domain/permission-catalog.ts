@@ -153,6 +153,14 @@ export const PERMISSION_DEFINITIONS: readonly PermissionDefinition[] = [
   define('service-tickets', 'cancel', 'Anular cualquier servicio pendiente de cobro'),
   define('service-tickets', 'cancel.own', 'Anular únicamente los servicios propios pendientes'),
 
+  // --- Fila de espera (ADR-0024) ---------------------------------------------
+  define('queue', 'read', 'Ver la fila de clientas sin cita del salón'),
+  define('queue', 'read.own', 'Ver únicamente las clientas de la fila que puede atender'),
+  define('queue', 'create', 'Anotar en la fila a una clienta que llega sin cita'),
+  define('queue', 'attend', 'Llamar y atender cualquier turno, a nombre de cualquier profesional'),
+  define('queue', 'attend.own', 'Llamar a la siguiente clienta y atender sus propios turnos'),
+  define('queue', 'manage-display', 'Crear o cambiar el enlace de la pantalla de turnos'),
+
   // --- Informes ------------------------------------------------------------
   define('reports', 'read', 'Ver informes operativos'),
   define('reports', 'financial', 'Ver informes financieros y márgenes'),
@@ -287,6 +295,14 @@ export const PERMISSIONS = {
     cancel: 'service-tickets.cancel',
     cancelOwn: 'service-tickets.cancel.own',
   },
+  queue: {
+    read: 'queue.read',
+    readOwn: 'queue.read.own',
+    create: 'queue.create',
+    attend: 'queue.attend',
+    attendOwn: 'queue.attend.own',
+    manageDisplay: 'queue.manage-display',
+  },
   reports: {
     read: 'reports.read',
     financial: 'reports.financial',
@@ -358,6 +374,10 @@ const withoutPlatformScope = (codes: readonly string[]) => codes;
  * - Agendar fuera del horario de una profesional (`appointments.override-schedule`) es de
  *   recepción y encargada, nunca de la propia profesional: alargarse la jornada a sí misma
  *   no es una decisión que le corresponda tomar sola.
+ * - En la fila de espera la profesional **llama a la siguiente** que puede atender
+ *   (`queue.attend.own`), pero no elige a quién: el orden de llegada lo fija la fila.
+ *   Saltárselo —asignar un turno concreto a una profesional— es de recepción y encargada
+ *   (`queue.attend`), que es quien habla con la clienta que espera.
  */
 export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
   {
@@ -439,6 +459,10 @@ export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
       PERMISSIONS.serviceTickets.read,
       PERMISSIONS.serviceTickets.create,
       PERMISSIONS.serviceTickets.cancel,
+      PERMISSIONS.queue.read,
+      PERMISSIONS.queue.create,
+      PERMISSIONS.queue.attend,
+      PERMISSIONS.queue.manageDisplay,
       PERMISSIONS.reports.read,
       PERMISSIONS.reports.commissions,
       PERMISSIONS.reports.export,
@@ -478,6 +502,9 @@ export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
       PERMISSIONS.serviceTickets.read,
       PERMISSIONS.serviceTickets.create,
       PERMISSIONS.serviceTickets.cancel,
+      PERMISSIONS.queue.read,
+      PERMISSIONS.queue.create,
+      PERMISSIONS.queue.attend,
     ],
   },
   {
@@ -497,6 +524,8 @@ export const SYSTEM_ROLE_DEFINITIONS: readonly SystemRoleDefinition[] = [
       PERMISSIONS.serviceTickets.readOwn,
       PERMISSIONS.serviceTickets.createOwn,
       PERMISSIONS.serviceTickets.cancelOwn,
+      PERMISSIONS.queue.readOwn,
+      PERMISSIONS.queue.attendOwn,
     ],
   },
 ] as const;

@@ -48,6 +48,27 @@ const guides = [
     permissions: ['service-tickets.create.own'],
   },
   {
+    image: '/help/agenda.svg',
+    title: 'Atiende a quien llega sin cita',
+    text: 'En Turnos, «Anotar clienta» le da su número del día; puedes imprimirle el ticket. Cuando una profesional queda libre, llama a la siguiente que sabe atender: desde su Mi día o desde aquí con «Quedó libre». Si la clienta pidió a alguien, espera a esa profesional, salvo que tú la asignes a otra. Al terminar, «Terminar» envía la comanda a caja.',
+    href: '/turnos',
+    permissions: ['queue.read'],
+  },
+  {
+    image: '/help/equipo.svg',
+    title: 'Pon la pantalla de turnos en la TV',
+    text: 'En Turnos → Pantalla de la TV crea el enlace y ábrelo en el navegador de la TV. Pulsa «Activar sonido»: cada llamada suena y se anuncia en voz alta con el número, el nombre corto y la profesional. Guarda el enlace; si lo pierdes, crea otro y el anterior deja de funcionar.',
+    href: '/turnos',
+    permissions: ['queue.manage-display'],
+  },
+  {
+    image: '/help/agenda.svg',
+    title: 'Llama a la siguiente de la fila',
+    text: 'En Mi día, la tarjeta «Fila de espera» te dice cuántas clientas puedes atender. Pulsa «Llamar siguiente» y aparecerá en la pantalla de la sala. Cuando se siente contigo, «Ya está conmigo»; si no aparece, «No vino». Al terminar, «Registrar lo que le hice» la envía a caja.',
+    href: '/mi-dia',
+    permissions: ['queue.attend.own'],
+  },
+  {
     image: '/help/equipo.svg',
     title: 'Configura servicios y jornadas',
     text: 'Define comisiones, agrega o retira servicios, asigna qué servicios realiza cada profesional y registra descansos, vacaciones y horarios.',

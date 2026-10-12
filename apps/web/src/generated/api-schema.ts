@@ -1954,6 +1954,224 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * La fila de hoy
+         * @description En espera, llamadas, en el sillón y las ya cerradas hoy. Con `queue.read.own`, solo las que esta profesional puede atender y las suyas.
+         */
+        get: operations["queue_board"];
+        put?: never;
+        /** Anota en la fila a una clienta que llega sin cita */
+        post: operations["queue_register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Llama a la siguiente de la fila que la profesional puede atender
+         * @description Por orden de llegada, saltando a quien pidió a otra profesional o un servicio que ella no hace. Devuelve `turn: null` si no queda nadie para ella.
+         */
+        post: operations["queue_call_next"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/{id}/call": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Asigna un turno concreto a una profesional y la llama
+         * @description Para cuando la clienta acepta ir con otra profesional. Se salta la preferencia, nunca lo que la profesional sabe hacer.
+         */
+        post: operations["queue_call"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/{id}/recall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Vuelve a anunciar a la clienta */
+        post: operations["queue_recall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** La clienta ya está en el sillón */
+        post: operations["queue_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/{id}/no-show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** La llamaron y no se presentó */
+        post: operations["queue_no_show"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/{id}/requeue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Devuelve a la fila, en su sitio, a una clienta llamada */
+        post: operations["queue_requeue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Saca de la fila a una clienta que se fue o se anotó por error */
+        post: operations["queue_cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/{id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Termina el turno y envía a caja lo que se le hizo
+         * @description Crea la comanda (ADR-0019) y cierra el turno en la misma transacción. Exige además poder registrar comandas: `service-tickets.create`, o `.own` para los turnos propios.
+         */
+        post: operations["queue_finish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/display-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Si el salón tiene una pantalla de turnos con enlace vigente */
+        get: operations["queue_display_link_status"];
+        put?: never;
+        /** Crea el enlace de la pantalla de turnos y retira el anterior */
+        post: operations["queue_display_link_issue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/queue-display/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lo que muestra la pantalla: llamadas y fila */
+        get: operations["PublicQueueDisplay_view"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/queue-display/{token}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Avisos en vivo de la fila para la pantalla (text/event-stream) */
+        get: operations["PublicQueueDisplay_stream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3826,6 +4044,125 @@ export interface components {
             ticketId: string;
             /** @enum {string} */
             status: "PENDING" | "CHARGED" | "CANCELLED";
+        };
+        QueueTurnResponse: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Número del día
+             * @example 7
+             */
+            number: number;
+            /** @example 2026-10-12 */
+            businessDate: string;
+            /** @enum {string} */
+            status: "WAITING" | "CALLED" | "IN_SERVICE" | "DONE" | "NO_SHOW" | "CANCELLED";
+            /** Format: uuid */
+            clientId: string | null;
+            clientName: string;
+            serviceIds: string[];
+            serviceNames: string[];
+            /** Format: uuid */
+            preferredStylistId: string | null;
+            preferredStylistName: string | null;
+            /** Format: uuid */
+            stylistId: string | null;
+            stylistName: string | null;
+            /** @description Puesto en la fila; 1 = la siguiente */
+            position: number | null;
+            notes: string | null;
+            callCount: number;
+            /** @description Llegada a la fila */
+            createdAt: string;
+            calledAt: string | null;
+            startedAt: string | null;
+            closedAt: string | null;
+            /** Format: uuid */
+            serviceTicketId: string | null;
+            cancellationReason: string | null;
+        };
+        QueueBoardResponse: {
+            /**
+             * @description Día del salón que se muestra
+             * @example 2026-10-12
+             */
+            businessDate: string;
+            turns: components["schemas"]["QueueTurnResponse"][];
+        };
+        RegisterWalkInDto: {
+            /**
+             * Format: uuid
+             * @description Ficha de la clienta, si la tiene
+             */
+            clientId?: string;
+            /** @description Nombre de una clienta de paso sin ficha. Se ignora si llega `clientId`. */
+            clientName?: string;
+            /** @description Lo que pide. Decide quién puede atenderla; lo que se cobra va en la comanda. */
+            serviceIds?: string[];
+            /**
+             * Format: uuid
+             * @description Profesional que pide la clienta
+             */
+            preferredStylistId?: string;
+            /** @description Nota para quien la atienda */
+            notes?: string;
+        };
+        CallNextDto: {
+            /**
+             * Format: uuid
+             * @description Solo con `queue.attend`: profesional que queda libre. Con `queue.attend.own` siempre es quien inicia sesión.
+             */
+            stylistId?: string;
+        };
+        CallNextResponse: {
+            /** @description `null` si no queda nadie en la fila que esta profesional pueda atender */
+            turn: components["schemas"]["QueueTurnResponse"] | null;
+        };
+        CallTurnDto: {
+            /**
+             * Format: uuid
+             * @description Profesional que la atenderá
+             */
+            stylistId: string;
+        };
+        CancelTurnDto: {
+            /** @example Se fue: no podía esperar */
+            reason?: string;
+        };
+        FinishTurnDto: {
+            /** @description Servicios realizados */
+            serviceIds: string[];
+            /** @description Observaciones para caja */
+            notes?: string;
+        };
+        FinishTurnResponse: {
+            turn: components["schemas"]["QueueTurnResponse"];
+            ticket: components["schemas"]["ServiceTicketResponse"];
+        };
+        QueueDisplayLinkStatusResponse: {
+            /** @description Si hay una pantalla con enlace vigente */
+            active: boolean;
+        };
+        QueueDisplayLinkResponse: {
+            /** @description Enlace de la pantalla. Solo se enseña ahora: se guarda su hash. Emitir otro retira este. */
+            token: string;
+        };
+        QueueDisplayCallResponse: {
+            id: string;
+            number: number;
+            /** @example Ana G. */
+            publicName: string;
+            stylistName: string;
+            /** @description Sube con cada llamada: la pantalla anuncia de nuevo */
+            callCount: number;
+            calledAt: string;
+        };
+        QueueDisplayResponse: {
+            salonName: string;
+            called: components["schemas"]["QueueDisplayCallResponse"][];
+            /** @description Siguientes números en espera */
+            waiting: number[];
+            waitingCount: number;
         };
     };
     responses: never;
@@ -8843,6 +9180,485 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    queue_board: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueBoardResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: queue.read | queue.read.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterWalkInDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueTurnResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: queue.create */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_call_next: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CallNextDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallNextResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: queue.attend | queue.attend.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_call: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CallTurnDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueTurnResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: queue.attend */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_recall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueTurnResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: queue.attend | queue.attend.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueTurnResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: queue.attend | queue.attend.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_no_show: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueTurnResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: queue.attend | queue.attend.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_requeue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueTurnResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: queue.attend | queue.attend.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelTurnDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueTurnResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: queue.attend */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_finish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinishTurnDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinishTurnResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere alguno de: queue.attend | queue.attend.own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_display_link_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueDisplayLinkStatusResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: queue.manage-display */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    queue_display_link_issue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueDisplayLinkResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: queue.manage-display */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PublicQueueDisplay_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueDisplayResponse"];
+                };
+            };
+            /** @description El enlace no existe o se sustituyó por otro */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PublicQueueDisplay_stream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
             };
         };
     };

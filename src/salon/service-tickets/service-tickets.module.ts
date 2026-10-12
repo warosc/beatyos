@@ -39,5 +39,8 @@ import { ServiceTicketsPersistenceModule } from './service-tickets-persistence.m
     ListServiceTicketsUseCase,
     ListAssignableServicesUseCase,
   ],
+  // Terminar un turno de la fila (ADR-0024) es registrar su comanda por la vía de siempre, y
+  // devolverla con su importe, como la devuelve «Mi día».
+  exports: [RegisterServiceTicketUseCase, ListServiceTicketsUseCase],
 })
 export class ServiceTicketsModule {}

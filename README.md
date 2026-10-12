@@ -110,7 +110,8 @@ src/
     ├── cash/                  Apertura, movimientos, arqueo y cierre de caja
     ├── reports/               Indicadores agregados en la hora del salón
     ├── purchases/             Proveedores y órdenes de compra
-    └── goals/                 Metas de facturación por profesional, con recompensa
+    ├── goals/                 Metas de facturación por profesional, con recompensa
+    └── queue/                 Fila de espera de clientas sin cita y pantalla de turnos
 ```
 
 Cada módulo de negocio repite la misma estructura:
@@ -396,6 +397,7 @@ CORS abierto o Swagger activo abortan el proceso con un mensaje explícito.
 | **Profesionales** | Horario semanal recurrente, ausencias que **recortan** la jornada, habilidades con duración y comisión propias, y cálculo de horario trabajable en instantes absolutos. |
 | **Catálogo** | Servicios con la distinción entre tiempo facturable y margen de limpieza, impuestos, escandallo de consumo; categorías en árbol con detección de ciclos. |
 | **Agenda** | Reserva con precios y duraciones **congeladas**, máquina de estados completa, reprogramación, huecos libres con cualquier profesional que haga los servicios, y ámbito `.own` para que cada profesional vea solo su agenda. Parrilla con una columna por profesional, asistente de reserva para el móvil que solo ofrece horas libres, bloqueos de agenda, avisos en vivo (SSE), **cambios de hora que la profesional pide y la encargada aprueba**, y recordatorios con enlace para que la clienta confirme o cancele (ADR-0023). |
+| **Fila de espera** | Clientas sin cita con número del día, «llamar siguiente» por orden de llegada que respeta a quién pidió la clienta y qué sabe hacer cada profesional —que dos no se lleven a la misma lo garantiza la base—, pantalla de la sala con campanita y voz por enlace propio, ticket imprimible y cierre del turno como comanda para caja (ADR-0024). |
 
 ### Implementado y probado
 

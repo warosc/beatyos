@@ -28,6 +28,7 @@ Un ADR nunca se edita una vez aceptado: se **supersede** con uno nuevo.
 | [0021](0021-precios-con-iva-incluido.md) | Precios con IVA incluido | Aceptado |
 | [0022](0022-cumpleanos-sin-ano.md) | Cumpleaños de la clienta sin año | Aceptado |
 | [0023](0023-agenda-por-equipo-cambios-aprobados-y-recordatorios.md) | Agenda por equipo, cambios aprobados por la encargada y recordatorios | Aceptado |
+| [0024](0024-fila-de-espera-y-pantalla-de-turnos.md) | Fila de espera de clientas sin cita y pantalla de turnos | Aceptado |
 
 ## Formato
 

@@ -5,6 +5,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { useAccess } from '@/components/session-access';
 import { Button } from '@/components/ui/button';
 import type { Appointment } from '@/features/agenda/types';
+import { finishTurn, type QueueTurn } from '@/features/queue/types';
 import { ClientCombobox, type PosClient } from '@/features/sales/client-combobox';
 import { sessionFetch } from '@/lib/session-fetch';
 import { useDialog } from '@/lib/use-dialog';
@@ -24,15 +25,21 @@ const time = (iso: string) =>
  *
  * Con `onBehalfOf`, recepción lo registra a nombre de la profesional de la cita: la comanda
  * —y la comisión— siguen siendo de ella.
+ *
+ * Con `turn`, cierra un turno de la fila (ADR-0024): la clienta y lo que pidió vienen del
+ * turno, y la comanda y el cierre del turno se guardan juntos.
  */
 export function RegisterServiceDialog({
   appointment,
+  turn,
   onBehalfOf,
   onClose,
   onDone,
 }: {
   /** Sin cita es una clienta que llegó sin reservar. */
   appointment?: Appointment | null;
+  /** Turno de la fila que se termina. */
+  turn?: QueueTurn | null;
   onBehalfOf?: { stylistId: string; name: string };
   onClose: () => void;
   onDone: (ticket: ServiceTicket) => void;
@@ -59,8 +66,8 @@ export function RegisterServiceDialog({
   });
   const catalog = useMemo(() => services.data ?? [], [services.data]);
   const booked = useMemo(
-    () => new Set(appointment?.services.map((line) => line.serviceId) ?? []),
-    [appointment],
+    () => new Set(appointment?.services.map((line) => line.serviceId) ?? turn?.serviceIds ?? []),
+    [appointment, turn],
   );
   // Lo reservado viene marcado hasta que ella toque algo: desde entonces manda su selección.
   const selected = picked ?? new Set(catalog.filter((s) => booked.has(s.id)).map((s) => s.id));
@@ -71,8 +78,10 @@ export function RegisterServiceDialog({
 
   const clientLabel = appointment
     ? (appointment.clientName ?? 'tu clienta')
-    : (client?.fullName ?? walkInName.trim());
-  const hasClient = !!appointment || !!client || walkInName.trim().length > 1;
+    : turn
+      ? turn.clientName
+      : (client?.fullName ?? walkInName.trim());
+  const hasClient = !!appointment || !!turn || !!client || walkInName.trim().length > 1;
 
   function toggle(id: string) {
     const next = new Set(selected);
@@ -86,6 +95,12 @@ export function RegisterServiceDialog({
     if (busy || !selected.size || !hasClient) return;
     setBusy(true);
     setError('');
+    if (turn) {
+      const outcome = await finishTurn(turn.id, [...selected], notes.trim() || undefined);
+      setBusy(false);
+      if (!outcome.ok) return setError(outcome.error);
+      return onDone(outcome.data.ticket);
+    }
     const response = await sessionFetch('/api/service-tickets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -125,6 +140,7 @@ export function RegisterServiceDialog({
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {appointment && `Cita de las ${time(appointment.startsAt)} · `}
+              {turn && `Turno ${turn.number} · `}
               {onBehalfOf
                 ? `Lo registras a nombre de ${onBehalfOf.name}.`
                 : 'Caja lo recibe al instante para cobrarlo.'}
@@ -141,7 +157,7 @@ export function RegisterServiceDialog({
         </header>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
-          {!appointment && (
+          {!appointment && !turn && (
             <section className="space-y-2">
               <h3 className="text-sm font-semibold">Clienta</h3>
               {can('clients.read') && (
@@ -224,7 +240,7 @@ export function RegisterServiceDialog({
                         <span className="block font-medium">{service.name}</span>
                         <span className="block text-xs text-muted-foreground">
                           {service.durationMinutes} min · {money(service.priceWithTax)}
-                          {booked.has(service.id) && ' · Reservado'}
+                          {booked.has(service.id) && (turn ? ' · Lo pidió' : ' · Reservado')}
                         </span>
                       </span>
                     </button>

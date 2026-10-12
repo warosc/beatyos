@@ -6978,6 +6978,580 @@
           "Comandas de servicio"
         ]
       }
+    },
+    "/api/v1/queue": {
+      "get": {
+        "description": "En espera, llamadas, en el sillón y las ya cerradas hoy. Con `queue.read.own`, solo las que esta profesional puede atender y las suyas.",
+        "operationId": "queue_board",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueBoardResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: queue.read | queue.read.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "La fila de hoy",
+        "tags": [
+          "Fila de espera"
+        ]
+      },
+      "post": {
+        "operationId": "queue_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterWalkInDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueTurnResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: queue.create"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Anota en la fila a una clienta que llega sin cita",
+        "tags": [
+          "Fila de espera"
+        ]
+      }
+    },
+    "/api/v1/queue/next": {
+      "post": {
+        "description": "Por orden de llegada, saltando a quien pidió a otra profesional o un servicio que ella no hace. Devuelve `turn: null` si no queda nadie para ella.",
+        "operationId": "queue_call_next",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallNextDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallNextResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: queue.attend | queue.attend.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Llama a la siguiente de la fila que la profesional puede atender",
+        "tags": [
+          "Fila de espera"
+        ]
+      }
+    },
+    "/api/v1/queue/{id}/call": {
+      "post": {
+        "description": "Para cuando la clienta acepta ir con otra profesional. Se salta la preferencia, nunca lo que la profesional sabe hacer.",
+        "operationId": "queue_call",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallTurnDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueTurnResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: queue.attend"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Asigna un turno concreto a una profesional y la llama",
+        "tags": [
+          "Fila de espera"
+        ]
+      }
+    },
+    "/api/v1/queue/{id}/recall": {
+      "post": {
+        "operationId": "queue_recall",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueTurnResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: queue.attend | queue.attend.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Vuelve a anunciar a la clienta",
+        "tags": [
+          "Fila de espera"
+        ]
+      }
+    },
+    "/api/v1/queue/{id}/start": {
+      "post": {
+        "operationId": "queue_start",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueTurnResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: queue.attend | queue.attend.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "La clienta ya está en el sillón",
+        "tags": [
+          "Fila de espera"
+        ]
+      }
+    },
+    "/api/v1/queue/{id}/no-show": {
+      "post": {
+        "operationId": "queue_no_show",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueTurnResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: queue.attend | queue.attend.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "La llamaron y no se presentó",
+        "tags": [
+          "Fila de espera"
+        ]
+      }
+    },
+    "/api/v1/queue/{id}/requeue": {
+      "post": {
+        "operationId": "queue_requeue",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueTurnResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: queue.attend | queue.attend.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Devuelve a la fila, en su sitio, a una clienta llamada",
+        "tags": [
+          "Fila de espera"
+        ]
+      }
+    },
+    "/api/v1/queue/{id}/cancel": {
+      "post": {
+        "operationId": "queue_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelTurnDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueTurnResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: queue.attend"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Saca de la fila a una clienta que se fue o se anotó por error",
+        "tags": [
+          "Fila de espera"
+        ]
+      }
+    },
+    "/api/v1/queue/{id}/finish": {
+      "post": {
+        "description": "Crea la comanda (ADR-0019) y cierra el turno en la misma transacción. Exige además poder registrar comandas: `service-tickets.create`, o `.own` para los turnos propios.",
+        "operationId": "queue_finish",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinishTurnDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinishTurnResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere alguno de: queue.attend | queue.attend.own"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Termina el turno y envía a caja lo que se le hizo",
+        "tags": [
+          "Fila de espera"
+        ]
+      }
+    },
+    "/api/v1/queue/display-link": {
+      "get": {
+        "operationId": "queue_display_link_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueDisplayLinkStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: queue.manage-display"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Si el salón tiene una pantalla de turnos con enlace vigente",
+        "tags": [
+          "Fila de espera"
+        ]
+      },
+      "post": {
+        "operationId": "queue_display_link_issue",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueDisplayLinkResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: queue.manage-display"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Crea el enlace de la pantalla de turnos y retira el anterior",
+        "tags": [
+          "Fila de espera"
+        ]
+      }
+    },
+    "/api/v1/public/queue-display/{token}": {
+      "get": {
+        "operationId": "PublicQueueDisplay_view",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueDisplayResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El enlace no existe o se sustituyó por otro"
+          }
+        },
+        "summary": "Lo que muestra la pantalla: llamadas y fila",
+        "tags": [
+          "Pantalla de turnos"
+        ]
+      }
+    },
+    "/api/v1/public/queue-display/{token}/stream": {
+      "get": {
+        "operationId": "PublicQueueDisplay_stream",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Avisos en vivo de la fila para la pantalla (text/event-stream)",
+        "tags": [
+          "Pantalla de turnos"
+        ]
+      }
     }
   },
   "info": {
@@ -12787,6 +13361,363 @@
         "required": [
           "ticketId",
           "status"
+        ]
+      },
+      "QueueTurnResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "number",
+            "example": 7,
+            "description": "Número del día"
+          },
+          "businessDate": {
+            "type": "string",
+            "example": "2026-10-12"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "WAITING",
+              "CALLED",
+              "IN_SERVICE",
+              "DONE",
+              "NO_SHOW",
+              "CANCELLED"
+            ]
+          },
+          "clientId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "clientName": {
+            "type": "string"
+          },
+          "serviceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "serviceNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferredStylistId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "preferredStylistName": {
+            "type": "string",
+            "nullable": true
+          },
+          "stylistId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "stylistName": {
+            "type": "string",
+            "nullable": true
+          },
+          "position": {
+            "type": "number",
+            "nullable": true,
+            "description": "Puesto en la fila; 1 = la siguiente"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "callCount": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Llegada a la fila"
+          },
+          "calledAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "startedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "closedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "serviceTicketId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "cancellationReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "businessDate",
+          "status",
+          "clientId",
+          "clientName",
+          "serviceIds",
+          "serviceNames",
+          "preferredStylistId",
+          "preferredStylistName",
+          "stylistId",
+          "stylistName",
+          "position",
+          "notes",
+          "callCount",
+          "createdAt",
+          "calledAt",
+          "startedAt",
+          "closedAt",
+          "serviceTicketId",
+          "cancellationReason"
+        ]
+      },
+      "QueueBoardResponse": {
+        "type": "object",
+        "properties": {
+          "businessDate": {
+            "type": "string",
+            "example": "2026-10-12",
+            "description": "Día del salón que se muestra"
+          },
+          "turns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueueTurnResponse"
+            }
+          }
+        },
+        "required": [
+          "businessDate",
+          "turns"
+        ]
+      },
+      "RegisterWalkInDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Ficha de la clienta, si la tiene"
+          },
+          "clientName": {
+            "type": "string",
+            "maxLength": 150,
+            "description": "Nombre de una clienta de paso sin ficha. Se ignora si llega `clientId`."
+          },
+          "serviceIds": {
+            "maxItems": 20,
+            "description": "Lo que pide. Decide quién puede atenderla; lo que se cobra va en la comanda.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "preferredStylistId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Profesional que pide la clienta"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "Nota para quien la atienda"
+          }
+        }
+      },
+      "CallNextDto": {
+        "type": "object",
+        "properties": {
+          "stylistId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Solo con `queue.attend`: profesional que queda libre. Con `queue.attend.own` siempre es quien inicia sesión."
+          }
+        }
+      },
+      "CallNextResponse": {
+        "type": "object",
+        "properties": {
+          "turn": {
+            "nullable": true,
+            "description": "`null` si no queda nadie en la fila que esta profesional pueda atender",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/QueueTurnResponse"
+              }
+            ]
+          }
+        },
+        "required": [
+          "turn"
+        ]
+      },
+      "CallTurnDto": {
+        "type": "object",
+        "properties": {
+          "stylistId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Profesional que la atenderá"
+          }
+        },
+        "required": [
+          "stylistId"
+        ]
+      },
+      "CancelTurnDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 250,
+            "example": "Se fue: no podía esperar"
+          }
+        }
+      },
+      "FinishTurnDto": {
+        "type": "object",
+        "properties": {
+          "serviceIds": {
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "Servicios realizados",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Observaciones para caja"
+          }
+        },
+        "required": [
+          "serviceIds"
+        ]
+      },
+      "FinishTurnResponse": {
+        "type": "object",
+        "properties": {
+          "turn": {
+            "$ref": "#/components/schemas/QueueTurnResponse"
+          },
+          "ticket": {
+            "$ref": "#/components/schemas/ServiceTicketResponse"
+          }
+        },
+        "required": [
+          "turn",
+          "ticket"
+        ]
+      },
+      "QueueDisplayLinkStatusResponse": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "Si hay una pantalla con enlace vigente"
+          }
+        },
+        "required": [
+          "active"
+        ]
+      },
+      "QueueDisplayLinkResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Enlace de la pantalla. Solo se enseña ahora: se guarda su hash. Emitir otro retira este."
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "QueueDisplayCallResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "number": {
+            "type": "number"
+          },
+          "publicName": {
+            "type": "string",
+            "example": "Ana G."
+          },
+          "stylistName": {
+            "type": "string"
+          },
+          "callCount": {
+            "type": "number",
+            "description": "Sube con cada llamada: la pantalla anuncia de nuevo"
+          },
+          "calledAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "publicName",
+          "stylistName",
+          "callCount",
+          "calledAt"
+        ]
+      },
+      "QueueDisplayResponse": {
+        "type": "object",
+        "properties": {
+          "salonName": {
+            "type": "string"
+          },
+          "called": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueueDisplayCallResponse"
+            }
+          },
+          "waiting": {
+            "description": "Siguientes números en espera",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "waitingCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "salonName",
+          "called",
+          "waiting",
+          "waitingCount"
         ]
       }
     }

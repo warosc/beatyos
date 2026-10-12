@@ -9,6 +9,7 @@ import {
   CircleDollarSign,
   CircleHelp,
   LayoutDashboard,
+  ListOrdered,
   Menu,
   Package,
   Percent,
@@ -33,6 +34,7 @@ import {
   fetchPasswordRequests,
   PASSWORD_REQUESTS_KEY,
 } from '@/features/settings/password-requests';
+import { fetchQueue, QUEUE_KEY } from '@/features/queue/types';
 import { fetchPendingCount, PENDING_COUNT_KEY } from '@/features/service-tickets/types';
 import { useIsStylist } from '@/features/stylist-day/my-stylist';
 import { useMyDay } from '@/features/stylist-day/use-my-day';
@@ -44,6 +46,7 @@ const nav = [
   ['Inicio', '/', LayoutDashboard, ['reports.read']],
   ['Mi día', MY_DAY, Sun, ['service-tickets.create.own']],
   ['Agenda', '/agenda', CalendarDays, ['appointments.read', 'appointments.read.own']],
+  ['Turnos', '/turnos', ListOrdered, ['queue.read']],
   ['Clientas', '/clientes', Users, ['clients.read']],
   ['Inventario', '/inventario', Package, ['products.read']],
   ['Compras', '/compras', Truck, ['purchases.read']],
@@ -59,7 +62,7 @@ const nav = [
  * Lo que va en la barra inferior del teléfono, por orden de uso en el día. El resto queda
  * en «Más»: catorce iconos con desplazamiento lateral escondían Ayuda y Perfil sin avisar.
  */
-const MOBILE_PRIORITY = [MY_DAY, '/', '/agenda', '/ventas', '/caja', '/clientes'];
+const MOBILE_PRIORITY = [MY_DAY, '/', '/agenda', '/turnos', '/ventas', '/caja', '/clientes'];
 const MOBILE_SLOTS = 4;
 /** La sección está activa también en sus subpáginas: el historial es parte de Ventas. */
 const isActive = (pathname: string, href: string) =>
@@ -69,8 +72,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const isPublic =
     ['/login', '/forgot-password', '/reset-password', '/session'].includes(pathname) ||
-    // El enlace del recordatorio lo abre la clienta, sin cuenta.
-    pathname.startsWith('/cita/');
+    // El enlace del recordatorio lo abre la clienta, sin cuenta; la pantalla de turnos, una TV.
+    pathname.startsWith('/cita/') ||
+    pathname.startsWith('/pantalla/');
   const profile = useQuery({
     queryKey: ['session-user'],
     enabled: !isPublic,
@@ -105,6 +109,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     refetchInterval: 60_000,
     queryFn: fetchPasswordRequests,
     select: (requests) => requests.length,
+  });
+  // Aviso en «Turnos» de cuántas clientas esperan sin cita. Misma consulta que el tablero.
+  const canSeeQueue =
+    !!profile.data &&
+    (profile.data.permissions.includes('*') || profile.data.permissions.includes('queue.read'));
+  const waitingQueue = useQuery({
+    queryKey: [...QUEUE_KEY, 'board'],
+    enabled: !isPublic && canSeeQueue,
+    refetchInterval: 60_000,
+    queryFn: fetchQueue,
+    select: (board) => board.turns.filter((turn) => turn.status === 'WAITING').length,
   });
   // «Mi día» es de quien atiende clientas: exige la ficha de profesional además del permiso.
   const stylist = useIsStylist(isPublic ? [] : (profile.data?.permissions ?? []));
@@ -189,6 +204,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // Citas que ya tocaban y la profesional aún no ha enviado a caja.
     [MY_DAY]: { count: myDay.day.pendingCount, label: 'citas por enviar a caja' },
     '/agenda': { count: pendingChanges.data ?? 0, label: 'cambios de cita por aprobar' },
+    '/turnos': { count: waitingQueue.data ?? 0, label: 'clientas en espera' },
     '/configuracion': {
       count: passwordRequests.data ?? 0,
       label: 'solicitudes de contraseña',
