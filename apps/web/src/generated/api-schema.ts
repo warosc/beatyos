@@ -9618,6 +9618,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Enlace de la pantalla */
                 token: string;
             };
             cookie?: never;
@@ -9646,6 +9647,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description Enlace de la pantalla */
                 token: string;
             };
             cookie?: never;
@@ -9659,6 +9661,13 @@ export interface operations {
                 content: {
                     "application/json": Record<string, never>;
                 };
+            };
+            /** @description El enlace no existe o se sustituyó por otro */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

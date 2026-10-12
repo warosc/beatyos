@@ -7496,6 +7496,7 @@
             "name": "token",
             "required": true,
             "in": "path",
+            "description": "Enlace de la pantalla",
             "schema": {
               "type": "string"
             }
@@ -7530,6 +7531,7 @@
             "name": "token",
             "required": true,
             "in": "path",
+            "description": "Enlace de la pantalla",
             "schema": {
               "type": "string"
             }
@@ -7545,6 +7547,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "El enlace no existe o se sustituyó por otro"
           }
         },
         "summary": "Avisos en vivo de la fila para la pantalla (text/event-stream)",

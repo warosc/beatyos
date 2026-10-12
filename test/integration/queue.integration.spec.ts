@@ -481,11 +481,15 @@ describe('Fila de espera (integración)', () => {
   });
 
   it('el canal de la pantalla avisa cuando cambia la fila, y solo de su salón', async () => {
-    const token = await issueDisplayLink();
+    await issueDisplayLink();
     const controller = app.get(PublicQueueDisplayController);
     const events = app.get(InMemoryAgendaEvents);
 
-    const stream: Observable<MessageEvent> = await controller.stream(token);
+    // El salón lo resuelve el guard del enlace; aquí se le pasa ya resuelto.
+    const stream: Observable<MessageEvent> = controller.stream({
+      tenantId: salonA.tenantId,
+      name: 'Salón salon-a',
+    });
     const firstQueueSignal = firstValueFrom(
       stream.pipe(
         filter((event) => (event.data as { kind: string }).kind === 'queue'),
@@ -504,6 +508,19 @@ describe('Fila de espera (integración)', () => {
     await walkIn().expect(201);
 
     await expect(firstQueueSignal).resolves.toMatchObject({ data: { kind: 'queue' } });
-    await expect(controller.stream('inventado-pero-largo-de-verdad')).rejects.toThrow();
+  });
+
+  it('un enlace retirado no abre el canal: es un 404, no un canal que se corta', async () => {
+    const first = await issueDisplayLink();
+    await issueDisplayLink();
+
+    // Si el canal llegara a abrirse, la petición no terminaría nunca y el test se colgaría.
+    for (const token of [first, 'inventado-pero-largo-de-verdad', 'corto']) {
+      const res = await request(server())
+        .get(api(`/public/queue-display/${token}/stream`))
+        .set('Accept', 'text/event-stream')
+        .expect(404);
+      expect(res.headers['content-type']).toContain('json');
+    }
   });
 });

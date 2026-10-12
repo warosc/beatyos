@@ -52,7 +52,12 @@ export function QueueDisplayScreen({ token }: { token: string }) {
     return () => clearInterval(timer);
   }, []);
 
-  useDisplayLive(token, () => void queryClient.invalidateQueries({ queryKey: key }));
+  // Con el enlace retirado no hay nada que escuchar: la vista ya explica qué pasa.
+  useDisplayLive(
+    token,
+    !display.error,
+    () => void queryClient.invalidateQueries({ queryKey: key }),
+  );
 
   const calls = display.data?.called;
   useEffect(() => {
@@ -195,14 +200,19 @@ export function QueueDisplayScreen({ token }: { token: string }) {
  * Canal en vivo de la pantalla. Como el de la agenda, se reconecta con espera creciente si
  * se corta —un reinicio de la API, el wifi de la sala—, y al volver refresca por si perdió
  * algo.
+ *
+ * La espera solo vuelve a cero cuando llega un aviso de verdad (también el latido): un canal
+ * que se abre y se cierra sin decir nada no cuenta como conexión buena, y reintentar al
+ * instante convertiría un fallo en un bucle contra el servidor.
  */
-function useDisplayLive(token: string, onChange: () => void) {
+function useDisplayLive(token: string, enabled: boolean, onChange: () => void) {
   const callback = useRef(onChange);
   useEffect(() => {
     callback.current = onChange;
   }, [onChange]);
 
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     let attempt = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -221,8 +231,8 @@ function useDisplayLive(token: string, onChange: () => void) {
         if (response.status === 404) return; // Enlace retirado: la vista ya lo explica.
         if (response.ok && response.body) {
           if (attempt > 0) callback.current();
-          attempt = 0;
           await readSignals(response.body, (signal) => {
+            attempt = 0;
             if (signal.kind === 'queue') callback.current();
           });
         }
@@ -238,7 +248,7 @@ function useDisplayLive(token: string, onChange: () => void) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [token]);
+  }, [token, enabled]);
 }
 
 /** Campanita de dos tonos, como la de cualquier sala de espera. */
