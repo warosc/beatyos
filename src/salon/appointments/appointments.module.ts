@@ -122,6 +122,7 @@ import {
       inject: [ConfigService],
     },
   ],
-  exports: [APPOINTMENT_REPOSITORY],
+  // La fila de espera publica por el canal de la agenda y su pantalla pública lo escucha.
+  exports: [APPOINTMENT_REPOSITORY, AGENDA_EVENTS, InMemoryAgendaEvents],
 })
 export class AppointmentsModule {}

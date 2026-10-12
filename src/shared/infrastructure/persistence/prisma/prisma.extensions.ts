@@ -98,6 +98,9 @@ const SOFT_DELETABLE_EXCLUSIONS: ReadonlySet<string> = new Set([
   'PurchaseOrderLine',
   'InvoiceLine',
   'ServiceTicketLine',
+  // La fila de espera no se borra: un turno sale de ella atendido, ausente o cancelado.
+  'QueueTurn',
+  'QueueDayCounter',
 ]);
 
 type QueryArgs = {

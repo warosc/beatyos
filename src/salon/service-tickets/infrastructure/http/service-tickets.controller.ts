@@ -22,7 +22,6 @@ import {
   ListAssignableServicesUseCase,
   ListServiceTicketsUseCase,
   RegisterServiceTicketUseCase,
-  type ServiceTicketView,
 } from '../../application/service-ticket.use-cases';
 import {
   AssignableServiceResponse,
@@ -124,7 +123,7 @@ export class ServiceTicketsController {
       restrictToStylistId: await this.ownScopeFor(user, PERMISSIONS.serviceTickets.read),
     });
 
-    return { data: page.data.map(present), meta: page.meta };
+    return { data: page.data.map((view) => ServiceTicketResponse.from(view)), meta: page.meta };
   }
 
   @Get('assignable-services')
@@ -176,7 +175,7 @@ export class ServiceTicketsController {
     // Se devuelve con importe y nombres, igual que en el listado: la pantalla que registra
     // la pinta en su lista sin volver a pedirla.
     const [view] = await this.listTickets.describe([ticket], this.currency);
-    return present(view);
+    return ServiceTicketResponse.from(view);
   }
 
   @Post(':id/charge')
@@ -240,32 +239,6 @@ export class ServiceTicketsController {
 }
 
 // ---------------------------------------------------------------------------
-
-const present = (view: ServiceTicketView): ServiceTicketResponse => ({
-  id: view.ticket.id,
-  status: view.ticket.status,
-  stylistId: view.ticket.stylistId,
-  stylistName: view.stylistName,
-  clientId: view.ticket.clientId,
-  clientName: view.ticket.clientName,
-  appointmentId: view.ticket.appointmentId,
-  invoiceId: view.ticket.invoiceId,
-  notes: view.ticket.notes,
-  lines: view.lines.map((line) => ({
-    serviceId: line.serviceId,
-    name: line.name,
-    unitPrice: line.unitPrice.toDecimalString(),
-    taxRate: line.taxRate?.value ?? null,
-    lineTotal: line.lineTotal.toDecimalString(),
-    available: line.available,
-  })),
-  total: view.total.toDecimalString(),
-  currency: view.total.currency,
-  createdAt: view.ticket.audit.createdAt.toISOString(),
-  chargedAt: view.ticket.chargedAt?.toISOString() ?? null,
-  cancelledAt: view.ticket.cancelledAt?.toISOString() ?? null,
-  cancellationReason: view.ticket.cancellationReason,
-});
 
 const requireTenant = (user: AccessTokenClaims): string => {
   if (!user.tenantId) {

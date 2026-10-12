@@ -1,6 +1,7 @@
 'use client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
+import { QUEUE_KEY } from '@/features/queue/types';
 import { MY_DAY_KEY } from '@/features/stylist-day/use-my-day';
 import type { AgendaSignal } from './types';
 import { AGENDA_KEY } from './use-agenda';
@@ -110,9 +111,20 @@ export function useAgendaLive({
       }, 300);
     };
 
+    // La fila cambia mucho más que la agenda: un aviso suyo solo refresca la fila.
+    let pendingQueue: ReturnType<typeof setTimeout> | undefined;
+    const refreshQueue = () => {
+      clearTimeout(pendingQueue);
+      pendingQueue = setTimeout(
+        () => void queryClient.invalidateQueries({ queryKey: QUEUE_KEY }),
+        200,
+      );
+    };
+
     const onSignal = (signal: AgendaSignal) => {
       attempt = 0;
       if (signal.kind === 'ping') return;
+      if (signal.kind === 'queue') return refreshQueue();
       refresh();
       if (signal.kind !== 'change-request') return;
       if (roles.current.approver && signal.status === 'PENDING') {
@@ -157,7 +169,10 @@ export function useAgendaLive({
         if (response.status === 403) return; // Sin permiso de agenda: nada que escuchar.
         if (response.ok && response.body) {
           // Al reconectar puede haberse perdido algo: se refresca por si acaso.
-          if (attempt > 0) refresh();
+          if (attempt > 0) {
+            refresh();
+            refreshQueue();
+          }
           await readSignals(response.body, onSignal);
         }
       } catch {
@@ -173,6 +188,7 @@ export function useAgendaLive({
       controller.abort();
       clearTimeout(timer);
       clearTimeout(pending);
+      clearTimeout(pendingQueue);
     };
   }, [enabled, queryClient]);
 }

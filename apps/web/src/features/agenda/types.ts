@@ -126,7 +126,8 @@ export interface ChangeRequest {
 
 /** Aviso del canal en vivo. Solo dice qué cambió; los datos se vuelven a pedir. */
 export interface AgendaSignal {
-  kind: 'appointment' | 'change-request' | 'block' | 'reminder' | 'ping';
+  /** `queue`: cambió la fila de espera (ADR-0024). Viaja por el mismo canal. */
+  kind: 'appointment' | 'change-request' | 'block' | 'reminder' | 'queue' | 'ping';
   status?: string | null;
   /** Para quien solo ve su agenda: si el cambio es suyo. */
   mine?: boolean | null;

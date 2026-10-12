@@ -13,6 +13,16 @@ describe('puerta de sesión', () => {
     (path) => expect(proxy(request(path)).headers.get('location')).toBeNull(),
   );
 
+  it.each([
+    '/cita/AbCdEfGhIjKlMnOpQrStUvWx',
+    '/pantalla/AbCdEfGhIjKlMnOpQrStUvWx',
+    '/api/public/queue-display/AbCdEfGhIjKlMnOpQrStUvWx/stream',
+  ])('los enlaces públicos (%s) no piden sesión: deciden con el propio enlace', (path) => {
+    const response = proxy(request(path));
+    expect(response.headers.get('location')).toBeNull();
+    expect(response.status).not.toBe(401);
+  });
+
   it('deja pasar cualquier página con una sesión válida', () => {
     expect(proxy(request('/caja', access)).headers.get('location')).toBeNull();
   });

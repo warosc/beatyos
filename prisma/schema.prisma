@@ -28,33 +28,36 @@ datasource db {
 
 /// Un salon. Es la raiz de aislamiento de todo el sistema (ADR-0003).
 model Tenant {
-  id          String       @id @default(uuid(7))
-  name        String
-  slug        String       @unique
-  legalName   String?
-  taxId       String?
-  email       String
-  phone       String?
-  addressLine String?
-  city        String?
-  country     String       @default("GT")
-  timezone    String       @default("America/Guatemala")
-  currency    String       @default("GTQ") @db.Char(3)
-  locale      String       @default("es-GT")
-  status      TenantStatus @default(ACTIVE)
-  planCode    String       @default("standard")
+  id                    String       @id @default(uuid(7))
+  name                  String
+  slug                  String       @unique
+  legalName             String?
+  taxId                 String?
+  email                 String
+  phone                 String?
+  addressLine           String?
+  city                  String?
+  country               String       @default("GT")
+  timezone              String       @default("America/Guatemala")
+  currency              String       @default("GTQ") @db.Char(3)
+  locale                String       @default("es-GT")
+  status                TenantStatus @default(ACTIVE)
+  planCode              String       @default("standard")
   /// Combinación de colores de la interfaz de este salón. Los valores válidos los fija la
   /// aplicación (`BRAND_THEMES`), no la base: añadir una paleta no debe exigir migración.
-  brandTheme  String       @default("terracota")
+  brandTheme            String       @default("terracota")
   /// Línea libre al pie de los comprobantes: redes, horario, un agradecimiento propio.
-  receiptNote String?
-  trialEndsAt DateTime?    @db.Timestamptz(3)
-  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
-  deletedAt   DateTime?    @db.Timestamptz(3)
-  createdBy   String?
-  updatedBy   String?
-  deletedBy   String?
+  receiptNote           String?
+  /// SHA-256 del enlace de la pantalla de turnos (ADR-0024). Se guarda el hash, nunca el
+  /// enlace: quien lea la base no puede abrir la pantalla de un salón.
+  queueDisplayTokenHash String?      @unique
+  trialEndsAt           DateTime?    @db.Timestamptz(3)
+  createdAt             DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime     @updatedAt @db.Timestamptz(3)
+  deletedAt             DateTime?    @db.Timestamptz(3)
+  createdBy             String?
+  updatedBy             String?
+  deletedBy             String?
 
   users             User[]
   roles             Role[]
@@ -83,6 +86,9 @@ model Tenant {
 
   appointmentChangeRequests AppointmentChangeRequest[]
   appointmentReminders      AppointmentReminder[]
+
+  queueTurns       QueueTurn[]
+  queueDayCounters QueueDayCounter[]
 
   @@index([status, deletedAt])
   @@map("tenants")
@@ -391,6 +397,7 @@ model Client {
   invoices       Invoice[]
   photos         ClientPhoto[]
   serviceTickets ServiceTicket[]
+  queueTurns     QueueTurn[]
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, lastName, firstName])
@@ -432,6 +439,8 @@ model Stylist {
   invoiceLines   InvoiceLine[]
   goals          Goal[]
   serviceTickets ServiceTicket[]
+  queueTurns     QueueTurn[]       @relation("QueueTurnStylist")
+  preferredBy    QueueTurn[]       @relation("QueueTurnPreferredStylist")
 
   @@index([tenantId, deletedAt])
   @@index([tenantId, status])
@@ -1309,6 +1318,7 @@ model ServiceTicket {
   appointment Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   invoice     Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   lines       ServiceTicketLine[]
+  queueTurn   QueueTurn?
 
   @@index([tenantId, status, createdAt])
   @@index([tenantId, stylistId, createdAt])
@@ -1334,6 +1344,82 @@ model ServiceTicketLine {
   @@index([tenantId])
   @@index([serviceId])
   @@map("service_ticket_lines")
+}
+
+// ===========================================================================
+// FILA DE ESPERA  (ADR-0024)
+// ===========================================================================
+
+/// Turno de una clienta que llega sin cita y espera a que una profesional la llame.
+///
+/// La fila es del día del salón: el número empieza en 1 cada mañana y lo que quedó en
+/// espera la víspera no se vuelve a llamar. Al terminar, el turno se convierte en una
+/// comanda (ADR-0019) y caja la cobra como cualquier otra.
+///
+/// Que una profesional no atienda a dos a la vez y que dos no se lleven a la misma clienta
+/// lo garantiza la base (índice único parcial y escritura condicional); ver la migración.
+model QueueTurn {
+  id                 String          @id @default(uuid(7))
+  tenantId           String
+  /// Día del salón, en su zona horaria, al que pertenece el turno.
+  businessDate       DateTime        @db.Date
+  number             Int
+  clientId           String?
+  /// Congelado al llegar. Obligatorio: cubre también a la clienta de paso sin ficha.
+  clientName         String
+  /// Lo que pide al llegar. Es una intención, no un cargo: lo que se cobra lo declara la
+  /// profesional al terminar, en la comanda, y allí se vuelve a validar contra el catálogo.
+  serviceIds         String[]
+  /// Profesional que pidió la clienta. «Llamar siguiente» la respeta; recepción puede
+  /// asignarla a otra si la clienta acepta.
+  preferredStylistId String?
+  stylistId          String?
+  status             QueueTurnStatus @default(WAITING)
+  notes              String?
+  /// Veces que se la ha llamado. La pantalla anuncia de nuevo cada vez que sube.
+  callCount          Int             @default(0)
+  calledAt           DateTime?       @db.Timestamptz(3)
+  /// Primera vez que la llamaron. No cambia al volver a llamarla ni al devolverla a la fila:
+  /// es el final de su espera, y de ella salen los indicadores de espera (ADR-0025).
+  firstCalledAt      DateTime?       @db.Timestamptz(3)
+  startedAt          DateTime?       @db.Timestamptz(3)
+  /// Cuándo salió de la fila: atendida, no se presentó o se fue.
+  closedAt           DateTime?       @db.Timestamptz(3)
+  serviceTicketId    String?         @unique
+  cancellationReason String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  createdBy String?
+  updatedBy String?
+
+  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client           Client?        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  preferredStylist Stylist?       @relation("QueueTurnPreferredStylist", fields: [preferredStylistId], references: [id], onDelete: Restrict)
+  stylist          Stylist?       @relation("QueueTurnStylist", fields: [stylistId], references: [id], onDelete: Restrict)
+  serviceTicket    ServiceTicket? @relation(fields: [serviceTicketId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, businessDate, number])
+  @@index([tenantId, businessDate, status])
+  @@index([tenantId, stylistId, status])
+  @@map("queue_turns")
+}
+
+/// Último número de turno dado cada día en cada salón. Mismo patrón que `DocumentSequence`:
+/// se incrementa con bloqueo de fila dentro de la transacción del turno, así que dos
+/// recepciones a la vez no reparten el mismo número.
+model QueueDayCounter {
+  id           String   @id @default(uuid(7))
+  tenantId     String
+  businessDate DateTime @db.Date
+  lastNumber   Int      @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, businessDate])
+  @@map("queue_day_counters")
 }
 
 // ===========================================================================
@@ -1536,6 +1622,15 @@ enum PasswordResetRequestStatus {
 enum ServiceTicketStatus {
   PENDING
   CHARGED
+  CANCELLED
+}
+
+enum QueueTurnStatus {
+  WAITING
+  CALLED
+  IN_SERVICE
+  DONE
+  NO_SHOW
   CANCELLED
 }
 

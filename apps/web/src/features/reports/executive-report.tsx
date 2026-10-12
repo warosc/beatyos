@@ -1,14 +1,17 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
 import {
+  ArrowRight,
   CalendarRange,
   ChartNoAxesCombined,
   CircleDollarSign,
+  ListOrdered,
   Percent,
   Receipt,
   RefreshCw,
   UsersRound,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -110,6 +113,21 @@ export function ExecutiveReportView() {
           </div>
         </Card>
       </div>
+      <Link
+        href="/turnos/estadisticas"
+        className="flex items-center gap-4 rounded-2xl border bg-card p-5 hover:bg-muted"
+      >
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-secondary text-primary">
+          <ListOrdered size={20} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold">Clientas sin cita</span>
+          <span className="block text-sm text-muted-foreground">
+            Cuánto esperan, cuántas se van y a qué horas hace falta más gente.
+          </span>
+        </span>
+        <ArrowRight size={18} className="text-muted-foreground" />
+      </Link>
       <div className="grid gap-6 lg:grid-cols-2">
         <Ranking
           title="Productos más vendidos"

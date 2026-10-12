@@ -21,6 +21,7 @@ import {
   PageMetaResponse,
   PaginationQueryDto,
 } from '../../../../shared/infrastructure/http/dto/pagination.dto';
+import type { ServiceTicketView } from '../../application/service-ticket.use-cases';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -162,6 +163,34 @@ export class ServiceTicketResponse {
   @ApiProperty({ nullable: true, type: String }) chargedAt!: string | null;
   @ApiProperty({ nullable: true, type: String }) cancelledAt!: string | null;
   @ApiProperty({ nullable: true, type: String }) cancellationReason!: string | null;
+
+  static from(view: ServiceTicketView): ServiceTicketResponse {
+    return {
+      id: view.ticket.id,
+      status: view.ticket.status,
+      stylistId: view.ticket.stylistId,
+      stylistName: view.stylistName,
+      clientId: view.ticket.clientId,
+      clientName: view.ticket.clientName,
+      appointmentId: view.ticket.appointmentId,
+      invoiceId: view.ticket.invoiceId,
+      notes: view.ticket.notes,
+      lines: view.lines.map((line) => ({
+        serviceId: line.serviceId,
+        name: line.name,
+        unitPrice: line.unitPrice.toDecimalString(),
+        taxRate: line.taxRate?.value ?? null,
+        lineTotal: line.lineTotal.toDecimalString(),
+        available: line.available,
+      })),
+      total: view.total.toDecimalString(),
+      currency: view.total.currency,
+      createdAt: view.ticket.audit.createdAt.toISOString(),
+      chargedAt: view.ticket.chargedAt?.toISOString() ?? null,
+      cancelledAt: view.ticket.cancelledAt?.toISOString() ?? null,
+      cancellationReason: view.ticket.cancellationReason,
+    };
+  }
 }
 
 export class ServiceTicketPageResponse {

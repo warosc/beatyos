@@ -12,9 +12,10 @@ const PUBLIC_PATHS = [
   '/api/auth/logout',
 ];
 
-// El enlace del recordatorio lo abre la clienta, que no tiene cuenta: la página y su ruta de
-// servidor no pasan por la sesión. La API decide con el propio enlace.
-const PUBLIC_PREFIXES = ['/cita/', '/api/public/'];
+// El enlace del recordatorio lo abre la clienta, que no tiene cuenta, y el de la pantalla de
+// turnos una TV: las páginas y sus rutas de servidor no pasan por la sesión. La API decide
+// con el propio enlace.
+const PUBLIC_PREFIXES = ['/cita/', '/pantalla/', '/api/public/'];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -22,6 +22,7 @@ import { statusMeta } from '@/features/agenda/status';
 import { addDays, dayLabel, sameDay, startOfDay } from '@/features/agenda/time';
 import type { Appointment } from '@/features/agenda/types';
 import { AGENDA_KEY, useAgendaRange, useServiceCatalog } from '@/features/agenda/use-agenda';
+import { MyQueueCard } from '@/features/queue/my-queue-card';
 import { RegisterServiceDialog } from '@/features/service-tickets/register-service-dialog';
 import {
   money,
@@ -173,6 +174,15 @@ export function MyDay() {
 
       {tab === 'today' && (
         <>
+          {me && (
+            <MyQueueCard
+              stylistId={me.id}
+              onFinished={async (ticket) => {
+                setNotice(`Enviado a caja: ${ticket.clientName} · ${money(ticket.total)}`);
+                await refresh();
+              }}
+            />
+          )}
           {day.now.map((appointment) => (
             <Card key={appointment.id} className="border-2 border-primary p-5">
               <p className="flex items-center gap-2 text-xs font-bold tracking-wide text-primary uppercase">
