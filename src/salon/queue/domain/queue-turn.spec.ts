@@ -69,6 +69,11 @@ describe('QueueTurn (fila de espera)', () => {
     it('con un solo nombre, solo ese', () => {
       expect(register({ clientName: 'Ana' }).publicName).toBe('Ana');
     });
+
+    it('en voz alta se la llama por su primer nombre', () => {
+      expect(register({ clientName: 'Ana María García' }).firstName).toBe('Ana');
+      expect(register({ clientName: 'Ana' }).firstName).toBe('Ana');
+    });
   });
 
   describe('quién puede atenderla', () => {

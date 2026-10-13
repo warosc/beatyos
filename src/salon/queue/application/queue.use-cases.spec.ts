@@ -796,7 +796,11 @@ describe('Casos de uso de la fila de espera', () => {
 
       const screen = await display.execute({ salonName: 'Marian Salón' });
 
-      expect(screen.called[0]).toMatchObject({ publicName: 'Ana G.', stylistName: 'Profesional' });
+      expect(screen.called[0]).toMatchObject({
+        publicName: 'Ana G.',
+        spokenName: 'Ana',
+        stylistName: 'Profesional',
+      });
     });
   });
 
