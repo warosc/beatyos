@@ -30,6 +30,7 @@ Un ADR nunca se edita una vez aceptado: se **supersede** con uno nuevo.
 | [0023](0023-agenda-por-equipo-cambios-aprobados-y-recordatorios.md) | Agenda por equipo, cambios aprobados por la encargada y recordatorios | Aceptado |
 | [0024](0024-fila-de-espera-y-pantalla-de-turnos.md) | Fila de espera de clientas sin cita y pantalla de turnos | Aceptado |
 | [0025](0025-indicadores-de-la-fila-de-espera.md) | Indicadores de la fila de espera para decidir | Aceptado |
+| [0026](0026-voz-de-los-llamados.md) | Voz de los llamados: la del navegador, elegida y gratis | Aceptado |
 
 ## Formato
 

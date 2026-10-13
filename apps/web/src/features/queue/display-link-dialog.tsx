@@ -66,6 +66,11 @@ export function DisplayLinkDialog({ onClose }: { onClose: () => void }) {
               Abre este enlace en el navegador de la TV y pulsa <strong>Activar sonido</strong>.
               Guárdalo: por seguridad solo se enseña ahora.
             </p>
+            <p className="rounded-xl bg-muted p-3 text-sm text-muted-foreground">
+              Para la voz más natural, gratis: ábrelo con <strong>Microsoft Edge</strong> en una
+              computadora con Windows y, en <strong>Voz</strong>, elige «Marta (Natural)» de
+              Guatemala.
+            </p>
             <input
               readOnly
               value={url}

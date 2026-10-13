@@ -177,6 +177,8 @@ export interface QueueDisplayCall {
   readonly id: string;
   readonly number: number;
   readonly publicName: string;
+  /** Como se la llama en voz alta: el primer nombre. */
+  readonly spokenName: string;
   readonly stylistName: string;
   readonly callCount: number;
   readonly calledAt: Date;
@@ -235,6 +237,7 @@ export class GetQueueDisplayUseCase implements UseCase<{ salonName: string }, Qu
         id: turn.id,
         number: turn.number,
         publicName: turn.publicName,
+        spokenName: turn.firstName,
         stylistName: names.get(turn.stylistId!) ?? 'Profesional',
         callCount: turn.callCount,
         calledAt: turn.calledAt!,

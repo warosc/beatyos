@@ -4275,6 +4275,11 @@ export interface components {
             number: number;
             /** @example Ana G. */
             publicName: string;
+            /**
+             * @description Primer nombre: como se la llama en voz alta
+             * @example Ana
+             */
+            spokenName: string;
             stylistName: string;
             /** @description Sube con cada llamada: la pantalla anuncia de nuevo */
             callCount: number;

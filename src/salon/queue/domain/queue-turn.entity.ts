@@ -205,6 +205,11 @@ export class QueueTurn extends Entity {
     return ACTIVE_QUEUE_STATUSES.includes(this.props.status);
   }
 
+  /** Primer nombre, como se la llama en voz alta: «Ana», no «Ana G.». */
+  get firstName(): string {
+    return this.props.clientName.split(/\s+/)[0] ?? this.props.clientName;
+  }
+
   /**
    * Nombre para la pantalla pública: el primero y la inicial del siguiente, «Ana G.».
    *
