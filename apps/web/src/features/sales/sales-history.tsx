@@ -20,6 +20,15 @@ const time = (iso: string | null) =>
   iso ? new Date(iso).toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' }) : '—';
 const shortDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit' }) : '';
+/** Lo cobrado en una línea: «Corte · 2 × Champú». La cantidad solo se nombra si pasa de uno. */
+const describe = (sale: Sale) =>
+  sale.lines
+    .map((line) =>
+      Number(line.quantity) === 1
+        ? line.description
+        : `${Number(line.quantity)} × ${line.description}`,
+    )
+    .join(' · ');
 
 /**
  * Ventas realizadas: lo que hace falta para cuadrar el día o el turno.
@@ -218,11 +227,12 @@ export function SalesHistory() {
           </p>
         ) : sales.data?.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[880px] text-left text-sm">
               <thead className="bg-secondary/60 text-muted-foreground">
                 <tr>
                   <th className="p-3 font-medium">Hora</th>
                   <th className="p-3 font-medium">Venta</th>
+                  <th className="p-3 font-medium">Descripción</th>
                   <th className="p-3 font-medium">Clienta</th>
                   <th className="p-3 font-medium">Cobró</th>
                   <th className="p-3 font-medium">Pago</th>
@@ -256,6 +266,9 @@ export function SalesHistory() {
                             Anulada
                           </span>
                         )}
+                      </td>
+                      <td className="max-w-xs p-3" title={describe(sale)}>
+                        <span className="line-clamp-2">{describe(sale) || '—'}</span>
                       </td>
                       <td className="p-3">{sale.clientName ?? 'Clienta ocasional'}</td>
                       <td className="p-3">{sale.createdByName ?? '—'}</td>
