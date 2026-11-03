@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { withMappedErrors } from '../../../../shared/infrastructure/persistence/prisma/prisma-error.mapper';
 import { QueryScopeStore } from '../../../../shared/infrastructure/persistence/prisma/query-scope';
 import { PrismaService } from '../../../../shared/infrastructure/persistence/prisma/prisma.service';
+import { withRetiredMark } from '../../../stylists/domain/stylist.entity';
 import type {
   AgendaDirectory,
   AgendaLabels,
@@ -13,9 +14,15 @@ import type {
 const fullName = (row: { firstName: string; lastName: string }) =>
   `${row.firstName} ${row.lastName}`.trim();
 
-/** El mismo nombre corto que da la ficha (`Stylist.displayName`): «Sara», no «Sara Molina». */
-const stylistName = (row: { firstName: string; displayName: string | null }) =>
-  row.displayName ?? row.firstName;
+/**
+ * El mismo nombre corto que da la ficha (`Stylist.displayName`): «Sara», no «Sara Molina».
+ * Con la marca si ya se dio de baja, para que sus citas pasadas se lean así (ADR-0027).
+ */
+const stylistName = (row: {
+  firstName: string;
+  displayName: string | null;
+  deletedAt: Date | null;
+}) => withRetiredMark(row.displayName ?? row.firstName, row.deletedAt);
 
 /**
  * Etiquetas de la agenda: una consulta por tipo, nunca una por cita.
@@ -62,7 +69,14 @@ export class PrismaAgendaDirectory implements AgendaDirectory {
           }),
           this.prisma.client.stylist.findMany({
             where: { id: { in: stylistIds } },
-            select: { id: true, firstName: true, lastName: true, displayName: true, color: true },
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              displayName: true,
+              color: true,
+              deletedAt: true,
+            },
           }),
           this.prisma.client.service.findMany({
             where: { id: { in: serviceIds } },
@@ -146,7 +160,13 @@ export class PrismaAgendaDirectory implements AgendaDirectory {
           status: true,
           client: { select: { firstName: true, lastName: true } },
           stylist: {
-            select: { firstName: true, lastName: true, displayName: true, color: true },
+            select: {
+              firstName: true,
+              lastName: true,
+              displayName: true,
+              color: true,
+              deletedAt: true,
+            },
           },
           services: {
             orderBy: { sortOrder: 'asc' },

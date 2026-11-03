@@ -12,7 +12,7 @@ import { Plus, Save, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { sessionFetch } from '@/lib/session-fetch';
-import { commissionOf, includedTax, IVA_RATE } from '@/lib/tax';
+import { commissionOf } from '@/lib/commission';
 import { useDialog } from '@/lib/use-dialog';
 import { money } from '@/lib/utils';
 
@@ -24,7 +24,6 @@ export type CatalogService = {
   bufferMinutes: number;
   /** Lo que paga la clienta: es el precio que la dueña reconoce como suyo. */
   priceWithTax: string;
-  taxRate: number;
   commissionRate: number | null;
 };
 
@@ -43,11 +42,10 @@ async function problem(response: Response, fallback: string) {
 /**
  * Lo que la dueña escribe y lo que el sistema deduce de ello.
  *
- * Ella piensa en lo que cobra con IVA, y eso es lo que guarda la API (ADR-0021). El IVA que
- * lleva dentro se separa con el impuesto del propio servicio, que no tiene por qué ser el
- * actual si se creó hace tiempo.
+ * Ella piensa en lo que cobra, y eso es lo que guarda la API. El salón no cobra IVA
+ * (ADR-0026): lo que paga la clienta es todo para el salón, y la comisión sale de ahí.
  */
-function useServiceDraft(initial: Draft, taxRate: number) {
+function useServiceDraft(initial: Draft) {
   const [draft, setDraft] = useState(initial);
   const typed = draft.price === '' ? 0 : cents(draft.price);
   return {
@@ -58,7 +56,8 @@ function useServiceDraft(initial: Draft, taxRate: number) {
       onChange: (e: ChangeEvent<HTMLInputElement>) =>
         setDraft((current) => ({ ...current, [key]: e.target.value })),
     }),
-    split: typed > 0 ? splitOf(typed, taxRate) : null,
+    /** Lo que paga la clienta, en centavos. `null` mientras no haya un precio válido. */
+    total: typed > 0 ? typed : null,
     minutes: Number(draft.duration) || 0,
     cleanupMinutes: Number(draft.cleanup) || 0,
     commissionRate: draft.commission === '' ? null : Number(draft.commission),
@@ -66,28 +65,22 @@ function useServiceDraft(initial: Draft, taxRate: number) {
 }
 type ServiceDraft = ReturnType<typeof useServiceDraft>;
 
-/** Lo que paga la clienta, repartido en lo que queda para el salón y el IVA que va dentro. */
-const splitOf = (total: number, taxRate: number) => {
-  const tax = includedTax(total, taxRate);
-  return { total, tax, base: total - tax };
-};
-
 /**
  * Alta de servicios pensada para la dueña, que da de alta todo su menú de una sentada.
  *
  * Pide lo que ella sabe —cuánto cobra y cuánto tarda— y el resto lo hace el sistema: el
- * precio sin IVA que guarda la API, el código del servicio (lo genera la API a partir del
- * nombre) y el resumen de cómo queda en caja y en la agenda antes de guardar.
+ * código del servicio (lo genera la API a partir del nombre) y el resumen de cómo queda en
+ * caja, en la agenda y en la comisión antes de guardar.
  */
 export function ServiceCreator({ onCreated }: { onCreated: () => Promise<unknown> }) {
   const nameRef = useRef<HTMLInputElement>(null);
-  const form = useServiceDraft(EMPTY, IVA_RATE);
+  const form = useServiceDraft(EMPTY);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!form.split) return;
+    if (!form.total) return;
     setBusy(true);
     setMessage(null);
     const name = form.draft.name.trim();
@@ -97,8 +90,7 @@ export function ServiceCreator({ onCreated }: { onCreated: () => Promise<unknown
       body: JSON.stringify({
         name,
         durationMinutes: form.minutes,
-        price: (form.split.total / 100).toFixed(2),
-        taxRate: IVA_RATE,
+        price: (form.total / 100).toFixed(2),
         bufferMinutes: form.cleanupMinutes,
         commissionRate: form.commissionRate,
       }),
@@ -110,7 +102,7 @@ export function ServiceCreator({ onCreated }: { onCreated: () => Promise<unknown
     }
     setMessage({
       kind: 'success',
-      text: `«${name}» quedó creado: la clienta paga ${quetzales(form.split.total)}. Ya puedes agregar el siguiente.`,
+      text: `«${name}» quedó creado: la clienta paga ${quetzales(form.total)}. Ya puedes agregar el siguiente.`,
     });
     // La limpieza suele ser la misma para todo el menú: se conserva para el siguiente.
     form.setDraft((current) => ({ ...EMPTY, cleanup: current.cleanup }));
@@ -122,7 +114,7 @@ export function ServiceCreator({ onCreated }: { onCreated: () => Promise<unknown
     <Card className="p-6">
       <h2 className="font-display text-xl font-semibold">Agregar servicio</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Escribe lo que cobras y lo que tarda. El sistema calcula el IVA y deja lista la agenda.
+        Escribe lo que cobras y lo que tarda. El sistema deja lista la agenda y la comisión.
       </p>
       <form onSubmit={submit} className="mt-4 grid gap-4 md:grid-cols-2">
         <ServiceFields form={form} nameRef={nameRef} />
@@ -147,26 +139,23 @@ export function ServiceEditor({
   saved: (name: string) => Promise<unknown>;
 }) {
   const dialogRef = useDialog(close);
-  const form = useServiceDraft(
-    {
-      name: service.name,
-      price: String(Number(service.priceWithTax)),
-      duration: String(service.durationMinutes),
-      cleanup: service.bufferMinutes ? String(service.bufferMinutes) : '',
-      commission: service.commissionRate === null ? '' : String(service.commissionRate),
-    },
-    service.taxRate,
-  );
+  const form = useServiceDraft({
+    name: service.name,
+    price: String(Number(service.priceWithTax)),
+    duration: String(service.durationMinutes),
+    cleanup: service.bufferMinutes ? String(service.bufferMinutes) : '',
+    commission: service.commissionRate === null ? '' : String(service.commissionRate),
+  });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!form.split) return;
+    if (!form.total) return;
     setBusy(true);
     setMessage(null);
     const name = form.draft.name.trim();
-    const priceChanged = form.split.total !== cents(service.priceWithTax);
+    const priceChanged = form.total !== cents(service.priceWithTax);
     const response = await sessionFetch(`/api/services/${encodeURIComponent(service.id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -176,7 +165,7 @@ export function ServiceEditor({
         bufferMinutes: form.cleanupMinutes,
         commissionRate: form.commissionRate,
         // Solo si cambia: un cambio de precio queda registrado aparte en la auditoría.
-        ...(priceChanged ? { price: (form.split.total / 100).toFixed(2) } : {}),
+        ...(priceChanged ? { price: (form.total / 100).toFixed(2) } : {}),
       }),
     });
     setBusy(false);
@@ -235,7 +224,7 @@ function ServiceFields({
   form: ServiceDraft;
   nameRef?: RefObject<HTMLInputElement | null>;
 }) {
-  const { split, minutes, cleanupMinutes, commissionRate } = form;
+  const { total, minutes, cleanupMinutes, commissionRate } = form;
   return (
     <>
       <Field
@@ -249,7 +238,7 @@ function ServiceFields({
       />
       <Field
         label="Precio que paga la clienta (Q)"
-        hint="Con IVA incluido, tal como lo dices en el salón."
+        hint="Lo que cobras en el salón."
         {...form.field('price')}
         required
         type="number"
@@ -293,15 +282,14 @@ function ServiceFields({
         placeholder="La de cada profesional"
       />
 
-      {split && (
+      {total && (
         <div
           role="status"
           aria-label="Resumen del servicio"
           className="space-y-1 rounded-xl bg-secondary p-4 text-sm md:col-span-2"
         >
           <p>
-            La clienta paga <strong>{quetzales(split.total)}</strong>: {quetzales(split.base)} para
-            el salón + {quetzales(split.tax)} de IVA.
+            La clienta paga <strong>{quetzales(total)}</strong>.
           </p>
           {minutes > 0 && (
             <p>
@@ -312,8 +300,8 @@ function ServiceFields({
           <p>
             Comisión:{' '}
             {commissionRate === null
-              ? 'la de cada profesional.'
-              : `${commissionRate} % = ${quetzales(commissionOf(split.base, commissionRate))} por servicio (sobre el precio sin IVA).`}
+              ? 'la de cada profesional (su % en servicios).'
+              : `${commissionRate} % = ${quetzales(commissionOf(total, commissionRate))} por servicio.`}
           </p>
         </div>
       )}

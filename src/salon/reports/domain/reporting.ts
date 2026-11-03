@@ -39,9 +39,9 @@ export interface SaleLineFact {
   readonly stylistName: string | null;
   readonly description: string;
   readonly quantity: number;
-  /** Base imponible de la linea: lo que ingresa el salon. */
+  /** Base imponible de la linea. Sin IVA (ADR-0026) coincide con `lineTotal`. */
   readonly lineSubtotal: Money;
-  /** Base mas impuesto: lo que paga el cliente. */
+  /** Lo que paga la clienta, despues de descuentos: la base de la comision. */
   readonly lineTotal: Money;
   readonly commissionAmount: Money;
 }
@@ -238,54 +238,66 @@ export const topProducts = (
 export interface StylistPerformance {
   readonly id: string;
   readonly name: string;
+  /** Lo que pagaron las clientas por sus servicios. */
   readonly revenue: Money;
   readonly services: number;
-  readonly commission: Money;
+  readonly serviceCommission: Money;
+  /** Lo que pagaron las clientas por los productos cobrados a su nombre. */
+  readonly productRevenue: Money;
+  /** Unidades de producto cobradas a su nombre. */
+  readonly products: number;
+  readonly productCommission: Money;
 }
 
 /**
  * Rendimiento por profesional.
  *
- * `revenue` y `services` cuentan solo líneas de **servicio**: un producto que se adjunta al
- * ticket no es trabajo de quien atendió, y atribuírselo inflaría su cifra con ventas que no ha
- * hecho. `commission`, en cambio, suma **todas** las líneas —servicio y producto— porque mide
- * otra cosa: cuánto se le debe a cada profesional, y una venta de producto que sí hizo ella
- * misma también genera comisión (ADR-0014). La comisión sale de la línea, donde se congeló al
- * facturar.
+ * Servicios y productos se cuentan **por separado** y nunca se suman (ADR-0026): son dos
+ * comisiones distintas, con su propio porcentaje, y la dueña paga mirando cada una.
+ * `revenue` y `services` son solo trabajo de servicio, que es por lo que se ordena la lista;
+ * un producto cobrado a su nombre va a `productRevenue`, `products` y `productCommission`.
+ * Las comisiones salen de la línea, donde se congelaron al facturar.
  *
- * La facturación atribuida es la **base imponible**, sin IVA. El impuesto no es ingreso del
- * salón sino dinero recaudado para Hacienda, así que no es rendimiento de nadie; además es
- * la misma base sobre la que se calcula la comisión, y mezclar las dos magnitudes daría un
- * porcentaje aparente distinto del pactado. La cifra global de ventas del informe sí lleva
- * el impuesto, porque ahí lo que se mide es lo que entró por caja.
+ * Lo facturado es lo que pagó la clienta, después de descuentos: la misma base sobre la que
+ * se calcula la comisión, así el porcentaje aparente coincide con el pactado.
  */
 export const stylistPerformance = (
   lines: readonly SaleLineFact[],
   currency: string,
   limit = 5,
 ): StylistPerformance[] => {
-  const byStylist = new Map<
-    string,
-    { name: string; revenue: Money; services: number; commission: Money }
-  >();
+  const byStylist = new Map<string, Omit<StylistPerformance, 'id'>>();
 
   for (const line of lines) {
     if (!line.stylistId) continue;
+    if (line.kind !== 'SERVICE' && line.kind !== 'PRODUCT') continue;
 
     const current = byStylist.get(line.stylistId) ?? {
       name: line.stylistName ?? 'Sin nombre',
       revenue: Money.zero(currency),
       services: 0,
-      commission: Money.zero(currency),
+      serviceCommission: Money.zero(currency),
+      productRevenue: Money.zero(currency),
+      products: 0,
+      productCommission: Money.zero(currency),
     };
-    const isService = line.kind === 'SERVICE';
 
-    byStylist.set(line.stylistId, {
-      name: current.name,
-      revenue: isService ? current.revenue.add(line.lineSubtotal) : current.revenue,
-      services: isService ? round3(current.services + line.quantity) : current.services,
-      commission: current.commission.add(line.commissionAmount),
-    });
+    byStylist.set(
+      line.stylistId,
+      line.kind === 'SERVICE'
+        ? {
+            ...current,
+            revenue: current.revenue.add(line.lineTotal),
+            services: round3(current.services + line.quantity),
+            serviceCommission: current.serviceCommission.add(line.commissionAmount),
+          }
+        : {
+            ...current,
+            productRevenue: current.productRevenue.add(line.lineTotal),
+            products: round3(current.products + line.quantity),
+            productCommission: current.productCommission.add(line.commissionAmount),
+          },
+    );
   }
 
   return [...byStylist.entries()]

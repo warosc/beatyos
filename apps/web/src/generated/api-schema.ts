@@ -570,7 +570,7 @@ export interface paths {
         post?: never;
         /**
          * Dar de baja a un profesional
-         * @description Borrado lógico. Sus citas y comisiones históricas siguen siendo consultables; solo deja de admitir reservas nuevas.
+         * @description Borrado lógico (ADR-0027). Deja de aparecer en la agenda, la caja, la cola y las metas, y su acceso al sistema se desactiva (salvo si es dueña). Sus ventas, citas y comisiones pasadas se conservan con su nombre. Las clientas en espera que la pidieron pasan a la fila general. No se puede con citas por atender, comandas sin cobrar o turnos en curso.
          */
         delete: operations["Stylists_remove"];
         options?: never;
@@ -676,6 +676,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/stylists/{id}/retirement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Qué impide dar de baja a una profesional
+         * @description Lista sus citas por atender, comandas sin cobrar y turnos en curso, que hay que resolver antes de darla de baja, y dice si su acceso al sistema se desactivará (ADR-0027).
+         */
+        get: operations["Stylists_retirement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stylists/{id}/restore": {
         parameters: {
             query?: never;
@@ -685,7 +705,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Recuperar a un profesional dado de baja */
+        /**
+         * Recuperar a un profesional dado de baja
+         * @description Vuelve a la agenda y a la caja; si su acceso estaba desactivado, se reactiva.
+         */
         post: operations["Stylists_restore"];
         delete?: never;
         options?: never;
@@ -2599,10 +2622,16 @@ export interface components {
              */
             hiredAt?: string | null;
             /**
-             * @description Comisión general, en porcentaje. Un servicio o una habilidad pueden sobreescribirla.
+             * @description % en servicios: lo que gana de lo que paga la clienta por cada servicio. Un servicio o una habilidad pueden sobreescribirlo.
              * @example 15
              */
             commissionRate?: number;
+            /**
+             * @description % en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0026).
+             * @default 10
+             * @example 10
+             */
+            productCommissionRate: number;
             /**
              * Format: uuid
              * @description Cuenta de acceso asociada. Opcional: no todo profesional usa el sistema.
@@ -2626,8 +2655,16 @@ export interface components {
             isBookable: boolean;
             /** Format: date */
             hiredAt: string | null;
-            /** @example 15 */
+            /**
+             * @description % en servicios
+             * @example 15
+             */
             commissionRate: number;
+            /**
+             * @description % en productos
+             * @example 10
+             */
+            productCommissionRate: number;
             /** Format: uuid */
             userId: string | null;
             schedule: {
@@ -2704,10 +2741,16 @@ export interface components {
              */
             hiredAt?: string | null;
             /**
-             * @description Comisión general, en porcentaje. Un servicio o una habilidad pueden sobreescribirla.
+             * @description % en servicios: lo que gana de lo que paga la clienta por cada servicio. Un servicio o una habilidad pueden sobreescribirlo.
              * @example 15
              */
             commissionRate?: number;
+            /**
+             * @description % en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0026).
+             * @default 10
+             * @example 10
+             */
+            productCommissionRate: number;
             /**
              * Format: uuid
              * @description Cuenta de acceso asociada. Opcional: no todo profesional usa el sistema.
@@ -2756,6 +2799,64 @@ export interface components {
             /** @description Servicios que sabe hacer. **Reemplaza** la lista anterior. Una lista vacía significa «puede hacerlo todo», que es el comportamiento por defecto de un salón recién dado de alta. */
             skills: components["schemas"]["SkillDto"][];
         };
+        RetirementAppointmentResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string;
+            /** @example CONFIRMED */
+            status: string;
+            /** @example Rosa Iglesias */
+            clientName: string;
+            /**
+             * @example [
+             *       "Corte de señora"
+             *     ]
+             */
+            serviceNames: string[];
+        };
+        RetirementTicketResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @example Rosa Iglesias */
+            clientName: string;
+        };
+        RetirementQueueTurnResponse: {
+            /** Format: uuid */
+            id: string;
+            /** @example 12 */
+            number: number;
+            /** @example Rosa */
+            clientName: string;
+            /** @example IN_SERVICE */
+            status: string;
+        };
+        StylistRetirementResponse: {
+            /** Format: uuid */
+            stylistId: string;
+            /** @example Sara */
+            displayName: string;
+            /** @description Si hay algo pendiente que impide darla de baja ahora. */
+            blocked: boolean;
+            /** @description Citas por atender o en curso, sin contar las listadas */
+            appointmentsTotal: number;
+            /** @description Las primeras 50 */
+            appointments: components["schemas"]["RetirementAppointmentResponse"][];
+            pendingTicketsTotal: number;
+            /** @description Las primeras 50 */
+            pendingTickets: components["schemas"]["RetirementTicketResponse"][];
+            activeQueueTurns: components["schemas"]["RetirementQueueTurnResponse"][];
+            /** @description Clientas en espera que la pidieron. No bloquean: pasan a la fila general. */
+            waitingPreferences: number;
+            /** @description Tiene cuenta de acceso al sistema */
+            hasAccount: boolean;
+            /** @description Su acceso se desactivará con la baja */
+            accountWillBeDeactivated: boolean;
+        };
         CreateServiceDto: {
             /**
              * @description Código corto y único dentro del salón. Sin indicar, se genera a partir del nombre («Corte de señora» → `CORTE-SENORA`, con sufijo `-2`, `-3`… si ya está ocupado).
@@ -2783,12 +2884,6 @@ export interface components {
             /** Format: uuid */
             categoryId?: string | null;
             description?: string | null;
-            /**
-             * @description IVA de Guatemala. Cada servicio guarda el suyo: si el tipo cambia por ley, los documentos ya emitidos conservan el que se les aplicó.
-             * @default 12
-             * @example 12
-             */
-            taxRate: number;
             /** @description Comisión propia del servicio. Sin indicar, manda la del profesional. */
             commissionRate?: number | null;
             /**
@@ -2829,18 +2924,21 @@ export interface components {
              */
             price: string;
             /**
-             * @description IVA que va dentro del precio
-             * @example 3.00
+             * @description IVA que va dentro del precio. Siempre 0 desde ADR-0026: el salón no cobra IVA
+             * @example 0.00
              */
             taxAmount: string;
             /**
-             * @description Igual que `price`: el IVA ya va dentro
+             * @description Igual que `price`: lo que paga la clienta
              * @example 28.00
              */
             priceWithTax: string;
             /** @example GTQ */
             currency: string;
-            /** @example 21 */
+            /**
+             * @description Siempre 0 desde ADR-0026
+             * @example 0
+             */
             taxRate: number;
             commissionRate: number | null;
             isActive: boolean;
@@ -2872,7 +2970,6 @@ export interface components {
              * @example 30.00
              */
             price?: string;
-            taxRate?: number;
             commissionRate?: number | null;
             isBookableOnline?: boolean;
             /** @description Retirar del catálogo sin borrar el histórico */
@@ -3238,7 +3335,10 @@ export interface components {
             stockValue?: string;
             marginPercentage?: number | null;
             currency: string;
+            /** @description Siempre `0.00` desde ADR-0026: el salón no cobra IVA. */
             taxRate: string;
+            /** @description Comisión especial al venderlo. `null`: la de cada profesional en productos. */
+            commissionRate: number | null;
             unit: string;
             stockOnHand: string;
             reorderPoint: string;
@@ -3281,10 +3381,10 @@ export interface components {
             /** @example 65 */
             costPrice?: number;
             /**
-             * @description IVA aplicable. Por defecto, el 12 % de Guatemala
-             * @example 12
+             * @description Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0026). El salón no cobra IVA, así que no se acepta tipo impositivo.
+             * @example 5
              */
-            taxRate?: number;
+            commissionRate?: number | null;
             reorderPoint?: number;
             reorderQuantity?: number;
             /** @enum {string} */
@@ -3319,10 +3419,10 @@ export interface components {
             /** @example 65 */
             costPrice?: number;
             /**
-             * @description IVA aplicable. Por defecto, el 12 % de Guatemala
-             * @example 12
+             * @description Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0026). El salón no cobra IVA, así que no se acepta tipo impositivo.
+             * @example 5
              */
-            taxRate?: number;
+            commissionRate?: number | null;
             reorderPoint?: number;
             reorderQuantity?: number;
             /** @enum {string} */
@@ -3628,8 +3728,25 @@ export interface components {
             /** @description Cobrado menos devuelto: lo que debe haber quedado por ese medio. */
             net: string;
         };
+        CommissionBucketResponse: {
+            /** @description Servicios realizados o unidades de producto. */
+            count: number;
+            /** @description Lo que pagaron las clientas, después de descuentos. */
+            sold: string;
+            commission: string;
+        };
+        StylistCommissionResponse: {
+            services: components["schemas"]["CommissionBucketResponse"];
+            products: components["schemas"]["CommissionBucketResponse"];
+            stylistId: string;
+            stylistName: string;
+            /** @description Servicios más productos: lo que se le entrega. */
+            total: string;
+        };
         SalesSummaryResponse: {
             byMethod: components["schemas"]["PaymentMethodTotalsResponse"][];
+            /** @description Comisiones a pagar por profesional en el periodo, servicios y productos por separado. Informativo: no cambia el efectivo esperado. */
+            commissions: components["schemas"]["StylistCommissionResponse"][];
             count: number;
             total: string;
             discountTotal: string;
@@ -3943,6 +4060,11 @@ export interface components {
             id: string;
             /** Format: uuid */
             stylistId: string;
+            /**
+             * @description Nombre de la profesional, con «(dada de baja)» si ya no está en el equipo
+             * @example Sara
+             */
+            stylistName: string;
             /** @enum {string} */
             metric: "SERVICE_REVENUE" | "PRODUCT_REVENUE";
             targetAmount: string;
@@ -5811,6 +5933,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `STYLIST_HAS_PENDING_WORK`: tiene citas, comandas o turnos pendientes */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     Stylists_update: {
@@ -6051,6 +6180,41 @@ export interface operations {
                 content?: never;
             };
             /** @description Requiere el permiso: stylists.update */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    Stylists_retirement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StylistRetirementResponse"];
+                };
+            };
+            /** @description Token ausente, inválido o caducado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requiere el permiso: stylists.delete */
             403: {
                 headers: {
                     [name: string]: unknown;

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { fetchTenantProfile, PAYMENT_LABEL, TENANT_PROFILE_KEY } from '@/features/sales/types';
 import { useDialog } from '@/lib/use-dialog';
 import { money } from '@/lib/utils';
+import { CommissionPayoutPrint } from './commission-payout';
 import { methodTotal, useShiftSummary, type Shift } from './shift-summary';
 
 export type ReportSession = Shift & {
@@ -136,6 +137,8 @@ export function CashReport({ session, onClose }: { session: ReportSession; onClo
                 <p>Calculando…</p>
               )}
             </Section>
+
+            {summary.data && <CommissionPayoutPrint commissions={summary.data.commissions} />}
 
             <div className="mt-6 space-y-6 text-center">
               <p className="border-t border-black pt-1">Firma de quien entrega</p>

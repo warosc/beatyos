@@ -41,7 +41,6 @@ export interface CreateServiceInput {
   readonly categoryId?: string | null;
   readonly description?: string | null;
   readonly bufferMinutes?: number;
-  readonly taxRate?: number;
   readonly commissionRate?: number | null;
   readonly isBookableOnline?: boolean;
   readonly color?: string | null;
@@ -88,7 +87,6 @@ export class CreateServiceUseCase implements UseCase<CreateServiceInput, Service
       categoryId: input.categoryId ?? null,
       description: input.description ?? null,
       bufferMinutes: input.bufferMinutes,
-      taxRate: input.taxRate === undefined ? undefined : Percentage.create(input.taxRate),
       commissionRate:
         input.commissionRate === null || input.commissionRate === undefined
           ? null
@@ -157,7 +155,6 @@ export interface UpdateServiceInput {
   readonly categoryId?: string | null;
   readonly durationMinutes?: number;
   readonly bufferMinutes?: number;
-  readonly taxRate?: number;
   readonly commissionRate?: number | null;
   readonly isBookableOnline?: boolean;
   readonly color?: string | null;
@@ -204,7 +201,6 @@ export class UpdateServiceUseCase implements UseCase<UpdateServiceInput, Service
         categoryId: input.categoryId,
         durationMinutes: input.durationMinutes,
         bufferMinutes: input.bufferMinutes,
-        taxRate: input.taxRate === undefined ? undefined : Percentage.create(input.taxRate),
         commissionRate:
           input.commissionRate === undefined
             ? undefined

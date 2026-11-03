@@ -18,3 +18,25 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     { status: response.status },
   );
 }
+
+/**
+ * Da de baja a una profesional (ADR-0027). Un 204 no lleva cuerpo, y `NextResponse.json`
+ * no puede construir una respuesta 204, así que el cuerpo se reenvía tal cual llega.
+ */
+export async function DELETE(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const token = (await cookies()).get('beautyos_access')?.value;
+  if (!token) return NextResponse.json({ message: 'Sesión expirada.' }, { status: 401 });
+  const { id } = await context.params;
+  const response = await fetch(`${API_URL}/stylists/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  const body = await response.text();
+  return new NextResponse(body || null, {
+    status: response.status,
+    headers: body
+      ? { 'Content-Type': response.headers.get('content-type') ?? 'application/json' }
+      : undefined,
+  });
+}

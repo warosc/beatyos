@@ -20,6 +20,8 @@ import {
 } from '../../../../shared/infrastructure/persistence/prisma/prisma-repository.base';
 import { PrismaService } from '../../../../shared/infrastructure/persistence/prisma/prisma.service';
 import { RequestContextStore } from '../../../../shared/infrastructure/context/request-context';
+import { QueryScopeStore } from '../../../../shared/infrastructure/persistence/prisma/query-scope';
+import { withRetiredMark } from '../../../stylists/domain/stylist.entity';
 import { Invoice, type InvoiceLine } from '../../domain/invoice.entity';
 import { Payment } from '../../domain/payment.entity';
 import type {
@@ -34,6 +36,7 @@ import type {
   PaymentRepository,
   SalesDirectory,
   SalesNames,
+  StylistSalesTotals,
 } from '../../domain/sales.repositories';
 
 const INVOICE_INCLUDE = {
@@ -227,6 +230,40 @@ export class PrismaInvoiceRepository
       ),
       voidCount,
     };
+  }
+
+  /**
+   * Lo agrupa la base: un turno de sábado tiene cientos de líneas y solo hacen falta tres
+   * sumas por profesional. El filtro sobre la factura es anidado, y la extensión de borrado
+   * lógico no llega ahí, así que `deletedAt` se pide a mano.
+   */
+  async salesByStylist(range: DateRange): Promise<StylistSalesTotals[]> {
+    const groups = await withMappedErrors(this.entityName, () =>
+      this.prisma.client.invoiceLine.groupBy({
+        by: ['stylistId', 'kind'],
+        where: {
+          stylistId: { not: null },
+          kind: { in: ['SERVICE', 'PRODUCT'] },
+          invoice: {
+            issuedAt: { gte: range.from, lte: range.to },
+            status: { notIn: ['VOID', 'DRAFT'] },
+            deletedAt: null,
+          },
+        },
+        _sum: { quantity: true, lineTotal: true, commissionAmount: true },
+      }),
+    );
+
+    return groups.map((group) => ({
+      stylistId: group.stylistId!,
+      kind: group.kind as 'SERVICE' | 'PRODUCT',
+      quantity: Number(group._sum.quantity ?? 0),
+      sold: Money.fromDecimal(group._sum.lineTotal?.toFixed(2) ?? '0.00', this.currency),
+      commission: Money.fromDecimal(
+        group._sum.commissionAmount?.toFixed(2) ?? '0.00',
+        this.currency,
+      ),
+    }));
   }
 
   protected buildWhere(filter: InvoiceFilter): Record<string, unknown> {
@@ -504,11 +541,21 @@ export class PrismaSalesDirectory implements SalesDirectory {
               select: { id: true, firstName: true, lastName: true },
             })
           : [],
+        // Las dadas de baja también: sus ventas pasadas siguen siendo suyas y se leen con
+        // su nombre y la marca de que ya no está (ADR-0027).
         ids.stylistIds.length
-          ? this.prisma.client.stylist.findMany({
-              where: { id: { in: unique(ids.stylistIds) } },
-              select: { id: true, firstName: true, lastName: true, displayName: true },
-            })
+          ? QueryScopeStore.includingDeleted(() =>
+              this.prisma.client.stylist.findMany({
+                where: { id: { in: unique(ids.stylistIds) } },
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  displayName: true,
+                  deletedAt: true,
+                },
+              }),
+            )
           : [],
       ]),
     );
@@ -518,7 +565,12 @@ export class PrismaSalesDirectory implements SalesDirectory {
     return {
       clients: new Map(clients.map((row) => [row.id, fullName(row)])),
       users: new Map(users.map((row) => [row.id, fullName(row)])),
-      stylists: new Map(stylists.map((row) => [row.id, row.displayName || fullName(row)])),
+      stylists: new Map(
+        stylists.map((row) => [
+          row.id,
+          withRetiredMark(row.displayName || fullName(row), row.deletedAt),
+        ]),
+      ),
     };
   }
 }

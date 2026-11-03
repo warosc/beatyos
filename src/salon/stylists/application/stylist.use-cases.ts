@@ -9,7 +9,15 @@ import {
   type IdGenerator,
   type UseCase,
 } from '../../../shared/application/ports';
-import type { Page, PageRequest } from '../../../shared/domain/ports/repository.port';
+import { USER_REPOSITORY, type UserRepository } from '../../../core/users/domain/user.repository';
+import type { User } from '../../../core/users/domain/user.entity';
+import { BusinessRuleViolationError } from '../../../shared/domain/errors';
+import {
+  UNIT_OF_WORK,
+  type Page,
+  type PageRequest,
+  type UnitOfWork,
+} from '../../../shared/domain/ports/repository.port';
 import {
   addCalendarDays,
   parseCalendarDay,
@@ -23,6 +31,12 @@ import {
   type StylistStatusValue,
   type WorkingBlock,
 } from '../domain/stylist.entity';
+import {
+  blocksRetirement,
+  STYLIST_OFFBOARDING,
+  type StylistOffboarding,
+  type StylistPendingWork,
+} from '../domain/stylist-offboarding.ports';
 import {
   STYLIST_REPOSITORY,
   type StylistFilter,
@@ -48,6 +62,7 @@ export interface CreateStylistInput {
   readonly color?: string;
   readonly hiredAt?: Date | null;
   readonly commissionRate?: number;
+  readonly productCommissionRate?: number;
   readonly userId?: string | null;
   readonly actorId: string | null;
 }
@@ -74,6 +89,10 @@ export class CreateStylistUseCase implements UseCase<CreateStylistInput, Stylist
       hiredAt: input.hiredAt ?? null,
       commissionRate:
         input.commissionRate === undefined ? undefined : Percentage.create(input.commissionRate),
+      productCommissionRate:
+        input.productCommissionRate === undefined
+          ? undefined
+          : Percentage.create(input.productCommissionRate),
       userId: input.userId ?? null,
       now: this.clock.now(),
       actorId: input.actorId,
@@ -85,7 +104,11 @@ export class CreateStylistUseCase implements UseCase<CreateStylistInput, Stylist
       action: 'CREATE',
       entityType: 'Stylist',
       entityId: saved.id,
-      after: { name: saved.name.full, commissionRate: saved.commissionRate.value },
+      after: {
+        name: saved.name.full,
+        commissionRate: saved.commissionRate.value,
+        productCommissionRate: saved.productCommissionRate.value,
+      },
     });
 
     return saved;
@@ -103,6 +126,7 @@ export interface UpdateStylistInput {
   readonly color?: string;
   readonly hiredAt?: Date | null;
   readonly commissionRate?: number;
+  readonly productCommissionRate?: number;
   readonly status?: StylistStatusValue;
   readonly userId?: string | null;
   readonly actorId: string | null;
@@ -120,7 +144,12 @@ export class UpdateStylistUseCase implements UseCase<UpdateStylistInput, Stylist
     const now = this.clock.now();
     const stylist = await this.stylists.findByIdOrFail(input.id);
 
-    const before = { name: stylist.name.full, status: stylist.status };
+    const before = {
+      name: stylist.name.full,
+      status: stylist.status,
+      commissionRate: stylist.commissionRate.value,
+      productCommissionRate: stylist.productCommissionRate.value,
+    };
 
     stylist.updateProfile(
       {
@@ -139,6 +168,10 @@ export class UpdateStylistUseCase implements UseCase<UpdateStylistInput, Stylist
         hiredAt: input.hiredAt,
         commissionRate:
           input.commissionRate === undefined ? undefined : Percentage.create(input.commissionRate),
+        productCommissionRate:
+          input.productCommissionRate === undefined
+            ? undefined
+            : Percentage.create(input.productCommissionRate),
         userId: input.userId,
       },
       now,
@@ -156,7 +189,12 @@ export class UpdateStylistUseCase implements UseCase<UpdateStylistInput, Stylist
       entityType: 'Stylist',
       entityId: saved.id,
       before,
-      after: { name: saved.name.full, status: saved.status },
+      after: {
+        name: saved.name.full,
+        status: saved.status,
+        commissionRate: saved.commissionRate.value,
+        productCommissionRate: saved.productCommissionRate.value,
+      },
     });
 
     return saved;
@@ -194,37 +232,207 @@ export interface StylistIdInput {
   readonly actorId: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Baja de una profesional (ADR-0027)
+// ---------------------------------------------------------------------------
+
+export interface StylistRetirementCheck {
+  readonly stylist: Stylist;
+  readonly pendingWork: StylistPendingWork;
+  /** `false` si se le puede dar de baja ya. */
+  readonly blocked: boolean;
+  readonly account: {
+    /** Tiene cuenta de acceso al sistema. */
+    readonly linked: boolean;
+    /** Su acceso se desactivará con la baja. */
+    readonly willBeDeactivated: boolean;
+  };
+}
+
+/**
+ * La cuenta de acceso de la profesional y si la baja debe apagarla.
+ *
+ * Se apaga si está activa, salvo que sea de una dueña: dar de baja su ficha de profesional
+ * (deja de atender) no puede dejar al salón sin quien lo administra.
+ */
+const accountOf = async (
+  users: UserRepository,
+  stylist: Stylist,
+): Promise<{ user: User | null; linked: boolean; willBeDeactivated: boolean }> => {
+  if (!stylist.userId) return { user: null, linked: false, willBeDeactivated: false };
+  const user = await users.findById(stylist.userId);
+  return {
+    user,
+    linked: true,
+    willBeDeactivated: !!user && user.isActive() && !user.roleCodes.includes('OWNER'),
+  };
+};
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+/** «2 citas pendientes, 1 comanda sin cobrar y 1 turno en curso». */
+const describePending = (work: StylistPendingWork): string => {
+  const parts = [
+    work.appointments.total
+      ? plural(work.appointments.total, 'cita pendiente', 'citas pendientes')
+      : null,
+    work.pendingTickets.total
+      ? plural(work.pendingTickets.total, 'comanda sin cobrar', 'comandas sin cobrar')
+      : null,
+    work.activeQueueTurns.length
+      ? plural(work.activeQueueTurns.length, 'turno en curso', 'turnos en curso')
+      : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length > 1
+    ? `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`
+    : (parts[0] ?? '');
+};
+
+/**
+ * Qué pasaría al dar de baja a una profesional: lo que lo impide y qué le pasa a su acceso.
+ *
+ * Existe aparte de la baja porque la pantalla necesita la **lista** de lo pendiente para
+ * que la dueña lo resuelva, y los errores de la API solo llevan código y mensaje.
+ */
+@Injectable()
+export class CheckStylistRetirementUseCase implements UseCase<
+  { id: string },
+  StylistRetirementCheck
+> {
+  constructor(
+    @Inject(STYLIST_REPOSITORY) private readonly stylists: StylistRepository,
+    @Inject(STYLIST_OFFBOARDING) private readonly offboarding: StylistOffboarding,
+    @Inject(USER_REPOSITORY) private readonly users: UserRepository,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
+
+  async execute(input: { id: string }): Promise<StylistRetirementCheck> {
+    const stylist = await this.stylists.findByIdOrFail(input.id);
+    const [pendingWork, account] = await Promise.all([
+      this.offboarding.pendingWorkOf(stylist.id, this.clock.now()),
+      accountOf(this.users, stylist),
+    ]);
+    return {
+      stylist,
+      pendingWork,
+      blocked: blocksRetirement(pendingWork),
+      account: { linked: account.linked, willBeDeactivated: account.willBeDeactivated },
+    };
+  }
+}
+
+/**
+ * Da de baja a una profesional: deja de aparecer en la agenda, la caja, la cola y las metas,
+ * y su acceso al sistema se apaga. Sus ventas, citas y comisiones pasadas se conservan.
+ *
+ * No se puede mientras tenga citas por atender, comandas sin cobrar o turnos en curso: hay
+ * que reasignarlos o cerrarlos antes. Las clientas en espera que la pidieron pasan a la fila
+ * general en la misma transacción. Todo va junto: o queda dada de baja con su acceso
+ * apagado, o no cambia nada.
+ */
 @Injectable()
 export class DeleteStylistUseCase implements UseCase<StylistIdInput, void> {
   constructor(
     @Inject(STYLIST_REPOSITORY) private readonly stylists: StylistRepository,
+    @Inject(STYLIST_OFFBOARDING) private readonly offboarding: StylistOffboarding,
+    @Inject(USER_REPOSITORY) private readonly users: UserRepository,
+    @Inject(UNIT_OF_WORK) private readonly uow: UnitOfWork,
+    @Inject(CLOCK) private readonly clock: Clock,
     @Inject(AUDIT_RECORDER) private readonly audit: AuditRecorder,
   ) {}
 
   async execute(input: StylistIdInput): Promise<void> {
-    const stylist = await this.stylists.findByIdOrFail(input.id);
-    await this.stylists.softDelete(input.id, input.actorId);
+    await this.uow.execute(async () => {
+      const stylist = await this.stylists.findByIdOrFail(input.id);
+      const now = this.clock.now();
 
-    await this.audit.record({
-      action: 'DELETE',
-      entityType: 'Stylist',
-      entityId: input.id,
-      before: { name: stylist.name.full },
+      const work = await this.offboarding.pendingWorkOf(stylist.id, now);
+      if (blocksRetirement(work)) {
+        throw new BusinessRuleViolationError(
+          'STYLIST_HAS_PENDING_WORK',
+          `${stylist.displayName} tiene ${describePending(work)}: resuélvelo antes de darla de baja`,
+          {
+            stylistId: stylist.id,
+            appointments: work.appointments.total,
+            pendingTickets: work.pendingTickets.total,
+            activeQueueTurns: work.activeQueueTurns.length,
+          },
+        );
+      }
+
+      const releasedQueuePreferences = await this.offboarding.releaseQueuePreferences(stylist.id);
+
+      const account = await accountOf(this.users, stylist);
+      if (account.user && account.willBeDeactivated) {
+        account.user.deactivate(now, input.actorId);
+        await this.users.update(account.user);
+        await this.audit.record({
+          action: 'UPDATE',
+          entityType: 'User',
+          entityId: account.user.id,
+          after: { status: 'INACTIVE' },
+          metadata: { reason: 'STYLIST_RETIRED', stylistId: stylist.id },
+        });
+      }
+
+      await this.stylists.softDelete(stylist.id, input.actorId);
+      await this.audit.record({
+        action: 'DELETE',
+        entityType: 'Stylist',
+        entityId: stylist.id,
+        before: { name: stylist.name.full },
+        metadata: {
+          releasedQueuePreferences,
+          accountDeactivated: account.willBeDeactivated,
+        },
+      });
     });
   }
 }
 
+/**
+ * Reactiva a una profesional dada de baja: vuelve a la agenda y a la caja, y si su acceso
+ * estaba desactivado, se vuelve a encender.
+ */
 @Injectable()
 export class RestoreStylistUseCase implements UseCase<StylistIdInput, Stylist> {
   constructor(
     @Inject(STYLIST_REPOSITORY) private readonly stylists: StylistRepository,
+    @Inject(USER_REPOSITORY) private readonly users: UserRepository,
+    @Inject(UNIT_OF_WORK) private readonly uow: UnitOfWork,
+    @Inject(CLOCK) private readonly clock: Clock,
     @Inject(AUDIT_RECORDER) private readonly audit: AuditRecorder,
   ) {}
 
   async execute(input: StylistIdInput): Promise<Stylist> {
-    const restored = await this.stylists.restore(input.id, input.actorId);
-    await this.audit.record({ action: 'RESTORE', entityType: 'Stylist', entityId: input.id });
-    return restored;
+    return this.uow.execute(async () => {
+      const restored = await this.stylists.restore(input.id, input.actorId);
+
+      let accountReactivated = false;
+      if (restored.userId) {
+        const user = await this.users.findById(restored.userId);
+        if (user && user.status === 'INACTIVE') {
+          user.activate(this.clock.now(), input.actorId);
+          await this.users.update(user);
+          accountReactivated = true;
+          await this.audit.record({
+            action: 'UPDATE',
+            entityType: 'User',
+            entityId: user.id,
+            after: { status: 'ACTIVE' },
+            metadata: { reason: 'STYLIST_RESTORED', stylistId: restored.id },
+          });
+        }
+      }
+
+      await this.audit.record({
+        action: 'RESTORE',
+        entityType: 'Stylist',
+        entityId: input.id,
+        metadata: { accountReactivated },
+      });
+      return restored;
+    });
   }
 }
 

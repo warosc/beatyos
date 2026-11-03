@@ -12,14 +12,20 @@ import { loadOptions } from '@/lib/pagination';
 import { money } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useState } from 'react';
-import { CalendarOff, Pencil, Trash2 } from 'lucide-react';
+import { CalendarOff, Pencil, RotateCcw, Trash2, UserMinus } from 'lucide-react';
+import { StylistRetirementDialog } from './stylist-retirement-dialog';
 
 type Block = { id?: string; dayOfWeek: number; start: string; end: string };
 type TimeOff = { id: string; startsAt: string; endsAt: string; reason: string | null };
 type Stylist = {
   id: string;
   displayName: string;
+  /** % en servicios. */
   commissionRate: number;
+  /** % en productos (ADR-0026). */
+  productCommissionRate: number;
+  /** Solo viene en las dadas de baja (ADR-0027). */
+  deletedAt?: string;
   schedule: Block[];
   timeOff: TimeOff[];
   skills: Skill[];
@@ -36,6 +42,7 @@ export function Commissions() {
   const qc = useQueryClient();
   const [notice, setNotice] = useState('');
   const [editing, setEditing] = useState<CatalogService | null>(null);
+  const [retiring, setRetiring] = useState<Stylist | null>(null);
   const stylists = useQuery({
     queryKey: ['commission-stylists'],
     enabled: can('stylists.read') || can('stylists.update'),
@@ -47,6 +54,17 @@ export function Commissions() {
     queryFn: ({ signal }) => loadOptions<CatalogService>('/api/agenda?resource=services', signal),
   });
   const refreshServices = () => qc.invalidateQueries({ queryKey: ['commission-services'] });
+  /** Tras una baja o una reactivación cambia el equipo en todas las pantallas. */
+  const refreshTeam = () =>
+    Promise.all(
+      [
+        ['commission-stylists'],
+        ['retired-stylists'],
+        ['pos-stylists'],
+        ['stylists'],
+        ['agenda'],
+      ].map((queryKey) => qc.invalidateQueries({ queryKey })),
+    );
   async function removeService(service: CatalogService) {
     if (
       !confirm(
@@ -132,21 +150,39 @@ export function Commissions() {
       )}
       <Card className="p-6">
         <h2 className="font-display text-xl font-semibold">Por profesional</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Cada profesional gana un % de lo que paga la clienta: uno en servicios y otro en
+          productos. La comisión especial de un servicio o producto manda sobre estos.
+        </p>
         <div className="mt-3 divide-y">
           {stylists.data?.map((x) => (
-            <CommissionRow
-              key={x.id}
-              id={x.id}
-              name={x.displayName}
-              rate={x.commissionRate}
-              resource="stylists"
-              queryKey="commission-stylists"
+            <StylistCommissionRow
+              key={`${x.id}:${x.commissionRate}:${x.productCommissionRate}`}
+              stylist={x}
               editable={can('stylists.update')}
-              nullable={false}
+              onRetire={can('stylists.delete') ? () => setRetiring(x) : undefined}
             />
           ))}
         </div>
       </Card>
+      {retiring && (
+        <StylistRetirementDialog
+          stylist={retiring}
+          onClose={() => setRetiring(null)}
+          onRetired={async (name) => {
+            setNotice(`${name} quedó dada de baja.`);
+            await refreshTeam();
+          }}
+        />
+      )}
+      {can('stylists.restore') && (
+        <RetiredStylists
+          onRestored={async (name) => {
+            setNotice(`${name} volvió al equipo.`);
+            await refreshTeam();
+          }}
+        />
+      )}
       {can('stylists.update') && (
         <SkillsManager stylists={stylists.data ?? []} services={services.data ?? []} />
       )}
@@ -455,63 +491,89 @@ function ScheduleManager({ stylists }: { stylists: Stylist[] }) {
   );
 }
 
-function CommissionRow({
-  id,
-  name,
-  rate,
-  resource,
-  queryKey,
+/**
+ * Los dos porcentajes de una profesional —servicios y productos— y su baja.
+ *
+ * Se guardan juntos: son la misma decisión («cuánto gana Sara») y un solo botón evita que
+ * quede guardado uno y el otro no.
+ */
+function StylistCommissionRow({
+  stylist,
   editable,
-  nullable,
+  onRetire,
 }: {
-  id: string;
-  name: string;
-  rate: number | null;
-  resource: 'stylists' | 'services';
-  queryKey: string;
+  stylist: Stylist;
   editable: boolean;
-  nullable: boolean;
+  /** Sin permiso para dar de baja no hay botón. */
+  onRetire?: () => void;
 }) {
   const qc = useQueryClient();
-  const initial = rate === null ? '' : String(rate);
-  const [value, setValue] = useState(initial);
+  const initialServices = String(stylist.commissionRate);
+  const initialProducts = String(stylist.productCommissionRate);
+  const [services, setServices] = useState(initialServices);
+  const [products, setProducts] = useState(initialProducts);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const changed = services !== initialServices || products !== initialProducts;
+
   async function save() {
     setBusy(true);
     setError('');
-    const r = await sessionFetch(`/api/${resource}/${id}`, {
+    const r = await sessionFetch(`/api/stylists/${encodeURIComponent(stylist.id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ commissionRate: value === '' ? null : Number(value) }),
+      body: JSON.stringify({
+        commissionRate: Number(services),
+        productCommissionRate: Number(products),
+      }),
     });
     setBusy(false);
     if (!r.ok) return setError(await problem(r, 'No pudimos guardar la comisión.'));
-    await qc.invalidateQueries({ queryKey: [queryKey] });
+    await qc.invalidateQueries({ queryKey: ['commission-stylists'] });
   }
+
+  const percent = (label: string, value: string, onChange: (value: string) => void) => (
+    <label className="flex items-center gap-2 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <input
+        aria-label={`${label} de ${stylist.displayName}`}
+        type="number"
+        min="0"
+        max="100"
+        step="0.01"
+        required
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={!editable}
+        className="h-10 w-24 rounded-lg border bg-background px-3 text-right text-sm"
+      />
+      <span>%</span>
+    </label>
+  );
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 py-3">
-      <p className="font-medium">{name}</p>
-      <div className="flex items-center gap-2">
-        <input
-          type="number"
-          min="0"
-          max="100"
-          step="0.01"
-          placeholder={nullable ? 'De la profesional' : undefined}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          disabled={!editable}
-          className="h-10 w-32 rounded-lg border bg-background px-3 text-right text-sm"
-        />
-        <span>%</span>
+      <p className="font-medium">{stylist.displayName}</p>
+      <div className="flex flex-wrap items-center gap-3">
+        {percent('Servicios', services, setServices)}
+        {percent('Productos', products, setProducts)}
         {editable && (
           <Button
             variant="outline"
-            disabled={busy || value === initial || (value === '' && !nullable)}
+            disabled={busy || !changed || services === '' || products === ''}
             onClick={save}
           >
             {busy ? 'Guardando…' : 'Guardar'}
+          </Button>
+        )}
+        {onRetire && (
+          <Button
+            variant="ghost"
+            aria-label={`Dar de baja a ${stylist.displayName}`}
+            onClick={onRetire}
+          >
+            <UserMinus size={16} />
+            Dar de baja
           </Button>
         )}
       </div>
@@ -521,5 +583,68 @@ function CommissionRow({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Profesionales dadas de baja, para reactivarlas (ADR-0027).
+ *
+ * La API las devuelve mezcladas con el equipo cuando se piden con `includeDeleted`; solo
+ * las dadas de baja traen `deletedAt`.
+ */
+function RetiredStylists({ onRestored }: { onRestored: (name: string) => Promise<unknown> }) {
+  const [message, setMessage] = useState('');
+  const retired = useQuery({
+    queryKey: ['retired-stylists'],
+    queryFn: async ({ signal }) =>
+      (
+        await loadOptions<Stylist>('/api/agenda?resource=stylists&includeDeleted=true', signal)
+      ).filter((x) => x.deletedAt),
+  });
+
+  async function restore(stylist: Stylist) {
+    if (
+      !confirm(
+        `¿Reactivar a ${stylist.displayName}? Volverá a la agenda y al punto de venta, y podrá entrar al sistema otra vez.`,
+      )
+    )
+      return;
+    setMessage('');
+    const r = await sessionFetch(`/api/stylists/${encodeURIComponent(stylist.id)}/restore`, {
+      method: 'POST',
+    });
+    if (!r.ok) return setMessage(await problem(r, 'No pudimos reactivarla.'));
+    await onRestored(stylist.displayName);
+  }
+
+  if (!retired.data?.length) return null;
+  return (
+    <Card className="p-6">
+      <h2 className="font-display text-xl font-semibold">Dadas de baja</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        No aparecen en la agenda, la caja ni los turnos. Sus ventas pasadas se conservan.
+      </p>
+      <ul className="mt-3 divide-y">
+        {retired.data.map((x) => (
+          <li key={x.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <div>
+              <p className="font-medium">{x.displayName}</p>
+              <p className="text-sm text-muted-foreground">
+                Dada de baja el {new Date(x.deletedAt!).toLocaleDateString('es-GT')}
+              </p>
+            </div>
+            <Button variant="outline" onClick={() => restore(x)}>
+              <RotateCcw size={16} />
+              Reactivar
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {message && (
+        <p role="alert" className="mt-3 text-sm text-danger">
+          {message}
+        </p>
+      )}
+    </Card>
   );
 }

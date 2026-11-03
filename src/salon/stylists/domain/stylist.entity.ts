@@ -70,7 +70,10 @@ export interface StylistProps {
   readonly color: string;
   readonly status: StylistStatusValue;
   readonly hiredAt: Date | null;
+  /** % en servicios: lo que gana por defecto de cada servicio que cobra. */
   readonly commissionRate: Percentage;
+  /** % en productos: lo que gana de cada producto cobrado a su nombre (ADR-0026). */
+  readonly productCommissionRate: Percentage;
   readonly schedule: readonly WorkingBlock[];
   readonly timeOff: readonly TimeOffPeriod[];
   readonly skills: readonly StylistSkill[];
@@ -78,6 +81,16 @@ export interface StylistProps {
 }
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+/** % en productos con el que empieza toda profesional (ADR-0026). */
+export const DEFAULT_PRODUCT_COMMISSION_RATE = 10;
+
+/** Lo que se añade al nombre en el historial de una profesional dada de baja (ADR-0027). */
+export const RETIRED_SUFFIX = ' (dada de baja)';
+
+/** El nombre tal como se lee en ventas, citas y reportes ya hechos: con la marca si se fue. */
+export const withRetiredMark = (name: string, deletedAt: Date | null | undefined): string =>
+  deletedAt ? `${name}${RETIRED_SUFFIX}` : name;
 
 export class Stylist extends AggregateRoot {
   private constructor(
@@ -99,6 +112,7 @@ export class Stylist extends AggregateRoot {
     color?: string;
     hiredAt?: Date | null;
     commissionRate?: Percentage;
+    productCommissionRate?: Percentage;
     now: Date;
     actorId: string | null;
   }): Stylist {
@@ -122,6 +136,8 @@ export class Stylist extends AggregateRoot {
       status: 'ACTIVE',
       hiredAt: params.hiredAt ?? null,
       commissionRate: params.commissionRate ?? Percentage.zero(),
+      productCommissionRate:
+        params.productCommissionRate ?? Percentage.create(DEFAULT_PRODUCT_COMMISSION_RATE),
       schedule: [],
       timeOff: [],
       skills: [],
@@ -175,6 +191,9 @@ export class Stylist extends AggregateRoot {
   get commissionRate(): Percentage {
     return this.props.commissionRate;
   }
+  get productCommissionRate(): Percentage {
+    return this.props.productCommissionRate;
+  }
   get schedule(): readonly WorkingBlock[] {
     return this.props.schedule;
   }
@@ -189,6 +208,14 @@ export class Stylist extends AggregateRoot {
   }
   get isDeleted(): boolean {
     return this.props.audit.deletedAt !== null;
+  }
+
+  /**
+   * Nombre para el historial: el de siempre, con «(dada de baja)» si ya no está en el
+   * equipo. Sus ventas y citas pasadas se siguen leyendo con su nombre (ADR-0027).
+   */
+  get historyName(): string {
+    return withRetiredMark(this.displayName, this.props.audit.deletedAt);
   }
 
   /**
@@ -242,6 +269,7 @@ export class Stylist extends AggregateRoot {
       color?: string;
       hiredAt?: Date | null;
       commissionRate?: Percentage;
+      productCommissionRate?: Percentage;
       userId?: string | null;
     },
     now: Date,
@@ -261,6 +289,7 @@ export class Stylist extends AggregateRoot {
       color: changes.color ?? this.props.color,
       hiredAt: changes.hiredAt !== undefined ? changes.hiredAt : this.props.hiredAt,
       commissionRate: changes.commissionRate ?? this.props.commissionRate,
+      productCommissionRate: changes.productCommissionRate ?? this.props.productCommissionRate,
       userId: changes.userId !== undefined ? changes.userId : this.props.userId,
       audit: { ...this.props.audit, updatedAt: now, updatedBy: actorId },
     };
@@ -410,6 +439,14 @@ export class Stylist extends AggregateRoot {
   commissionFor(serviceId: string, serviceCommission: Percentage | null): Percentage {
     const skill = this.props.skills.find((entry) => entry.serviceId === serviceId);
     return skill?.commissionRate ?? serviceCommission ?? this.props.commissionRate;
+  }
+
+  /**
+   * Comisión por un producto cobrado a su nombre: la especial del producto si la tiene, si
+   * no su % en productos. Nunca su % en servicios: son dos cosas distintas (ADR-0026).
+   */
+  productCommissionFor(productCommission: Percentage | null): Percentage {
+    return productCommission ?? this.props.productCommissionRate;
   }
 
   // -- Disponibilidad -------------------------------------------------------

@@ -29,7 +29,8 @@ describe('Service', () => {
       expect(service.isActive).toBe(true);
       expect(service.isBookable()).toBe(true);
       expect(service.isBookableOnline).toBe(true);
-      expect(service.taxRate.value).toBe(12);
+      // El salón no cobra IVA (ADR-0026).
+      expect(service.taxRate.value).toBe(0);
       expect(service.consumables).toEqual([]);
     });
 
@@ -110,10 +111,20 @@ describe('Service', () => {
   });
 
   describe('precio e impuestos', () => {
-    it('el precio ya lleva el IVA dentro (ADR-0021)', () => {
+    it('sin IVA, lo que paga la clienta es todo para el salón (ADR-0026)', () => {
       const service = create({ price: Money.fromDecimal('28.00', 'EUR') });
 
-      // IVA de Guatemala: 28,00 = 25,00 de base + 3,00 de IVA.
+      expect(service.taxAmount.toDecimalString()).toBe('0.00');
+      expect(service.priceWithTax.toDecimalString()).toBe('28.00');
+    });
+
+    it('con un tipo indicado, el precio lo lleva dentro (ADR-0021)', () => {
+      const service = create({
+        price: Money.fromDecimal('28.00', 'EUR'),
+        taxRate: Percentage.create(12),
+      });
+
+      // 28,00 = 25,00 de base + 3,00 de IVA.
       expect(service.taxAmount.toDecimalString()).toBe('3.00');
       expect(service.priceWithTax.toDecimalString()).toBe('28.00');
     });

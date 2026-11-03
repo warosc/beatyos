@@ -777,7 +777,6 @@ test('la dueña crea un servicio escribiendo lo que cobra', async ({ page }) => 
       durationMinutes: created.durationMinutes,
       bufferMinutes: created.bufferMinutes,
       priceWithTax: '100.00',
-      taxRate: 12,
     });
     return route.fulfill({ status: 201, json: { data: services[0] } });
   });
@@ -790,17 +789,21 @@ test('la dueña crea un servicio escribiendo lo que cobra', async ({ page }) => 
 
   const summary = page.getByRole('status', { name: 'Resumen del servicio' });
   await expect(summary).toContainText(/La clienta paga Q\s?100\.00/);
-  await expect(summary).toContainText(/Q\s?10\.71 de IVA/);
+  // El salón no cobra IVA (ADR-0026): no hay nada que separar.
+  await expect(summary).not.toContainText('IVA');
   await expect(summary).toContainText('55 min');
+  await page.getByLabel('Comisión especial (%, opcional)').fill('20');
+  // La comisión es un % de lo que paga la clienta: 20 % de Q100 son Q20.
+  await expect(summary).toContainText(/20 % = Q\s?20\.00 por servicio/);
+  await page.getByLabel('Comisión especial (%, opcional)').fill('');
   await page.getByRole('button', { name: 'Crear servicio' }).click();
 
   await expect(page.getByText('«Corte de señora» quedó creado')).toBeVisible();
-  // Se guarda lo que cobra, con el IVA dentro (ADR-0021); el código lo pone la API.
+  // Se guarda lo que cobra, sin tipo de IVA (ADR-0026); el código lo pone la API.
   expect(created).toEqual({
     name: 'Corte de señora',
     durationMinutes: 45,
     price: '100.00',
-    taxRate: 12,
     bufferMinutes: 10,
     commissionRate: null,
   });
@@ -839,7 +842,6 @@ test('la encargada edita y elimina un servicio', async ({ page }) => {
       durationMinutes: 45,
       bufferMinutes: 10,
       priceWithTax: '100.00',
-      taxRate: 12,
       commissionRate: null as number | null,
     },
   ];
@@ -863,7 +865,7 @@ test('la encargada edita y elimina un servicio', async ({ page }) => {
   await page.goto('/comisiones');
   await page.getByRole('button', { name: 'Editar Corte de señora' }).click();
   const dialog = page.getByRole('dialog', { name: 'Editar Corte de señora' });
-  // Abre con lo que la dueña reconoce: el precio que paga la clienta, no el de sin IVA.
+  // Abre con lo que la dueña reconoce: el precio que paga la clienta.
   await expect(dialog.getByLabel('Precio que paga la clienta (Q)')).toHaveValue('100');
   await dialog.getByLabel('Nombre del servicio').fill('Corte y peinado');
   await dialog.getByLabel('Precio que paga la clienta (Q)').fill('150');
@@ -906,7 +908,6 @@ test('la dueña da de alta un producto con lo que cobra y lo corrige después', 
     name: 'Champú de argán',
     brand: null as string | null,
     price: '100.00',
-    taxRate: '12.00',
     currency: 'GTQ',
     stockOnHand: '0.000',
     reorderPoint: '2.000',
@@ -920,7 +921,7 @@ test('la dueña da de alta un producto con lo que cobra y lo corrige después', 
     if (request.method() === 'GET') return route.fulfill({ json: { data: products } });
     const body = request.postDataJSON() as Record<string, unknown>;
     writes.push({ method: request.method(), url: request.url(), body });
-    // La API guarda lo que manda la pantalla: el precio con el IVA dentro.
+    // La API guarda lo que manda la pantalla: lo que paga la clienta.
     products = [{ ...product, name: String(body.name), price: String(body.price ?? '100.00') }];
     return route.fulfill({ status: request.method() === 'POST' ? 201 : 200, json: { data: {} } });
   });
@@ -931,7 +932,8 @@ test('la dueña da de alta un producto con lo que cobra y lo corrige después', 
   await alta.getByLabel('SKU').fill('sh arg 500');
   await alta.getByLabel('Nombre').fill('Champú de argán');
   await alta.getByLabel('Precio de venta (Q)').fill('100');
-  await expect(alta.getByRole('status')).toContainText(/Q\s?100\.00.*Q\s?10\.71 de IVA/);
+  await expect(alta.getByRole('status')).toContainText(/La clienta paga Q\s?100\.00/);
+  await expect(alta.getByRole('status')).not.toContainText('IVA');
   await alta.getByLabel('Existencia mínima').fill('2');
   await alta.getByLabel('Cantidad a reponer').fill('6');
   await alta.getByRole('button', { name: 'Guardar' }).click();
@@ -943,11 +945,13 @@ test('la dueña da de alta un producto con lo que cobra y lo corrige después', 
       sku: 'SH-ARG-500',
       name: 'Champú de argán',
       price: 100,
-      taxRate: 12,
+      // Vacía: gana el % en productos de cada profesional (ADR-0026).
+      commissionRate: null,
       reorderPoint: 2,
       reorderQuantity: 6,
     },
   });
+  expect(writes[0].body).not.toHaveProperty('taxRate');
   // En inventario se ve lo mismo que se escribió y lo mismo que se cobrará en caja.
   await expect(page.getByText(/Q\s?100\.00/)).toBeVisible();
 
@@ -975,4 +979,130 @@ test('la dueña da de alta un producto con lo que cobra y lo corrige después', 
   await otra.getByRole('button', { name: 'Guardar cambios' }).click();
   await expect(otra).toBeHidden();
   expect(writes[2].body).not.toHaveProperty('price');
+  expect(writes[2].body).not.toHaveProperty('commissionRate');
+
+  // La comisión especial se manda solo cuando cambia.
+  await page.getByRole('button', { name: 'Editar Champú de argán' }).click();
+  const comision = page.getByRole('dialog', { name: 'Editar Champú de argán' });
+  await comision.getByLabel('Comisión especial (%, opcional)').fill('5');
+  await comision.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(comision).toBeHidden();
+  expect(writes[3].body).toMatchObject({ commissionRate: 5 });
+});
+
+test('la dueña ajusta los dos porcentajes de una profesional', async ({ page }) => {
+  await authenticated(page);
+  const sara = {
+    id: 'stylist-sara',
+    displayName: 'Sara',
+    commissionRate: 15,
+    productCommissionRate: 10,
+    schedule: [],
+    timeOff: [],
+    skills: [],
+  };
+  const patches: unknown[] = [];
+  await page.route('**/api/agenda?resource=**', (route) => {
+    const url = route.request().url();
+    if (url.includes('includeDeleted')) return route.fulfill({ json: { data: [] } });
+    return route.fulfill({ json: { data: url.includes('stylists') ? [sara] : [] } });
+  });
+  await page.route('**/api/stylists/stylist-sara', (route) => {
+    patches.push(route.request().postDataJSON());
+    return route.fulfill({ json: { data: sara } });
+  });
+
+  await page.goto('/comisiones');
+  await expect(page.getByLabel('Servicios de Sara')).toHaveValue('15');
+  await expect(page.getByLabel('Productos de Sara')).toHaveValue('10');
+  await page.getByLabel('Productos de Sara').fill('12');
+  await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+
+  await expect.poll(() => patches.length).toBe(1);
+  expect(patches[0]).toEqual({ commissionRate: 15, productCommissionRate: 12 });
+});
+
+test('dar de baja a una profesional pide resolver antes sus citas', async ({ page }) => {
+  await authenticated(page);
+  let team = [
+    {
+      id: 'stylist-sara',
+      displayName: 'Sara',
+      commissionRate: 15,
+      productCommissionRate: 10,
+      schedule: [],
+      timeOff: [],
+      skills: [],
+    },
+  ];
+  let pendiente = true;
+  let deleted = false;
+  await page.route('**/api/agenda?resource=**', (route) => {
+    const url = route.request().url();
+    if (!url.includes('stylists')) return route.fulfill({ json: { data: [] } });
+    if (url.includes('includeDeleted')) {
+      return route.fulfill({
+        json: {
+          data: deleted ? [{ ...team[0], deletedAt: '2026-11-03T15:00:00.000Z' }] : [],
+        },
+      });
+    }
+    return route.fulfill({ json: { data: deleted ? [] : team } });
+  });
+  await page.route('**/api/stylists/stylist-sara/retirement', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          stylistId: 'stylist-sara',
+          displayName: 'Sara',
+          blocked: pendiente,
+          appointmentsTotal: pendiente ? 1 : 0,
+          appointments: pendiente
+            ? [
+                {
+                  id: 'cita-1',
+                  startsAt: '2026-11-05T16:00:00.000Z',
+                  endsAt: '2026-11-05T17:00:00.000Z',
+                  status: 'CONFIRMED',
+                  clientName: 'Rosa Iglesias',
+                  serviceNames: ['Corte de señora'],
+                },
+              ]
+            : [],
+          pendingTicketsTotal: 0,
+          pendingTickets: [],
+          activeQueueTurns: [],
+          waitingPreferences: pendiente ? 0 : 2,
+          hasAccount: true,
+          accountWillBeDeactivated: true,
+        },
+      },
+    }),
+  );
+  await page.route('**/api/stylists/stylist-sara', (route) => {
+    if (route.request().method() !== 'DELETE') return route.fallback();
+    deleted = true;
+    team = [];
+    return route.fulfill({ status: 204, body: '' });
+  });
+
+  await page.goto('/comisiones');
+  await page.getByRole('button', { name: 'Dar de baja a Sara' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Dar de baja a Sara' });
+  await expect(dialog).toContainText('Antes de dar de baja a Sara');
+  await expect(dialog).toContainText('1 cita pendiente');
+  await expect(dialog).toContainText('Rosa Iglesias');
+  await expect(dialog.getByRole('button', { name: 'Dar de baja' })).toHaveCount(0);
+
+  // La reasignan en la agenda y vuelven a revisar.
+  pendiente = false;
+  await dialog.getByRole('button', { name: 'Volver a revisar' }).click();
+  await expect(dialog).toContainText('Su acceso al sistema se desactivará');
+  await expect(dialog).toContainText('2 clientas en espera la pidieron');
+  await dialog.getByRole('button', { name: 'Dar de baja' }).click();
+
+  await expect(page.getByText('Sara quedó dada de baja.')).toBeVisible();
+  expect(deleted).toBe(true);
+  await expect(page.getByRole('heading', { name: 'Dadas de baja' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reactivar' })).toBeVisible();
 });

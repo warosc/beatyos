@@ -15,7 +15,6 @@ type ServiceRow = {
   id: string;
   name: string;
   price: string;
-  taxRate: number | string;
   color: string | null;
   durationMinutes: number;
 };
@@ -24,7 +23,6 @@ type ProductRow = {
   name: string;
   sku: string | null;
   price: string;
-  taxRate: number | string;
   stockOnHand: string | null;
   trackStock: boolean;
 };
@@ -39,7 +37,6 @@ const asService = (row: ServiceRow): SaleItem => ({
   id: row.id,
   name: row.name,
   price: row.price,
-  taxRate: row.taxRate,
   color: row.color,
   durationMinutes: row.durationMinutes,
 });
@@ -49,7 +46,6 @@ const asProduct = (row: ProductRow): SaleItem => ({
   name: row.name,
   sku: row.sku,
   price: row.price,
-  taxRate: row.taxRate,
   stockOnHand: row.stockOnHand,
   trackStock: row.trackStock,
 });

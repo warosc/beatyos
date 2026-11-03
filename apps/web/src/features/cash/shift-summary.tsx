@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { fetchSummary, PAYMENT_LABEL, type SalesSummary } from '@/features/sales/types';
 import { money } from '@/lib/utils';
+import { CommissionPayoutTable } from './commission-payout';
 
 export type Shift = { id: string; openedAt: string; closedAt: string | null };
 
@@ -94,6 +95,7 @@ export function ShiftSummary({ shift }: { shift: Shift }) {
           </tbody>
         </table>
       </div>
+      <CommissionPayoutTable commissions={data?.commissions} />
     </Card>
   );
 }

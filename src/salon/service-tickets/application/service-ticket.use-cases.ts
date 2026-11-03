@@ -442,12 +442,13 @@ export class ListServiceTicketsUseCase implements UseCase<
     const [services, stylists] = await Promise.all([
       this.services.findManyByIds(serviceIds),
       // Un salón tiene un puñado de profesionales: no justifica un `findManyByIds` propio.
-      Promise.all(stylistIds.map((id) => this.stylists.findById(id))),
+      // Las dadas de baja también, con su marca: lo que hicieron sigue siendo suyo.
+      Promise.all(stylistIds.map((id) => this.stylists.findById(id, { includeDeleted: true }))),
     ]);
 
     const servicesById = new Map(services.map((service) => [service.id, service]));
     const namesById = new Map(
-      stylists.filter((s) => s !== null).map((stylist) => [stylist.id, stylist.displayName]),
+      stylists.filter((s) => s !== null).map((stylist) => [stylist.id, stylist.historyName]),
     );
 
     return tickets.map((ticket) => {

@@ -197,8 +197,71 @@ describe('Ventas y caja (integración)', () => {
 
       const lines = response.body.data.lines as { stylistId: string; commissionAmount: string }[];
       expect(lines.map((line) => line.stylistId).sort()).toEqual([salonA.stylistId, otraId].sort());
-      // Cada una cobra su comisión con su propia tasa: 15 % y 10 % sobre la base de 25,00.
-      expect(lines.map((line) => line.commissionAmount).sort()).toEqual(['2.50', '3.75']);
+      // Cada una cobra su comisión con su propia tasa sobre lo que pagó la clienta (ADR-0026):
+      // 15 % y 10 % de 30,25.
+      expect(lines.map((line) => line.commissionAmount).sort()).toEqual(['3.03', '4.54']);
+    });
+
+    describe('comisión de productos (ADR-0026)', () => {
+      const sellProduct = async (productId: string, stylistId?: string) =>
+        sell({
+          lines: [{ kind: 'PRODUCT', itemId: productId, quantity: 1, stylistId }],
+          payments: [{ method: 'CARD', amount: 50 }],
+        }).expect(201);
+
+      const commissionOf = (sale: request.Response) =>
+        (sale.body.data.lines as { commissionAmount: string }[])[0].commissionAmount;
+
+      it('gana su % en productos, no el de servicios', async () => {
+        // Sara gana el 15 % en servicios y empieza con el 10 % en productos.
+        const productId = await createProduct({ sku: 'COM-1', price: 50 });
+        await receive({ productId, quantity: 5, unitCost: 20 }).expect(201);
+
+        expect(commissionOf(await sellProduct(productId, salonA.stylistId))).toBe('5.00');
+      });
+
+      it('la comisión especial del producto manda sobre la de la profesional', async () => {
+        const productId = await createProduct({ sku: 'COM-2', price: 50, commissionRate: 4 });
+        await receive({ productId, quantity: 5, unitCost: 20 }).expect(201);
+
+        expect(commissionOf(await sellProduct(productId, salonA.stylistId))).toBe('2.00');
+      });
+
+      it('cambia con el % en productos de la profesional', async () => {
+        await request(server())
+          .patch(api(`/stylists/${salonA.stylistId}`))
+          .set(auth())
+          .send({ productCommissionRate: 12 })
+          .expect(200);
+        const productId = await createProduct({ sku: 'COM-3', price: 50 });
+        await receive({ productId, quantity: 5, unitCost: 20 }).expect(201);
+
+        expect(commissionOf(await sellProduct(productId, salonA.stylistId))).toBe('6.00');
+      });
+
+      it('sin profesional no hay comisión', async () => {
+        const productId = await createProduct({ sku: 'COM-4', price: 50 });
+        await receive({ productId, quantity: 5, unitCost: 20 }).expect(201);
+
+        expect(commissionOf(await sellProduct(productId))).toBe('0.00');
+      });
+
+      it('lo que se gasta en cabina no da comisión: no es una venta', async () => {
+        const productId = await createProduct({ sku: 'COM-5', price: 50, isInternal: true });
+        await receive({ productId, quantity: 5, unitCost: 20 }).expect(201);
+        await request(server())
+          .post(api('/inventory/consume'))
+          .set(auth())
+          .send({ productId, quantity: 1 })
+          .expect(201);
+
+        const resumen = await request(server())
+          .get(api('/sales/summary'))
+          .query({ from: `${isoDay(-1)}T00:00:00Z`, to: `${isoDay(1)}T23:59:59Z` })
+          .set(auth())
+          .expect(200);
+        expect(resumen.body.data.commissions).toEqual([]);
+      });
     });
 
     it('sigue rechazando el mismo servicio de la misma profesional en dos líneas', async () => {
@@ -214,7 +277,7 @@ describe('Ventas y caja (integración)', () => {
 
     it('solo concede descuentos quien tiene invoices.discount', async () => {
       const base = { kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1, discountAmount: 6.05 };
-      // 30,25 − 6,05 = 24,20, que con el 21 % sembrado son 20,00 de base.
+      // 30,25 − 6,05 = 24,20. Sin IVA, la base es lo mismo que paga la clienta.
       const body = { lines: [base], payments: [{ method: 'CARD', amount: 24.2 }] };
 
       const recepcion = await request(server())
@@ -242,7 +305,8 @@ describe('Ventas y caja (integración)', () => {
       const owner = await sell(body).expect(201);
       expect(owner.body.data).toMatchObject({
         discountTotal: '6.05',
-        subtotal: '20.00',
+        subtotal: '24.20',
+        taxTotal: '0.00',
         total: '24.20',
       });
     });
@@ -672,6 +736,51 @@ describe('Ventas y caja (integración)', () => {
         .query({ from: `${isoDay(1)}T00:00:00Z`, to: `${isoDay(-1)}T00:00:00Z` })
         .set(auth())
         .expect(422);
+    });
+
+    it('da las comisiones a pagar por profesional, servicios y productos aparte', async () => {
+      const productId = await createProduct({ sku: 'CIERRE-1', price: 50 });
+      await receive({ productId, quantity: 5, unitCost: 20 }).expect(201);
+      const total = Number(await totalFor(salonA.serviceId));
+
+      await sell({
+        lines: [
+          { kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1, stylistId: salonA.stylistId },
+          { kind: 'PRODUCT', itemId: productId, quantity: 2, stylistId: salonA.stylistId },
+        ],
+        payments: [{ method: 'CARD', amount: Number((total + 100).toFixed(2)) }],
+      }).expect(201);
+      // Una anulada no se paga.
+      const anulada = await sell({
+        lines: [
+          { kind: 'SERVICE', itemId: salonA.serviceId, quantity: 1, stylistId: salonA.stylistId },
+        ],
+        payments: [{ method: 'CARD', amount: total }],
+      }).expect(201);
+      await request(server())
+        .post(api(`/sales/${anulada.body.data.id as string}/void`))
+        .set(auth())
+        .send({ reason: 'Prueba' })
+        .expect(201);
+
+      const resumen = await request(server())
+        .get(api('/sales/summary'))
+        .query({ from: `${isoDay(-1)}T00:00:00Z`, to: `${isoDay(1)}T23:59:59Z` })
+        .set(auth())
+        .expect(200);
+
+      expect(resumen.body.data.commissions).toEqual([
+        {
+          stylistId: salonA.stylistId,
+          // Sin nombre corto en la ficha, el directorio de ventas usa el completo.
+          stylistName: 'Sara Molina',
+          // 15 % de 30,25.
+          services: { count: 1, sold: '30.25', commission: '4.54' },
+          // 10 % de 100,00.
+          products: { count: 2, sold: '100.00', commission: '10.00' },
+          total: '14.54',
+        },
+      ]);
     });
 
     it('filtra por estado y por profesional', async () => {

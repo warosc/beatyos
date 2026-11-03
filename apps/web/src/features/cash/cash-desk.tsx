@@ -22,6 +22,7 @@ import { PendingCharges } from '@/features/service-tickets/pending-charges';
 import { PAYMENT_LABEL } from '@/features/sales/types';
 import { money } from '@/lib/utils';
 import { CashReport } from './cash-report';
+import { CommissionPayoutList } from './commission-payout';
 import { methodTotal, ShiftSummary, useShiftSummary } from './shift-summary';
 import { LoadError } from '@/components/ui/states';
 type Session = {
@@ -371,6 +372,7 @@ function CashForm({
                   </p>
                 );
               })}
+            <CommissionPayoutList commissions={shift.data?.commissions} />
           </div>
         )}
         {action === 'movement' && (

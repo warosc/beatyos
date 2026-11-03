@@ -429,6 +429,34 @@ describe('Stylist', () => {
       expect(stylist.commissionFor('svc-corte', null).value).toBe(15);
     });
 
+    it('empieza con un 10 % en productos (ADR-0026)', () => {
+      expect(create().productCommissionRate.value).toBe(10);
+    });
+
+    it('la comisión de un producto es su especial o el % en productos, nunca el de servicios', () => {
+      const stylist = create(); // 15 % en servicios, 10 % en productos
+
+      expect(stylist.productCommissionFor(Percentage.create(5)).value).toBe(5);
+      expect(stylist.productCommissionFor(null).value).toBe(10);
+    });
+
+    it('cambia el % en productos sin tocar el de servicios', () => {
+      const stylist = create();
+      stylist.updateProfile({ productCommissionRate: Percentage.create(12) }, NOW, 'admin');
+
+      expect(stylist.productCommissionRate.value).toBe(12);
+      expect(stylist.commissionRate.value).toBe(15);
+    });
+
+    it('en el historial lleva la marca de dada de baja (ADR-0027)', () => {
+      const stylist = create();
+      expect(stylist.historyName).toBe('Sara');
+
+      stylist.markDeleted(NOW, 'admin');
+
+      expect(stylist.historyName).toBe('Sara (dada de baja)');
+    });
+
     it('rechaza un servicio repetido', () => {
       const stylist = create();
 

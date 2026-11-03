@@ -258,6 +258,7 @@ export class PrismaStylistRepository
       status: stylist.status,
       hiredAt: stylist.hiredAt,
       commissionRate: stylist.commissionRate.value.toFixed(2),
+      productCommissionRate: stylist.productCommissionRate.value.toFixed(2),
       deletedAt: stylist.audit.deletedAt,
       deletedBy: stylist.audit.deletedBy,
     };
@@ -276,6 +277,7 @@ export class PrismaStylistRepository
       status: row.status,
       hiredAt: row.hiredAt,
       commissionRate: Percentage.create(Number(row.commissionRate)),
+      productCommissionRate: Percentage.create(Number(row.productCommissionRate)),
       schedule: row.schedules.map((block) => ({
         id: block.id,
         dayOfWeek: block.dayOfWeek,

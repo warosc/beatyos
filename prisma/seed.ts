@@ -415,7 +415,8 @@ async function seedSalon(salon: DemoSalon, roleIds: Map<string, string>): Promis
         durationMinutes: service.minutes,
         price: service.price,
         currency: 'GTQ',
-        taxRate: '12.00',
+        // El salón no cobra IVA (ADR-0026). Explícito para que re-sembrar no lo devuelva.
+        taxRate: '0.00',
       },
       create: {
         id: seedId(slug, 'service', service.code),
@@ -427,7 +428,8 @@ async function seedSalon(salon: DemoSalon, roleIds: Map<string, string>): Promis
         bufferMinutes: service.buffer,
         price: service.price,
         currency: 'GTQ',
-        taxRate: '12.00',
+        // El salón no cobra IVA (ADR-0026). Explícito para que re-sembrar no lo devuelva.
+        taxRate: '0.00',
         sortOrder: index,
       },
     });
@@ -492,7 +494,8 @@ async function seedSalon(salon: DemoSalon, roleIds: Map<string, string>): Promis
         price: product.price,
         costPrice: product.cost,
         currency: 'GTQ',
-        taxRate: '12.00',
+        // El salón no cobra IVA (ADR-0026). Explícito para que re-sembrar no lo devuelva.
+        taxRate: '0.00',
         // Va también aquí y no solo en `create`: el seed es re-ejecutable y los productos
         // de una siembra anterior solo pasan por esta rama. Sin esta línea, los lotes se
         // creaban pero el producto seguía sin marcar como trazado, y el reparto FEFO no se
@@ -508,7 +511,8 @@ async function seedSalon(salon: DemoSalon, roleIds: Map<string, string>): Promis
         price: product.price,
         costPrice: product.cost,
         currency: 'GTQ',
-        taxRate: '12.00',
+        // El salón no cobra IVA (ADR-0026). Explícito para que re-sembrar no lo devuelva.
+        taxRate: '0.00',
         stockOnHand: product.stock,
         reorderPoint: '5.000',
         reorderQuantity: '20.000',

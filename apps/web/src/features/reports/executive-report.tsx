@@ -57,7 +57,7 @@ export function ExecutiveReportView() {
       {report.isError && (
         <LoadError message={report.error.message} onRetry={() => report.refetch()} />
       )}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <Metric
           icon={CircleDollarSign}
           label="Ventas"
@@ -72,8 +72,13 @@ export function ExecutiveReportView() {
         <Metric icon={CalendarRange} label="Ocupación" value={data && `${data.occupancyRate}%`} />
         <Metric
           icon={Percent}
-          label="Comisiones"
-          value={data && currency.format(Number(data.commissionTotal))}
+          label="Comisión servicios"
+          value={data && currency.format(Number(data.serviceCommissionTotal))}
+        />
+        <Metric
+          icon={Percent}
+          label="Comisión productos"
+          value={data && currency.format(Number(data.productCommissionTotal))}
         />
       </div>
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
@@ -128,25 +133,68 @@ export function ExecutiveReportView() {
         </span>
         <ArrowRight size={18} className="text-muted-foreground" />
       </Link>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Ranking
-          title="Productos más vendidos"
-          rows={(data?.topProducts ?? []).map((x) => ({
-            name: x.name,
-            detail: `${x.quantity} unidades`,
-            value: currency.format(Number(x.revenue)),
-          }))}
-        />
-        <Ranking
-          title="Profesionales con más ventas"
-          rows={(data?.topStylists ?? []).map((x) => ({
-            name: x.name,
-            detail: `${x.services} servicios · Comisión ${currency.format(Number(x.commission))}`,
-            value: currency.format(Number(x.revenue)),
-          }))}
-        />
-      </div>
+      <Ranking
+        title="Productos más vendidos"
+        rows={(data?.topProducts ?? []).map((x) => ({
+          name: x.name,
+          detail: `${x.quantity} unidades`,
+          value: currency.format(Number(x.revenue)),
+        }))}
+      />
+      <StylistCommissions rows={data?.topStylists ?? []} />
     </div>
+  );
+}
+
+/**
+ * Lo que vendió y ganó cada profesional en el periodo. Servicios y productos van en columnas
+ * separadas porque son dos comisiones distintas, con su propio porcentaje (ADR-0026).
+ */
+function StylistCommissions({ rows }: { rows: ExecutiveReport['topStylists'] }) {
+  const q = (value: string) => currency.format(Number(value));
+  return (
+    <Card className="p-5">
+      <h2 className="font-display text-xl font-semibold">Comisiones por profesional</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Sobre lo que pagaron las clientas, después de descuentos.
+      </p>
+      {rows.length === 0 ? (
+        <Empty />
+      ) : (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="py-2 font-semibold">Profesional</th>
+                <th className="py-2 text-right font-semibold">Servicios</th>
+                <th className="py-2 text-right font-semibold">Vendido</th>
+                <th className="py-2 text-right font-semibold">Comisión</th>
+                <th className="py-2 text-right font-semibold">Productos</th>
+                <th className="py-2 text-right font-semibold">Vendido</th>
+                <th className="py-2 text-right font-semibold">Comisión</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {rows.map((x) => (
+                <tr key={x.id}>
+                  <td className="py-2 font-medium">{x.name}</td>
+                  <td className="py-2 text-right tabular-nums">{Number(x.services)}</td>
+                  <td className="py-2 text-right tabular-nums">{q(x.revenue)}</td>
+                  <td className="py-2 text-right font-semibold tabular-nums">
+                    {q(x.serviceCommission)}
+                  </td>
+                  <td className="py-2 text-right tabular-nums">{Number(x.products)}</td>
+                  <td className="py-2 text-right tabular-nums">{q(x.productRevenue)}</td>
+                  <td className="py-2 text-right font-semibold tabular-nums">
+                    {q(x.productCommission)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 function DateField({

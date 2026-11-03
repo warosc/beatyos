@@ -1,6 +1,6 @@
 # ADR-0021: Precios con IVA incluido
 
-- **Estado:** Aceptado
+- **Estado:** Aceptado. Enmendado por [ADR-0026](0026-sin-iva-comision-sobre-lo-cobrado-y-comision-de-productos.md): el IVA de venta pasa a cero y la comisión va sobre lo que paga la clienta
 - **Fecha:** 2026-10-08
 - **Cumple:** [ADR-0010](0010-dinero-y-precision-decimal.md)
 - **Enmienda:** [ADR-0014](0014-ventas-cobros-y-arqueo-de-caja.md) §2, en cómo se obtiene el impuesto de una línea

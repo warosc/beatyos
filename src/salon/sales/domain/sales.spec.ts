@@ -87,12 +87,37 @@ describe('buildInvoiceLine', () => {
     expect(() => aLine({ quantity: 0 })).toThrow(DomainValidationError);
   });
 
-  it('calcula la comisión sobre la base, no sobre el total con impuesto', () => {
-    // El IVA no es ingreso del salón: es dinero recaudado para Hacienda, y pagar comisión
-    // sobre él sería pagar por recaudar. El 20 % de 100 son 20, no el 20 % de 112.
+  it('calcula la comisión sobre lo que paga la clienta (ADR-0026)', () => {
+    // El salón no cobra IVA: si la clienta paga Q30 y la comisión es del 20 %, son Q6.00.
+    const line = aLine({
+      unitPrice: gtq('30.00'),
+      taxRate: Percentage.zero(),
+      commissionRate: Percentage.create(20),
+    });
+
+    expect(line.taxAmount.toDecimalString()).toBe('0.00');
+    expect(line.lineSubtotal.toDecimalString()).toBe('30.00');
+    expect(line.commissionAmount.toDecimalString()).toBe('6.00');
+  });
+
+  it('calcula la comisión después del descuento', () => {
+    const line = aLine({
+      unitPrice: gtq('30.00'),
+      taxRate: Percentage.zero(),
+      discountAmount: gtq('5.00'),
+      commissionRate: Percentage.create(20),
+    });
+
+    expect(line.lineTotal.toDecimalString()).toBe('25.00');
+    expect(line.commissionAmount.toDecimalString()).toBe('5.00');
+  });
+
+  it('con IVA dentro del precio, la comisión también va sobre el total', () => {
+    // Una línea con IVA solo puede venir de antes de ADR-0026; si llegara a construirse,
+    // la comisión es sobre lo que pagó la clienta, no sobre la base.
     const line = aLine({ unitPrice: gtq('112.00'), commissionRate: Percentage.create(20) });
 
-    expect(line.commissionAmount.toDecimalString()).toBe('20.00');
+    expect(line.commissionAmount.toDecimalString()).toBe('22.40');
   });
 
   it('no devenga comisión si el servicio no la tiene fijada', () => {
@@ -168,7 +193,8 @@ describe('Invoice', () => {
         aLine({ unitPrice: gtq('56.00'), commissionRate: Percentage.create(10) }),
       ]);
 
-      expect(invoice.commissionTotal.toDecimalString()).toBe('25.00');
+      // 20 % de 112 más 10 % de 56: sobre lo que paga la clienta.
+      expect(invoice.commissionTotal.toDecimalString()).toBe('28.00');
     });
 
     it('distingue las líneas de producto, que son las que mueven existencias', () => {

@@ -4,7 +4,6 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAccess } from '@/components/session-access';
 import { sessionFetch } from '@/lib/session-fetch';
-import { IVA_RATE, includedTax } from '@/lib/tax';
 import { useDialog } from '@/lib/use-dialog';
 import { money } from '@/lib/utils';
 import { DialogClose } from '@/components/ui/dialog-close';
@@ -14,9 +13,10 @@ export type Product = {
   sku: string;
   name: string;
   brand: string | null;
-  /** Lo que paga la clienta, con el IVA dentro (ADR-0021). */
+  /** Lo que paga la clienta. El salón no cobra IVA (ADR-0026). */
   price: string;
-  taxRate: string;
+  /** Comisión especial al venderlo. `null`: la de cada profesional en productos. */
+  commissionRate?: number | null;
   /** La API lo omite a quien no tiene `products.read-cost`: hoy, solo la propietaria lo ve. */
   costPrice?: string;
   currency: string;
@@ -35,8 +35,9 @@ const cents = (value: string | number) => Math.round(Number(value) * 100);
 /**
  * Alta y edición de un producto.
  *
- * La dueña escribe lo que cobra, con el IVA ya dentro, y eso es lo que guarda la API y lo que
- * se cobra en caja, al centavo. El IVA solo se muestra como dato interno.
+ * La dueña escribe lo que cobra, y eso es lo que guarda la API y lo que se cobra en caja, al
+ * centavo. El salón no cobra IVA (ADR-0026). La comisión especial, si la tiene, manda sobre
+ * el % en productos de cada profesional cuando se lo cobra a su nombre.
  */
 export function ProductDialog({
   product,
@@ -51,7 +52,10 @@ export function ProductDialog({
   const { can } = useAccess();
   const canSeeCosts = can('products.read-cost');
   const dialogRef = useDialog(onClose);
-  const taxRate = product ? Number(product.taxRate) : IVA_RATE;
+  const currentCommission =
+    product?.commissionRate === null || product?.commissionRate === undefined
+      ? ''
+      : String(product.commissionRate);
   const currentCents = product ? cents(product.price) : 0;
   const [salePrice, setSalePrice] = useState(product ? String(currentCents / 100) : '');
   const [error, setError] = useState('');
@@ -65,6 +69,8 @@ export function ProductDialog({
     setError('');
     const f = new FormData(e.currentTarget);
     const costPrice = String(f.get('costPrice') ?? '').trim();
+    const commission = String(f.get('commissionRate') ?? '').trim();
+    const commissionRate = commission === '' ? null : Number(commission);
     const common = {
       name: f.get('name'),
       reorderPoint: Number(f.get('reorderPoint')),
@@ -77,6 +83,8 @@ export function ProductDialog({
           brand: String(f.get('brand') ?? ''),
           // Solo si cambia: un cambio de precio queda registrado aparte en la auditoría.
           ...(typedCents !== currentCents ? { price: typedCents / 100 } : {}),
+          // Vacía, se quita la especial y vuelve a mandar la de cada profesional.
+          ...(commission !== currentCommission ? { commissionRate } : {}),
           // Corregir el coste cambia la valoración del almacén: solo se manda si cambió.
           ...(costPrice && cents(costPrice) !== cents(product.costPrice ?? '')
             ? { costPrice: Number(costPrice) }
@@ -94,7 +102,7 @@ export function ProductDialog({
             .replace(/^-+/, ''),
           brand: f.get('brand') || undefined,
           price: typedCents / 100,
-          taxRate: IVA_RATE,
+          commissionRate,
           // Vacío no es «cuesta cero»: se omite y la primera entrada de mercancía fija el coste.
           costPrice: costPrice ? Number(costPrice) : undefined,
         };
@@ -177,11 +185,28 @@ export function ProductDialog({
             {typedCents > 0 ? (
               <>
                 La clienta paga <strong>{money(typedCents / 100)}</strong>, lo mismo que verás en
-                caja. Ya incluye {money(includedTax(typedCents, taxRate) / 100)} de IVA.
+                caja.
               </>
             ) : (
-              'Lo que paga la clienta, con el IVA ya incluido.'
+              'Lo que paga la clienta.'
             )}
+          </span>
+        </label>
+        <label className="block text-sm font-semibold">
+          Comisión especial (%, opcional)
+          <input
+            name="commissionRate"
+            type="number"
+            min={0}
+            max={100}
+            step="0.01"
+            inputMode="decimal"
+            placeholder="La de cada profesional"
+            defaultValue={currentCommission}
+            className={input}
+          />
+          <span className={hint}>
+            Déjalo vacío para que cada profesional gane su % en productos cuando lo vende.
           </span>
         </label>
         {/* Quien no puede ver el coste tampoco lo escribe: la API lo rechazaría. */}

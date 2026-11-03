@@ -94,12 +94,12 @@ describe('Casos de uso de catálogo', () => {
   };
 
   describe('servicios', () => {
-    it('crea con el IVA dentro del precio', async () => {
+    it('crea sin IVA: lo que paga la clienta (ADR-0026)', async () => {
       const service = await newService();
 
       expect(service.code).toBe('COR-M');
       expect(service.priceWithTax.toDecimalString()).toBe('25.00');
-      expect(service.taxAmount.toDecimalString()).toBe('2.68');
+      expect(service.taxAmount.toDecimalString()).toBe('0.00');
       expect(audit.has('CREATE')).toBe(true);
     });
 

@@ -131,6 +131,14 @@ export class PurchaseOrderViewFactory {
   }
 }
 
+/**
+ * IVA que cobra el proveedor cuando la línea no indica otro: el 12 % de Guatemala.
+ *
+ * No sale del producto porque el producto lleva el IVA de **venta**, y el salón no lo cobra
+ * (ADR-0026). Tomarlo de ahí dejaba cada orden nueva sin el IVA que sí trae la factura.
+ */
+const DEFAULT_SUPPLIER_TAX_RATE = 12;
+
 const uniqueProductIds = (orders: readonly PurchaseOrder[]): string[] => [
   ...new Set(orders.flatMap((order) => order.lines.map((line) => line.productId))),
 ];
@@ -205,7 +213,6 @@ export class CreatePurchaseOrderUseCase implements UseCase<
       }
 
       const now = this.clock.now();
-      const taxRateOf = new Map(products.map((product) => [product.id, product.taxRate]));
 
       const lines = input.lines.map((line) =>
         buildPurchaseOrderLine({
@@ -213,12 +220,12 @@ export class CreatePurchaseOrderUseCase implements UseCase<
           productId: line.productId,
           quantity: Quantity.fromDecimal(line.quantity),
           unitCost: Money.fromDecimal(line.unitCost, this.currency),
-          // El tipo por defecto de una línea es el del producto que se compra, no una
-          // constante: escribir un 12 aquí ataba el módulo al IVA guatemalteco y se
-          // desviaba en cuanto un producto declaraba otro.
+          // Es el IVA que cobra el proveedor, no el de venta del producto: el salón dejó de
+          // cobrar IVA (ADR-0026) y sus productos están a cero, pero la factura del proveedor
+          // lo sigue llevando y la orden tiene que cuadrar con ella.
           taxRate:
             line.taxRate === undefined
-              ? (taxRateOf.get(line.productId) ?? Percentage.zero())
+              ? Percentage.create(DEFAULT_SUPPLIER_TAX_RATE)
               : Percentage.create(line.taxRate),
           notes: line.notes,
           now,

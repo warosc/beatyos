@@ -43,12 +43,33 @@ export type Sale = {
   payments?: SalePayment[];
 };
 
+/** Servicios o productos cobrados a nombre de una profesional. */
+export type CommissionBucket = {
+  /** Servicios realizados o unidades de producto. */
+  count: number;
+  /** Lo que pagaron las clientas, después de descuentos. */
+  sold: string;
+  commission: string;
+};
+
+/** Lo que hay que pagarle a una profesional por el periodo (ADR-0026). */
+export type StylistCommission = {
+  stylistId: string;
+  stylistName: string;
+  services: CommissionBucket;
+  products: CommissionBucket;
+  /** Servicios más productos: lo que se le entrega. */
+  total: string;
+};
+
 export type SalesSummary = {
   count: number;
   total: string;
   discountTotal: string;
   voidCount: number;
   byMethod: { method: string; received: string; refunded: string; net: string }[];
+  /** Comisiones a pagar por profesional. Informativo: no cambia el efectivo esperado. */
+  commissions: StylistCommission[];
 };
 
 export type TenantProfile = {

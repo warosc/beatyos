@@ -123,6 +123,7 @@ test('muestra lo cobrado por método para cuadrar el día', async ({ page }) => 
   await expect(totales).toContainText(/Tarjeta\s*Q\s*50\.00/);
   await expect(totales).toContainText('1 anuladas aparte');
   await expect(page.getByRole('row', { name: /F-2026-000011/ })).toContainText('Anulada');
+  await expect(page.getByRole('row', { name: /F-2026-000010/ })).toContainText('Corte de dama');
 });
 
 test('abre el comprobante y la propietaria anula la venta', async ({ page }) => {

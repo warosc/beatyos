@@ -74,7 +74,7 @@ describe('Metas e incentivos (integración)', () => {
         ...overrides,
       });
 
-  // El servicio del seed vale 25,00 con 21 % de IVA: 30,25 al cobro, 25,00 de base imponible.
+  // El servicio del seed vale 30,25: lo que paga la clienta, sin IVA (ADR-0026).
   const sellService = (stylistId = salonA.stylistId) =>
     request(server())
       .post(api('/sales'))
@@ -101,7 +101,12 @@ describe('Metas e incentivos (integración)', () => {
       const goal = (list.body.data as Array<{ id: string }>).find(
         (g) => g.id === (created.body.data.id as string),
       );
-      expect(goal).toMatchObject({ progress: '25.00', percentage: 50, status: 'ACTIVE' });
+      expect(goal).toMatchObject({
+        progress: '30.25',
+        percentage: 61,
+        status: 'ACTIVE',
+        stylistName: 'Sara',
+      });
     });
 
     it('se marca cumplida al alcanzar el objetivo, y una venta anulada después no la retira', async () => {

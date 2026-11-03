@@ -78,7 +78,7 @@ const guides = [
   {
     image: '/help/equipo.svg',
     title: 'Configura servicios y jornadas',
-    text: 'Define comisiones, agrega o retira servicios, asigna qué servicios realiza cada profesional y registra descansos, vacaciones y horarios.',
+    text: 'Define la comisión de cada profesional en servicios y en productos, agrega o retira servicios, asigna qué servicios realiza cada profesional, registra descansos, vacaciones y horarios, y da de baja a quien deja el salón.',
     href: '/comisiones',
     permissions: ['services.update', 'stylists.manage-schedule'],
   },

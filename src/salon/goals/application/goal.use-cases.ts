@@ -9,12 +9,17 @@ import {
   type IdGenerator,
   type UseCase,
 } from '../../../shared/application/ports';
+import { BusinessRuleViolationError, EntityNotFoundError } from '../../../shared/domain/errors';
 import type { Page, PageRequest } from '../../../shared/domain/ports/repository.port';
 import { Money } from '../../../shared/domain/value-objects/money.vo';
 import {
   REPORTING_REPOSITORY,
   type ReportingRepository,
 } from '../../reports/domain/reporting.repository';
+import {
+  STYLIST_REPOSITORY,
+  type StylistRepository,
+} from '../../stylists/domain/stylist.repository';
 import { Goal, type GoalMetricValue } from '../domain/goal.entity';
 import {
   GOAL_REPOSITORY,
@@ -47,10 +52,23 @@ export class CreateGoalUseCase implements UseCase<CreateGoalInput, GoalWithProgr
     @Inject(ID_GENERATOR) private readonly ids: IdGenerator,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(AUDIT_RECORDER) private readonly audit: AuditRecorder,
+    @Inject(STYLIST_REPOSITORY) private readonly stylists: StylistRepository,
   ) {}
 
   async execute(input: CreateGoalInput): Promise<GoalWithProgress> {
     const now = this.clock.now();
+
+    // Una meta es para alguien que sigue en el equipo: a una dada de baja o inactiva no le
+    // queda nada que vender (ADR-0027).
+    const stylist = await this.stylists.findById(input.stylistId, { includeDeleted: true });
+    if (!stylist) throw new EntityNotFoundError('Profesional', input.stylistId);
+    if (!stylist.isBookable()) {
+      throw new BusinessRuleViolationError(
+        'STYLIST_NOT_AVAILABLE',
+        `${stylist.displayName} ya no está en el equipo: no se le pueden poner metas nuevas`,
+        { stylistId: stylist.id },
+      );
+    }
 
     const goal = Goal.define({
       id: this.ids.generate(),
@@ -161,7 +179,9 @@ async function withProgress(
   const progress = Money.sum(
     lines
       .filter((line) => line.stylistId === goal.stylistId && line.kind === kind)
-      .map((line) => line.lineSubtotal),
+      // Lo que pagaron las clientas, después de descuentos: la misma base que la comisión
+      // (ADR-0026).
+      .map((line) => line.lineTotal),
     currency,
   );
 

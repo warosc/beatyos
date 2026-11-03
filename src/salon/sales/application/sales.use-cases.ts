@@ -43,10 +43,12 @@ import {
   SERVICE_TICKET_REPOSITORY,
   type ServiceTicketRepository,
 } from '../../service-tickets/domain/service-ticket.repository';
+import type { Stylist } from '../../stylists/domain/stylist.entity';
 import {
   STYLIST_REPOSITORY,
   type StylistRepository,
 } from '../../stylists/domain/stylist.repository';
+import { commissionPayouts, type StylistCommissionPayout } from '../domain/commission-payout';
 import { buildInvoiceLine, Invoice, type InvoiceLine } from '../domain/invoice.entity';
 import { Payment, type PaymentMethodValue } from '../domain/payment.entity';
 import {
@@ -244,7 +246,7 @@ export class RegisterSaleUseCase implements UseCase<RegisterSaleInput, RegisterS
       this.services.findManyByIds(serviceIds),
       // Una venta rara vez lleva a más de un par de estilistas: no hace falta un
       // `findManyByIds` en el repositorio solo para esto.
-      Promise.all(stylistIds.map((id) => this.stylists.findByIdOrFail(id))),
+      Promise.all(stylistIds.map((id) => this.availableStylist(id))),
     ]);
 
     const productsById = new Map(products.map((product) => [product.id, product]));
@@ -270,13 +272,14 @@ export class RegisterSaleUseCase implements UseCase<RegisterSaleInput, RegisterS
 
       // Sin profesional asignado no hay comisión: devengarla sin saber a quién pagársela
       // produce un pasivo sin destinatario. Con profesional, un servicio usa la cascada
-      // completa del dominio (ajuste por habilidad → tarifa del servicio → general de la
-      // estilista); un producto no tiene ajuste por habilidad, así que usa directamente su
-      // tarifa general.
+      // completa del dominio (ajuste por habilidad → comisión especial del servicio → su %
+      // en servicios). Un producto cobrado usa la especial del producto o su % en
+      // productos, nunca el de servicios (ADR-0026). Los insumos que se gastan en cabina
+      // no pasan por aquí: no son líneas de venta y no dan comisión.
       const stylist = line.stylistId ? stylistsById.get(line.stylistId) : undefined;
       const commissionRate = stylist
         ? isProduct
-          ? stylist.commissionRate
+          ? stylist.productCommissionFor(productsById.get(line.itemId)?.commissionRate ?? null)
           : stylist.commissionFor(
               line.itemId,
               servicesById.get(line.itemId)?.commissionRate ?? null,
@@ -302,6 +305,26 @@ export class RegisterSaleUseCase implements UseCase<RegisterSaleInput, RegisterS
     });
 
     return { lines, productsById };
+  }
+
+  /**
+   * La profesional a la que se le asigna una línea, si todavía puede cobrar a su nombre.
+   *
+   * Dada de baja o inactiva ya no está en el equipo, y una venta nueva a su nombre le
+   * devengaría una comisión que nadie le va a pagar (ADR-0027). De vacaciones sí: puede
+   * quedar una comanda suya por cobrar.
+   */
+  private async availableStylist(id: string): Promise<Stylist> {
+    const stylist = await this.stylists.findById(id, { includeDeleted: true });
+    if (!stylist) throw new EntityNotFoundError('Profesional', id);
+    if (stylist.isDeleted || stylist.status === 'INACTIVE') {
+      throw new BusinessRuleViolationError(
+        'STYLIST_NOT_AVAILABLE',
+        `${stylist.displayName} ya no está en el equipo: elige otra profesional`,
+        { stylistId: id },
+      );
+    }
+    return stylist;
   }
 
   /**
@@ -461,17 +484,23 @@ export class GetInvoiceUseCase implements UseCase<{ invoiceId: string }, Invoice
 export interface SalesSummary {
   readonly invoices: InvoiceTotals;
   readonly byMethod: readonly PaymentMethodTotals[];
+  /** Comisiones a pagar por profesional, servicios y productos por separado (ADR-0026). */
+  readonly commissions: readonly StylistCommissionPayout[];
 }
 
 /**
  * Cuadre de un periodo —un día, un turno de caja—: lo facturado y, por método, lo cobrado
  * y lo devuelto. Es la cifra que se compara con el cajón, el datáfono y el banco.
+ *
+ * Trae también lo que hay que pagarle a cada profesional por ese periodo: al cerrar la caja
+ * se le entregan sus comisiones del día. Es informativo, no mueve el efectivo esperado.
  */
 @Injectable()
 export class SummarizeSalesUseCase implements UseCase<DateRange, SalesSummary> {
   constructor(
     @Inject(INVOICE_REPOSITORY) private readonly invoices: InvoiceRepository,
     @Inject(PAYMENT_REPOSITORY) private readonly payments: PaymentRepository,
+    @Inject(SALES_DIRECTORY) private readonly directory: SalesDirectory,
   ) {}
 
   async execute(range: DateRange): Promise<SalesSummary> {
@@ -481,11 +510,27 @@ export class SummarizeSalesUseCase implements UseCase<DateRange, SalesSummary> {
         'La fecha de inicio es posterior a la de fin',
       );
     }
-    const [invoices, byMethod] = await Promise.all([
+    const [invoices, byMethod, byStylist] = await Promise.all([
       this.invoices.summarize(range),
       this.payments.summarizeByMethod(range),
+      this.invoices.salesByStylist(range),
     ]);
-    return { invoices, byMethod };
+    const names = byStylist.length
+      ? await this.directory.namesFor({
+          clientIds: [],
+          userIds: [],
+          stylistIds: byStylist.map((row) => row.stylistId),
+        })
+      : undefined;
+    return {
+      invoices,
+      byMethod,
+      commissions: commissionPayouts(
+        byStylist,
+        names?.stylists ?? new Map(),
+        invoices.total.currency,
+      ),
+    };
   }
 }
 

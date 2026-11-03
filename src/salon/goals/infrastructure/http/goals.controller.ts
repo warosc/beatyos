@@ -80,7 +80,7 @@ export class GoalsController {
       actorId: user.sub,
     });
 
-    return present(created);
+    return present(created, await this.namesFor([created]));
   }
 
   @Get()
@@ -110,7 +110,21 @@ export class GoalsController {
       restrictToStylistId: await this.ownScopeFor(user),
     });
 
-    return { data: page.data.map(present), meta: page.meta };
+    const names = await this.namesFor(page.data);
+    return { data: page.data.map((item) => present(item, names)), meta: page.meta };
+  }
+
+  /** Nombres de las profesionales de las metas, también de las dadas de baja (ADR-0027). */
+  private async namesFor(items: readonly GoalWithProgress[]): Promise<Map<string, string>> {
+    const ids = [...new Set(items.map((item) => item.goal.stylistId))];
+    const found = await Promise.all(
+      ids.map((id) => this.stylists.findById(id, { includeDeleted: true })),
+    );
+    return new Map(
+      found
+        .filter((stylist) => stylist !== null)
+        .map((stylist) => [stylist.id, stylist.historyName]),
+    );
   }
 
   @Delete(':id')
@@ -127,9 +141,10 @@ export class GoalsController {
 
 // ---------------------------------------------------------------------------
 
-const present = (item: GoalWithProgress): GoalResponse => ({
+const present = (item: GoalWithProgress, names: ReadonlyMap<string, string>): GoalResponse => ({
   id: item.goal.id,
   stylistId: item.goal.stylistId,
+  stylistName: names.get(item.goal.stylistId) ?? 'Profesional',
   metric: item.goal.metric,
   targetAmount: item.goal.targetAmount.toDecimalString(),
   progress: item.progress.toDecimalString(),

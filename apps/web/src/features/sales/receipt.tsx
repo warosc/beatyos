@@ -1,4 +1,5 @@
 'use client';
+import { withoutRetiredMark } from '@/lib/retired';
 import { money } from '@/lib/utils';
 import { PAYMENT_LABEL, type Sale, type TenantProfile } from './types';
 
@@ -70,7 +71,10 @@ export function Receipt({
                 <p>
                   {Number(line.quantity)} × {line.description}
                 </p>
-                {line.stylistName && <p className="text-[10px]">con {line.stylistName}</p>}
+                {/* La clienta no necesita saber que la profesional ya no está. */}
+                {line.stylistName && (
+                  <p className="text-[10px]">con {withoutRetiredMark(line.stylistName)}</p>
+                )}
                 {Number(line.discountAmount) > 0 && (
                   <p className="text-[10px]">Descuento −{money(line.discountAmount)}</p>
                 )}
@@ -82,8 +86,8 @@ export function Receipt({
       </table>
 
       <dl className="mt-1 space-y-0.5 border-t border-dashed border-black pt-1">
-        {/* Precios y descuentos con IVA incluido (ADR-0021): el impuesto se desglosa, no se
-            suma. El subtotal es lo que se habría pagado sin descuentos. */}
+        {/* El subtotal es lo que se habría pagado sin descuentos. El salón no cobra IVA
+            (ADR-0026): solo una venta de antes lo lleva, y entonces se desglosa, no se suma. */}
         {Number(sale.discountTotal) > 0 && (
           <>
             <Pair label="Subtotal" value={money(Number(sale.total) + Number(sale.discountTotal))} />
@@ -94,7 +98,7 @@ export function Receipt({
           <dt>TOTAL</dt>
           <dd>{money(sale.total)}</dd>
         </div>
-        <Pair label="IVA incluido" value={money(sale.taxTotal)} />
+        {Number(sale.taxTotal) > 0 && <Pair label="IVA incluido" value={money(sale.taxTotal)} />}
       </dl>
 
       {!!sale.payments?.length && (
