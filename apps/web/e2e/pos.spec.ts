@@ -9,7 +9,7 @@ type SaleBody = {
 const corte = {
   id: 'service-1',
   name: 'Corte de dama',
-  // Lo que paga la clienta. El salón no cobra IVA (ADR-0026).
+  // Lo que paga la clienta. El salón no cobra IVA (ADR-0027).
   price: '28.00',
   taxRate: 12,
   color: '#db2777',

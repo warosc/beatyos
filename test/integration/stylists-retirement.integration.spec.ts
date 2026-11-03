@@ -9,7 +9,7 @@ import { api, createTestApp, resetDatabase } from './app-harness';
 import { seedTwoTenants, TEST_PASSWORD, type SeededTenant } from './fixtures';
 
 /**
- * Dar de baja a una profesional, de extremo a extremo (ADR-0027).
+ * Dar de baja a una profesional, de extremo a extremo (ADR-0028).
  *
  * Lo que solo se ve con la base real: que lo pendiente se cuente en las tablas de agenda,
  * cola y comandas; que la baja apague su acceso en la misma transacción; que su nombre siga

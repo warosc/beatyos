@@ -478,7 +478,7 @@ export const NO_PENDING_WORK: StylistPendingWork = {
 };
 
 /**
- * Lo pendiente de cada profesional, fijado por el test (ADR-0027).
+ * Lo pendiente de cada profesional, fijado por el test (ADR-0028).
  *
  * Liberar las preferencias pone a cero las clientas en espera que la pedían y anota a
  * quién se le liberaron, para comprobar que la baja lo hace.

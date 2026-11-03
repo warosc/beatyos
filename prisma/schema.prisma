@@ -422,7 +422,7 @@ model Stylist {
   hiredAt        DateTime?     @db.Date
   /// Porcentaje de comision en servicios, 0-100. El servicio puede sobreescribirlo.
   commissionRate Decimal       @default(0) @db.Decimal(5, 2)
-  /// Porcentaje de comision en productos cobrados, 0-100 (ADR-0026). La comision especial
+  /// Porcentaje de comision en productos cobrados, 0-100 (ADR-0027). La comision especial
   /// del producto, si la tiene, manda sobre este.
   productCommissionRate Decimal @default(10) @db.Decimal(5, 2)
 
@@ -598,7 +598,7 @@ model Service {
   bufferMinutes    Int      @default(0)
   price            Decimal  @db.Decimal(12, 2)
   currency         String   @default("GTQ") @db.Char(3)
-  /// El salon no cobra IVA (ADR-0026): siempre 0. Las ventas antiguas guardan el suyo.
+  /// El salon no cobra IVA (ADR-0027): siempre 0. Las ventas antiguas guardan el suyo.
   taxRate          Decimal  @default(0) @db.Decimal(5, 2)
   commissionRate   Decimal? @db.Decimal(5, 2)
   isActive         Boolean  @default(true)
@@ -664,7 +664,7 @@ model Product {
   /// Coste medio ponderado, recalculado en cada entrada (ADR-0011).
   costPrice Decimal @default(0) @db.Decimal(12, 2)
   currency  String  @default("GTQ") @db.Char(3)
-  /// El salon no cobra IVA (ADR-0026): siempre 0.
+  /// El salon no cobra IVA (ADR-0027): siempre 0.
   taxRate   Decimal @default(0) @db.Decimal(5, 2)
   /// Comision especial al venderlo, 0-100. Nula: la de cada profesional en productos.
   commissionRate Decimal? @db.Decimal(5, 2)

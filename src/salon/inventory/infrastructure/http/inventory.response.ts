@@ -29,7 +29,7 @@ export class ProductResponse {
   stockValue?: string;
   marginPercentage?: number | null;
   currency!: string;
-  /** Siempre `0.00` desde ADR-0026: el salón no cobra IVA. */
+  /** Siempre `0.00` desde ADR-0027: el salón no cobra IVA. */
   taxRate!: string;
   /** Comisión especial al venderlo. `null`: la de cada profesional en productos. */
   commissionRate!: number | null;

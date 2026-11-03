@@ -105,7 +105,7 @@ export class CreateStylistDto {
     maximum: 100,
     default: 10,
     description:
-      '% en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0026).',
+      '% en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0027).',
     example: 10,
   })
   @IsOptional()
@@ -379,7 +379,7 @@ export class StylistResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Baja (ADR-0027)
+// Baja (ADR-0028)
 // ---------------------------------------------------------------------------
 
 export class RetirementAppointmentResponse {

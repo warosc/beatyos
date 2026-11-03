@@ -1992,7 +1992,7 @@
         ]
       },
       "delete": {
-        "description": "Borrado lógico (ADR-0027). Deja de aparecer en la agenda, la caja, la cola y las metas, y su acceso al sistema se desactiva (salvo si es dueña). Sus ventas, citas y comisiones pasadas se conservan con su nombre. Las clientas en espera que la pidieron pasan a la fila general. No se puede con citas por atender, comandas sin cobrar o turnos en curso.",
+        "description": "Borrado lógico (ADR-0028). Deja de aparecer en la agenda, la caja, la cola y las metas, y su acceso al sistema se desactiva (salvo si es dueña). Sus ventas, citas y comisiones pasadas se conservan con su nombre. Las clientas en espera que la pidieron pasan a la fila general. No se puede con citas por atender, comandas sin cobrar o turnos en curso.",
         "operationId": "Stylists_remove",
         "parameters": [
           {
@@ -2321,7 +2321,7 @@
     },
     "/api/v1/stylists/{id}/retirement": {
       "get": {
-        "description": "Lista sus citas por atender, comandas sin cobrar y turnos en curso, que hay que resolver antes de darla de baja, y dice si su acceso al sistema se desactivará (ADR-0027).",
+        "description": "Lista sus citas por atender, comandas sin cobrar y turnos en curso, que hay que resolver antes de darla de baja, y dice si su acceso al sistema se desactivará (ADR-0028).",
         "operationId": "Stylists_retirement",
         "parameters": [
           {
@@ -8834,7 +8834,7 @@
             "minimum": 0,
             "maximum": 100,
             "default": 10,
-            "description": "% en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0026).",
+            "description": "% en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0027).",
             "example": 10
           },
           "userId": {
@@ -9129,7 +9129,7 @@
             "minimum": 0,
             "maximum": 100,
             "default": 10,
-            "description": "% en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0026).",
+            "description": "% en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0027).",
             "example": 10
           },
           "userId": {
@@ -9536,7 +9536,7 @@
           "taxAmount": {
             "type": "string",
             "example": "0.00",
-            "description": "IVA que va dentro del precio. Siempre 0 desde ADR-0026: el salón no cobra IVA"
+            "description": "IVA que va dentro del precio. Siempre 0 desde ADR-0027: el salón no cobra IVA"
           },
           "priceWithTax": {
             "type": "string",
@@ -9550,7 +9550,7 @@
           "taxRate": {
             "type": "number",
             "example": 0,
-            "description": "Siempre 0 desde ADR-0026"
+            "description": "Siempre 0 desde ADR-0027"
           },
           "commissionRate": {
             "type": "number",
@@ -10734,7 +10734,7 @@
           },
           "taxRate": {
             "type": "string",
-            "description": "Siempre `0.00` desde ADR-0026: el salón no cobra IVA."
+            "description": "Siempre `0.00` desde ADR-0027: el salón no cobra IVA."
           },
           "commissionRate": {
             "type": "number",
@@ -10887,7 +10887,7 @@
             "minimum": 0,
             "maximum": 100,
             "example": 5,
-            "description": "Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0026). El salón no cobra IVA, así que no se acepta tipo impositivo."
+            "description": "Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0027). El salón no cobra IVA, así que no se acepta tipo impositivo."
           },
           "reorderPoint": {
             "type": "number",
@@ -10977,7 +10977,7 @@
             "minimum": 0,
             "maximum": 100,
             "example": 5,
-            "description": "Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0026). El salón no cobra IVA, así que no se acepta tipo impositivo."
+            "description": "Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0027). El salón no cobra IVA, así que no se acepta tipo impositivo."
           },
           "reorderPoint": {
             "type": "number",

@@ -570,7 +570,7 @@ export interface paths {
         post?: never;
         /**
          * Dar de baja a un profesional
-         * @description Borrado lógico (ADR-0027). Deja de aparecer en la agenda, la caja, la cola y las metas, y su acceso al sistema se desactiva (salvo si es dueña). Sus ventas, citas y comisiones pasadas se conservan con su nombre. Las clientas en espera que la pidieron pasan a la fila general. No se puede con citas por atender, comandas sin cobrar o turnos en curso.
+         * @description Borrado lógico (ADR-0028). Deja de aparecer en la agenda, la caja, la cola y las metas, y su acceso al sistema se desactiva (salvo si es dueña). Sus ventas, citas y comisiones pasadas se conservan con su nombre. Las clientas en espera que la pidieron pasan a la fila general. No se puede con citas por atender, comandas sin cobrar o turnos en curso.
          */
         delete: operations["Stylists_remove"];
         options?: never;
@@ -685,7 +685,7 @@ export interface paths {
         };
         /**
          * Qué impide dar de baja a una profesional
-         * @description Lista sus citas por atender, comandas sin cobrar y turnos en curso, que hay que resolver antes de darla de baja, y dice si su acceso al sistema se desactivará (ADR-0027).
+         * @description Lista sus citas por atender, comandas sin cobrar y turnos en curso, que hay que resolver antes de darla de baja, y dice si su acceso al sistema se desactivará (ADR-0028).
          */
         get: operations["Stylists_retirement"];
         put?: never;
@@ -2627,7 +2627,7 @@ export interface components {
              */
             commissionRate?: number;
             /**
-             * @description % en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0026).
+             * @description % en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0027).
              * @default 10
              * @example 10
              */
@@ -2746,7 +2746,7 @@ export interface components {
              */
             commissionRate?: number;
             /**
-             * @description % en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0026).
+             * @description % en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0027).
              * @default 10
              * @example 10
              */
@@ -2924,7 +2924,7 @@ export interface components {
              */
             price: string;
             /**
-             * @description IVA que va dentro del precio. Siempre 0 desde ADR-0026: el salón no cobra IVA
+             * @description IVA que va dentro del precio. Siempre 0 desde ADR-0027: el salón no cobra IVA
              * @example 0.00
              */
             taxAmount: string;
@@ -2936,7 +2936,7 @@ export interface components {
             /** @example GTQ */
             currency: string;
             /**
-             * @description Siempre 0 desde ADR-0026
+             * @description Siempre 0 desde ADR-0027
              * @example 0
              */
             taxRate: number;
@@ -3335,7 +3335,7 @@ export interface components {
             stockValue?: string;
             marginPercentage?: number | null;
             currency: string;
-            /** @description Siempre `0.00` desde ADR-0026: el salón no cobra IVA. */
+            /** @description Siempre `0.00` desde ADR-0027: el salón no cobra IVA. */
             taxRate: string;
             /** @description Comisión especial al venderlo. `null`: la de cada profesional en productos. */
             commissionRate: number | null;
@@ -3381,7 +3381,7 @@ export interface components {
             /** @example 65 */
             costPrice?: number;
             /**
-             * @description Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0026). El salón no cobra IVA, así que no se acepta tipo impositivo.
+             * @description Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0027). El salón no cobra IVA, así que no se acepta tipo impositivo.
              * @example 5
              */
             commissionRate?: number | null;
@@ -3419,7 +3419,7 @@ export interface components {
             /** @example 65 */
             costPrice?: number;
             /**
-             * @description Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0026). El salón no cobra IVA, así que no se acepta tipo impositivo.
+             * @description Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0027). El salón no cobra IVA, así que no se acepta tipo impositivo.
              * @example 5
              */
             commissionRate?: number | null;

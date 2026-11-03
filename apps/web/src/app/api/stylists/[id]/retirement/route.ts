@@ -5,7 +5,7 @@ const API_URL = process.env.API_URL ?? 'http://localhost:3000/api/v1';
 
 /**
  * Qué impide dar de baja a una profesional: citas, comandas y turnos pendientes, y si su
- * acceso se desactivará (ADR-0027).
+ * acceso se desactivará (ADR-0028).
  */
 export async function GET(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const token = (await cookies()).get('beautyos_access')?.value;

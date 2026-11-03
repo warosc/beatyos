@@ -29,7 +29,7 @@ describe('Service', () => {
       expect(service.isActive).toBe(true);
       expect(service.isBookable()).toBe(true);
       expect(service.isBookableOnline).toBe(true);
-      // El salón no cobra IVA (ADR-0026).
+      // El salón no cobra IVA (ADR-0027).
       expect(service.taxRate.value).toBe(0);
       expect(service.consumables).toEqual([]);
     });
@@ -111,7 +111,7 @@ describe('Service', () => {
   });
 
   describe('precio e impuestos', () => {
-    it('sin IVA, lo que paga la clienta es todo para el salón (ADR-0026)', () => {
+    it('sin IVA, lo que paga la clienta es todo para el salón (ADR-0027)', () => {
       const service = create({ price: Money.fromDecimal('28.00', 'EUR') });
 
       expect(service.taxAmount.toDecimalString()).toBe('0.00');

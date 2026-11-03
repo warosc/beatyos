@@ -111,7 +111,7 @@ export class PrismaReportingRepository implements ReportingRepository {
         serviceId: row.serviceId,
         stylistId: row.stylistId,
         // El `select` anidado trae también a las dadas de baja: sus ventas siguen siendo
-        // suyas, con la marca para que se lea que ya no está (ADR-0027).
+        // suyas, con la marca para que se lea que ya no está (ADR-0028).
         stylistName: row.stylist
           ? withRetiredMark(
               row.stylist.displayName ?? `${row.stylist.firstName} ${row.stylist.lastName}`.trim(),
@@ -152,7 +152,7 @@ export class PrismaReportingRepository implements ReportingRepository {
 
   /**
    * Jornadas del equipo que atiende: la capacidad de la agenda. Una profesional dada de baja
-   * o inactiva conserva su horario guardado, pero ya no ofrece esas horas (ADR-0027).
+   * o inactiva conserva su horario guardado, pero ya no ofrece esas horas (ADR-0028).
    */
   async findSchedules(): Promise<ScheduleFact[]> {
     const rows = await withMappedErrors(this.entityName, () =>

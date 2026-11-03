@@ -41,7 +41,7 @@ export interface InvoiceTotals {
 
 /**
  * Lo cobrado con profesional asignada en un periodo, por profesional y tipo de línea. Es la
- * materia prima de las comisiones a pagar al cerrar la caja (ADR-0026).
+ * materia prima de las comisiones a pagar al cerrar la caja (ADR-0027).
  */
 export interface StylistSalesTotals {
   readonly stylistId: string;

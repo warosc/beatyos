@@ -19,7 +19,7 @@ const LISTED = 50;
 
 /**
  * Lee lo pendiente de una profesional directamente de las tablas de agenda, cola y comandas
- * (ADR-0027). Solo cuenta y lista; nunca decide.
+ * (ADR-0028). Solo cuenta y lista; nunca decide.
  */
 @Injectable()
 export class PrismaStylistOffboarding implements StylistOffboarding {

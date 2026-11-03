@@ -157,7 +157,7 @@ export class CommissionBucketResponse {
   commission!: string;
 }
 
-/** Lo que hay que pagarle a una profesional por el periodo (ADR-0026). */
+/** Lo que hay que pagarle a una profesional por el periodo (ADR-0027). */
 export class StylistCommissionResponse {
   stylistId!: string;
   stylistName!: string;

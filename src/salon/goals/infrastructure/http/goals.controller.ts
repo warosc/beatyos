@@ -114,7 +114,7 @@ export class GoalsController {
     return { data: page.data.map((item) => present(item, names)), meta: page.meta };
   }
 
-  /** Nombres de las profesionales de las metas, también de las dadas de baja (ADR-0027). */
+  /** Nombres de las profesionales de las metas, también de las dadas de baja (ADR-0028). */
   private async namesFor(items: readonly GoalWithProgress[]): Promise<Map<string, string>> {
     const ids = [...new Set(items.map((item) => item.goal.stylistId))];
     const found = await Promise.all(

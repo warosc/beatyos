@@ -13,7 +13,7 @@ export type Product = {
   sku: string;
   name: string;
   brand: string | null;
-  /** Lo que paga la clienta. El salón no cobra IVA (ADR-0026). */
+  /** Lo que paga la clienta. El salón no cobra IVA (ADR-0027). */
   price: string;
   /** Comisión especial al venderlo. `null`: la de cada profesional en productos. */
   commissionRate?: number | null;
@@ -36,7 +36,7 @@ const cents = (value: string | number) => Math.round(Number(value) * 100);
  * Alta y edición de un producto.
  *
  * La dueña escribe lo que cobra, y eso es lo que guarda la API y lo que se cobra en caja, al
- * centavo. El salón no cobra IVA (ADR-0026). La comisión especial, si la tiene, manda sobre
+ * centavo. El salón no cobra IVA (ADR-0027). La comisión especial, si la tiene, manda sobre
  * el % en productos de cada profesional cuando se lo cobra a su nombre.
  */
 export function ProductDialog({

@@ -37,7 +37,7 @@ describe('Product', () => {
       expect(aProduct().stockOnHand).toBe(0);
     });
 
-    it('nace sin IVA: el salón no lo cobra (ADR-0026)', () => {
+    it('nace sin IVA: el salón no lo cobra (ADR-0027)', () => {
       expect(aProduct().taxRate.value).toBe(0);
     });
 

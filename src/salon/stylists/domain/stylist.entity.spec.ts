@@ -429,7 +429,7 @@ describe('Stylist', () => {
       expect(stylist.commissionFor('svc-corte', null).value).toBe(15);
     });
 
-    it('empieza con un 10 % en productos (ADR-0026)', () => {
+    it('empieza con un 10 % en productos (ADR-0027)', () => {
       expect(create().productCommissionRate.value).toBe(10);
     });
 
@@ -448,7 +448,7 @@ describe('Stylist', () => {
       expect(stylist.commissionRate.value).toBe(15);
     });
 
-    it('en el historial lleva la marca de dada de baja (ADR-0027)', () => {
+    it('en el historial lleva la marca de dada de baja (ADR-0028)', () => {
       const stylist = create();
       expect(stylist.historyName).toBe('Sara');
 

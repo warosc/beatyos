@@ -19,7 +19,7 @@ type GoalStatus = 'ACTIVE' | 'ACHIEVED' | 'EXPIRED';
 type GoalItem = {
   id: string;
   stylistId: string;
-  /** Con «(dada de baja)» si ya no está en el equipo: la API lo resuelve (ADR-0027). */
+  /** Con «(dada de baja)» si ya no está en el equipo: la API lo resuelve (ADR-0028). */
   stylistName: string;
   metric: Metric;
   targetAmount: string;

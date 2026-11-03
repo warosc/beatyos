@@ -11,7 +11,7 @@ type InvoiceLine = {
   kind: 'PRODUCT' | 'SERVICE';
   description: string;
   stylistId: string | null;
-  /** Lo resuelve la API, también el de una profesional dada de baja (ADR-0027). */
+  /** Lo resuelve la API, también el de una profesional dada de baja (ADR-0028). */
   stylistName: string | null;
   lineTotal: string;
 };

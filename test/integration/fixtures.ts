@@ -201,7 +201,7 @@ export async function seedTenant(
         name: 'Corte de señora',
         durationMinutes: 45,
         bufferMinutes: 10,
-        // Lo que paga la clienta. El salón no cobra IVA (ADR-0026): el tipo queda en cero.
+        // Lo que paga la clienta. El salón no cobra IVA (ADR-0027): el tipo queda en cero.
         price: '30.25',
       },
     });

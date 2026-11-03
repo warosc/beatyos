@@ -94,7 +94,7 @@ describe('Casos de uso de catálogo', () => {
   };
 
   describe('servicios', () => {
-    it('crea sin IVA: lo que paga la clienta (ADR-0026)', async () => {
+    it('crea sin IVA: lo que paga la clienta (ADR-0027)', async () => {
       const service = await newService();
 
       expect(service.code).toBe('COR-M');

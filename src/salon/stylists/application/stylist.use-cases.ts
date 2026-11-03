@@ -233,7 +233,7 @@ export interface StylistIdInput {
 }
 
 // ---------------------------------------------------------------------------
-// Baja de una profesional (ADR-0027)
+// Baja de una profesional (ADR-0028)
 // ---------------------------------------------------------------------------
 
 export interface StylistRetirementCheck {

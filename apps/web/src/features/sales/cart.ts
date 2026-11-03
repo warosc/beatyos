@@ -3,7 +3,7 @@
  *
  * Los importes van en céntimos enteros y se redondean igual que la factura del servidor
  * (`invoice.entity.ts`): bruto = precio × cantidad y total = bruto − descuento. El salón no
- * cobra IVA (ADR-0026), así que no hay impuesto que separar. Si la pantalla sumara de otra
+ * cobra IVA (ADR-0027), así que no hay impuesto que separar. Si la pantalla sumara de otra
  * forma, el cobro exacto que exige la API fallaría por un céntimo.
  */
 export type ItemKind = 'SERVICE' | 'PRODUCT';

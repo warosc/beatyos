@@ -35,7 +35,7 @@ export interface ProductProps {
   readonly costPrice: Money;
   readonly taxRate: Percentage;
   /**
-   * Comisión especial al venderlo (ADR-0026). Nula: la profesional gana su % en productos.
+   * Comisión especial al venderlo (ADR-0027). Nula: la profesional gana su % en productos.
    * Solo cuenta cuando el producto se cobra en una venta con profesional asignada.
    */
   readonly commissionRate: Percentage | null;
@@ -54,7 +54,7 @@ export interface ProductProps {
 const QUANTITY_EPSILON = 0.0005;
 const SKU_PATTERN = /^[A-Z0-9][A-Z0-9._-]{0,49}$/;
 
-/** El salón no cobra IVA (ADR-0026): todo producto nace con tipo cero. */
+/** El salón no cobra IVA (ADR-0027): todo producto nace con tipo cero. */
 const DEFAULT_TAX_RATE = 0;
 
 export class Product extends Entity {
@@ -268,7 +268,7 @@ export class Product extends Entity {
 
   /**
    * Precio de venta sin el IVA que lleva dentro: lo que de verdad ingresa el salón. Desde
-   * ADR-0026 el tipo es cero y coincide con el precio.
+   * ADR-0027 el tipo es cero y coincide con el precio.
    */
   get netPrice(): Money {
     return this.props.price.subtract(this.props.price.includedTax(this.props.taxRate.value));

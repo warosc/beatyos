@@ -1,4 +1,4 @@
--- ADR-0026: comisión en productos.
+-- ADR-0027: comisión en productos.
 --
 -- Cada profesional gana un % en servicios (la columna de siempre) y otro en productos. Todas
 -- las profesionales existentes empiezan con el 10 % en productos. Un producto puede tener una

@@ -74,7 +74,7 @@ describe('Metas e incentivos (integración)', () => {
         ...overrides,
       });
 
-  // El servicio del seed vale 30,25: lo que paga la clienta, sin IVA (ADR-0026).
+  // El servicio del seed vale 30,25: lo que paga la clienta, sin IVA (ADR-0027).
   const sellService = (stylistId = salonA.stylistId) =>
     request(server())
       .post(api('/sales'))

@@ -20,7 +20,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 }
 
 /**
- * Da de baja a una profesional (ADR-0027). Un 204 no lleva cuerpo, y `NextResponse.json`
+ * Da de baja a una profesional (ADR-0028). Un 204 no lleva cuerpo, y `NextResponse.json`
  * no puede construir una respuesta 204, así que el cuerpo se reenvía tal cual llega.
  */
 export async function DELETE(_request: NextRequest, context: { params: Promise<{ id: string }> }) {

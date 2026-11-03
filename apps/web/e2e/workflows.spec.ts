@@ -789,7 +789,7 @@ test('la dueña crea un servicio escribiendo lo que cobra', async ({ page }) => 
 
   const summary = page.getByRole('status', { name: 'Resumen del servicio' });
   await expect(summary).toContainText(/La clienta paga Q\s?100\.00/);
-  // El salón no cobra IVA (ADR-0026): no hay nada que separar.
+  // El salón no cobra IVA (ADR-0027): no hay nada que separar.
   await expect(summary).not.toContainText('IVA');
   await expect(summary).toContainText('55 min');
   await page.getByLabel('Comisión especial (%, opcional)').fill('20');
@@ -799,7 +799,7 @@ test('la dueña crea un servicio escribiendo lo que cobra', async ({ page }) => 
   await page.getByRole('button', { name: 'Crear servicio' }).click();
 
   await expect(page.getByText('«Corte de señora» quedó creado')).toBeVisible();
-  // Se guarda lo que cobra, sin tipo de IVA (ADR-0026); el código lo pone la API.
+  // Se guarda lo que cobra, sin tipo de IVA (ADR-0027); el código lo pone la API.
   expect(created).toEqual({
     name: 'Corte de señora',
     durationMinutes: 45,
@@ -945,7 +945,7 @@ test('la dueña da de alta un producto con lo que cobra y lo corrige después', 
       sku: 'SH-ARG-500',
       name: 'Champú de argán',
       price: 100,
-      // Vacía: gana el % en productos de cada profesional (ADR-0026).
+      // Vacía: gana el % en productos de cada profesional (ADR-0027).
       commissionRate: null,
       reorderPoint: 2,
       reorderQuantity: 6,

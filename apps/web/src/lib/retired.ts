@@ -1,4 +1,4 @@
-/** La marca que la API añade al nombre de una profesional dada de baja (ADR-0027). */
+/** La marca que la API añade al nombre de una profesional dada de baja (ADR-0028). */
 export const RETIRED_SUFFIX = ' (dada de baja)';
 
 /**

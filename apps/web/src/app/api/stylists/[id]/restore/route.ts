@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3000/api/v1';
 
-/** Reactiva a una profesional dada de baja; si tenía acceso, se le devuelve (ADR-0027). */
+/** Reactiva a una profesional dada de baja; si tenía acceso, se le devuelve (ADR-0028). */
 export async function POST(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const token = (await cookies()).get('beautyos_access')?.value;
   if (!token) return NextResponse.json({ message: 'Sesión expirada.' }, { status: 401 });

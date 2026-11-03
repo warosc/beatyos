@@ -87,7 +87,7 @@ export function Receipt({
 
       <dl className="mt-1 space-y-0.5 border-t border-dashed border-black pt-1">
         {/* El subtotal es lo que se habría pagado sin descuentos. El salón no cobra IVA
-            (ADR-0026): solo una venta de antes lo lleva, y entonces se desglosa, no se suma. */}
+            (ADR-0027): solo una venta de antes lo lleva, y entonces se desglosa, no se suma. */}
         {Number(sale.discountTotal) > 0 && (
           <>
             <Pair label="Subtotal" value={money(Number(sale.total) + Number(sale.discountTotal))} />

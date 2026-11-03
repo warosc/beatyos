@@ -158,7 +158,7 @@ describe('Casos de uso de pedidos de compra', () => {
       expect(order.expectedAt).toEqual(new Date(expectedAt));
     });
 
-    it('aplica el 12 % del proveedor aunque el producto se venda sin IVA (ADR-0026)', async () => {
+    it('aplica el 12 % del proveedor aunque el producto se venda sin IVA (ADR-0027)', async () => {
       // El IVA del producto es el de venta, y el salón no lo cobra. El proveedor sí lo
       // cobra, y la orden tiene que cuadrar con su factura.
       suppliers.seed(seedSupplier());

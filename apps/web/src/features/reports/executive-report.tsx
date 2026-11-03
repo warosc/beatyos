@@ -148,7 +148,7 @@ export function ExecutiveReportView() {
 
 /**
  * Lo que vendió y ganó cada profesional en el periodo. Servicios y productos van en columnas
- * separadas porque son dos comisiones distintas, con su propio porcentaje (ADR-0026).
+ * separadas porque son dos comisiones distintas, con su propio porcentaje (ADR-0027).
  */
 function StylistCommissions({ rows }: { rows: ExecutiveReport['topStylists'] }) {
   const q = (value: string) => currency.format(Number(value));

@@ -1,4 +1,4 @@
-# ADR-0026: Sin IVA en el cobro, comisión sobre lo que paga la clienta y comisión de productos
+# ADR-0027: Sin IVA en el cobro, comisión sobre lo que paga la clienta y comisión de productos
 
 - **Estado:** Aceptado
 - **Fecha:** 2026-11-03

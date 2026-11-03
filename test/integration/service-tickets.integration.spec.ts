@@ -22,7 +22,7 @@ describe('Comandas de servicio (integración)', () => {
   let stylistToken: string;
   let receptionToken: string;
 
-  // El servicio del seed vale 30,25: lo que paga la clienta, sin IVA (ADR-0026).
+  // El servicio del seed vale 30,25: lo que paga la clienta, sin IVA (ADR-0027).
   const TOTAL = '30.25';
 
   beforeAll(async () => {

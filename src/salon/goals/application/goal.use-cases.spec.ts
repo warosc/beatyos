@@ -147,7 +147,7 @@ describe('Casos de uso de metas', () => {
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'CREATE' }));
   });
 
-  it('no le pone metas a una profesional dada de baja (ADR-0027)', async () => {
+  it('no le pone metas a una profesional dada de baja (ADR-0028)', async () => {
     const team = teamWith('stylist-1');
     await team.softDelete('stylist-1');
     const useCase = new CreateGoalUseCase(goals, reporting, ids, clock, audit, team);

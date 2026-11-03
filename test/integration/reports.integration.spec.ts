@@ -58,7 +58,7 @@ describe('Informes (integración)', () => {
   const server = () => app.getHttpServer();
   const inspect = <T>(work: () => Promise<T>): Promise<T> => QueryScopeStore.crossTenant(work);
 
-  /** Una venta de un servicio a 112,00. El salón no cobra IVA (ADR-0026). */
+  /** Una venta de un servicio a 112,00. El salón no cobra IVA (ADR-0027). */
   const sellService = (method = 'CARD') =>
     request(server())
       .post(api('/sales'))
@@ -125,7 +125,7 @@ describe('Informes (integración)', () => {
       const stylist = response.body.data.topStylists[0];
 
       expect(stylist.revenue).toBe('112.00');
-      // El 20 % de lo que pagó la clienta (ADR-0026).
+      // El 20 % de lo que pagó la clienta (ADR-0027).
       expect(stylist.serviceCommission).toBe('22.40');
       expect(stylist.productCommission).toBe('0.00');
       expect(response.body.data.serviceCommissionTotal).toBe('22.40');

@@ -16,7 +16,7 @@ const fullName = (row: { firstName: string; lastName: string }) =>
 
 /**
  * El mismo nombre corto que da la ficha (`Stylist.displayName`): «Sara», no «Sara Molina».
- * Con la marca si ya se dio de baja, para que sus citas pasadas se lean así (ADR-0027).
+ * Con la marca si ya se dio de baja, para que sus citas pasadas se lean así (ADR-0028).
  */
 const stylistName = (row: {
   firstName: string;

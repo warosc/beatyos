@@ -197,12 +197,12 @@ describe('Ventas y caja (integración)', () => {
 
       const lines = response.body.data.lines as { stylistId: string; commissionAmount: string }[];
       expect(lines.map((line) => line.stylistId).sort()).toEqual([salonA.stylistId, otraId].sort());
-      // Cada una cobra su comisión con su propia tasa sobre lo que pagó la clienta (ADR-0026):
+      // Cada una cobra su comisión con su propia tasa sobre lo que pagó la clienta (ADR-0027):
       // 15 % y 10 % de 30,25.
       expect(lines.map((line) => line.commissionAmount).sort()).toEqual(['3.03', '4.54']);
     });
 
-    describe('comisión de productos (ADR-0026)', () => {
+    describe('comisión de productos (ADR-0027)', () => {
       const sellProduct = async (productId: string, stylistId?: string) =>
         sell({
           lines: [{ kind: 'PRODUCT', itemId: productId, quantity: 1, stylistId }],

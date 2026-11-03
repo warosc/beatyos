@@ -135,7 +135,7 @@ export class PurchaseOrderViewFactory {
  * IVA que cobra el proveedor cuando la línea no indica otro: el 12 % de Guatemala.
  *
  * No sale del producto porque el producto lleva el IVA de **venta**, y el salón no lo cobra
- * (ADR-0026). Tomarlo de ahí dejaba cada orden nueva sin el IVA que sí trae la factura.
+ * (ADR-0027). Tomarlo de ahí dejaba cada orden nueva sin el IVA que sí trae la factura.
  */
 const DEFAULT_SUPPLIER_TAX_RATE = 12;
 
@@ -221,7 +221,7 @@ export class CreatePurchaseOrderUseCase implements UseCase<
           quantity: Quantity.fromDecimal(line.quantity),
           unitCost: Money.fromDecimal(line.unitCost, this.currency),
           // Es el IVA que cobra el proveedor, no el de venta del producto: el salón dejó de
-          // cobrar IVA (ADR-0026) y sus productos están a cero, pero la factura del proveedor
+          // cobrar IVA (ADR-0027) y sus productos están a cero, pero la factura del proveedor
           // lo sigue llevando y la orden tiene que cuadrar con ella.
           taxRate:
             line.taxRate === undefined

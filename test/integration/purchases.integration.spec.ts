@@ -168,7 +168,7 @@ describe('Compras (integración)', () => {
   });
 
   describe('el tipo impositivo', () => {
-    it('es el 12 % del proveedor aunque el producto se venda sin IVA (ADR-0026)', async () => {
+    it('es el 12 % del proveedor aunque el producto se venda sin IVA (ADR-0027)', async () => {
       const supplierId = await createSupplier();
       const productId = await createProduct();
 

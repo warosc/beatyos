@@ -130,7 +130,7 @@ export function CartPanel({
       </div>
 
       <div className="space-y-3 border-t p-4">
-        {/* Lo que paga la clienta. El salón no cobra IVA (ADR-0026). */}
+        {/* Lo que paga la clienta. El salón no cobra IVA (ADR-0027). */}
         <dl className="space-y-1 text-sm">
           {totals.discountCents > 0 && (
             <>

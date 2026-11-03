@@ -465,7 +465,7 @@ function UserCard({
           </Can>
         )}
       </div>
-      {/* Desactivar el acceso no la saca del equipo (ADR-0027): eso es la baja de profesional. */}
+      {/* Desactivar el acceso no la saca del equipo (ADR-0028): eso es la baja de profesional. */}
       {user.roles.some((role) => role.code === 'STYLIST') && !user.deletedAt && (
         <p className="mt-2 text-xs text-muted-foreground">
           Desactivar solo quita el acceso. Para sacarla de la agenda y la caja, usa «Dar de baja» en

@@ -3,7 +3,7 @@ import type { StylistCommission } from '@/features/sales/types';
 import { money } from '@/lib/utils';
 
 /**
- * Comisiones del turno por profesional (ADR-0026).
+ * Comisiones del turno por profesional (ADR-0027).
  *
  * Servicios y productos se muestran por separado porque son dos comisiones distintas, cada
  * una con su porcentaje; el total es lo que se le entrega al cerrar la caja. Es informativo:

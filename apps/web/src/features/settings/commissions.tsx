@@ -22,9 +22,9 @@ type Stylist = {
   displayName: string;
   /** % en servicios. */
   commissionRate: number;
-  /** % en productos (ADR-0026). */
+  /** % en productos (ADR-0027). */
   productCommissionRate: number;
-  /** Solo viene en las dadas de baja (ADR-0027). */
+  /** Solo viene en las dadas de baja (ADR-0028). */
   deletedAt?: string;
   schedule: Block[];
   timeOff: TimeOff[];
@@ -587,7 +587,7 @@ function StylistCommissionRow({
 }
 
 /**
- * Profesionales dadas de baja, para reactivarlas (ADR-0027).
+ * Profesionales dadas de baja, para reactivarlas (ADR-0028).
  *
  * La API las devuelve mezcladas con el equipo cuando se piden con `includeDeleted`; solo
  * las dadas de baja traen `deletedAt`.

@@ -39,7 +39,7 @@ export interface ExecutiveReport {
   readonly topProducts: readonly RankedItem[];
   readonly topStylists: readonly StylistPerformance[];
   readonly dailySales: readonly { date: string; total: Money }[];
-  /** Comisión de servicios del periodo. Nunca se suma con la de productos (ADR-0026). */
+  /** Comisión de servicios del periodo. Nunca se suma con la de productos (ADR-0027). */
   readonly serviceCommissionTotal: Money;
   readonly productCommissionTotal: Money;
 }

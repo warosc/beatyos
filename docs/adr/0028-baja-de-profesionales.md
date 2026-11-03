@@ -1,4 +1,4 @@
-# ADR-0027: Baja de profesionales
+# ADR-0028: Baja de profesionales
 
 - **Estado:** Aceptado
 - **Fecha:** 2026-11-03

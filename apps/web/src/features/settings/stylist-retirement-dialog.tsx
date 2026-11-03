@@ -7,7 +7,7 @@ import { DialogClose } from '@/components/ui/dialog-close';
 import { sessionFetch } from '@/lib/session-fetch';
 import { useDialog } from '@/lib/use-dialog';
 
-/** Lo que impide dar de baja a una profesional, como lo devuelve la API (ADR-0027). */
+/** Lo que impide dar de baja a una profesional, como lo devuelve la API (ADR-0028). */
 export type StylistRetirement = {
   stylistId: string;
   displayName: string;

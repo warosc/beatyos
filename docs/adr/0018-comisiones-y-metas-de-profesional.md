@@ -1,6 +1,6 @@
 # ADR-0018: Comisiones por profesional y metas con recompensa
 
-- **Estado:** Aceptado. Enmendado por [ADR-0026](0026-sin-iva-comision-sobre-lo-cobrado-y-comision-de-productos.md): comisión sobre lo que paga la clienta y % propio en productos
+- **Estado:** Aceptado. Enmendado por [ADR-0027](0027-sin-iva-comision-sobre-lo-cobrado-y-comision-de-productos.md): comisión sobre lo que paga la clienta y % propio en productos
 - **Fecha:** 2026-09-11
 - **Cumple:** [ADR-0001](0001-arquitectura-hexagonal.md), [ADR-0006](0006-autorizacion-rbac.md), [ADR-0010](0010-dinero-y-precision-decimal.md), [ADR-0015](0015-informes-e-indicadores.md)
 - **Depende de:** [ADR-0014](0014-ventas-cobros-y-arqueo-de-caja.md)

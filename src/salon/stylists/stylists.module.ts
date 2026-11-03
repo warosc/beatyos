@@ -32,7 +32,7 @@ import { PrismaStylistRepository } from './infrastructure/persistence/prisma-sty
  * cabe hay que preguntar por el horario, y esa pregunta la responde este agregado.
  *
  * Importa el de usuarios porque dar de baja a una profesional apaga también su acceso
- * (ADR-0027). La dependencia va del salón hacia el núcleo, nunca al revés.
+ * (ADR-0028). La dependencia va del salón hacia el núcleo, nunca al revés.
  */
 @Module({
   imports: [UsersModule],

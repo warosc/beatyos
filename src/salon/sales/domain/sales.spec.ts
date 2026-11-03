@@ -87,7 +87,7 @@ describe('buildInvoiceLine', () => {
     expect(() => aLine({ quantity: 0 })).toThrow(DomainValidationError);
   });
 
-  it('calcula la comisión sobre lo que paga la clienta (ADR-0026)', () => {
+  it('calcula la comisión sobre lo que paga la clienta (ADR-0027)', () => {
     // El salón no cobra IVA: si la clienta paga Q30 y la comisión es del 20 %, son Q6.00.
     const line = aLine({
       unitPrice: gtq('30.00'),
@@ -113,7 +113,7 @@ describe('buildInvoiceLine', () => {
   });
 
   it('con IVA dentro del precio, la comisión también va sobre el total', () => {
-    // Una línea con IVA solo puede venir de antes de ADR-0026; si llegara a construirse,
+    // Una línea con IVA solo puede venir de antes de ADR-0027; si llegara a construirse,
     // la comisión es sobre lo que pagó la clienta, no sobre la base.
     const line = aLine({ unitPrice: gtq('112.00'), commissionRate: Percentage.create(20) });
 

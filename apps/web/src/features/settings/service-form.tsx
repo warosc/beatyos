@@ -43,7 +43,7 @@ async function problem(response: Response, fallback: string) {
  * Lo que la dueña escribe y lo que el sistema deduce de ello.
  *
  * Ella piensa en lo que cobra, y eso es lo que guarda la API. El salón no cobra IVA
- * (ADR-0026): lo que paga la clienta es todo para el salón, y la comisión sale de ahí.
+ * (ADR-0027): lo que paga la clienta es todo para el salón, y la comisión sale de ahí.
  */
 function useServiceDraft(initial: Draft) {
   const [draft, setDraft] = useState(initial);

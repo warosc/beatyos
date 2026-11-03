@@ -10,7 +10,7 @@ export type ExecutiveReport = {
   occupancyRate: number;
   completedAppointments: number;
   cancelledAppointments: number;
-  /** Comisión de servicios y de productos del periodo: nunca se suman (ADR-0026). */
+  /** Comisión de servicios y de productos del periodo: nunca se suman (ADR-0027). */
   serviceCommissionTotal: string;
   productCommissionTotal: string;
   topProducts: { name: string; quantity: number; revenue: string }[];

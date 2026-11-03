@@ -72,7 +72,7 @@ export interface StylistProps {
   readonly hiredAt: Date | null;
   /** % en servicios: lo que gana por defecto de cada servicio que cobra. */
   readonly commissionRate: Percentage;
-  /** % en productos: lo que gana de cada producto cobrado a su nombre (ADR-0026). */
+  /** % en productos: lo que gana de cada producto cobrado a su nombre (ADR-0027). */
   readonly productCommissionRate: Percentage;
   readonly schedule: readonly WorkingBlock[];
   readonly timeOff: readonly TimeOffPeriod[];
@@ -82,10 +82,10 @@ export interface StylistProps {
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
-/** % en productos con el que empieza toda profesional (ADR-0026). */
+/** % en productos con el que empieza toda profesional (ADR-0027). */
 export const DEFAULT_PRODUCT_COMMISSION_RATE = 10;
 
-/** Lo que se añade al nombre en el historial de una profesional dada de baja (ADR-0027). */
+/** Lo que se añade al nombre en el historial de una profesional dada de baja (ADR-0028). */
 export const RETIRED_SUFFIX = ' (dada de baja)';
 
 /** El nombre tal como se lee en ventas, citas y reportes ya hechos: con la marca si se fue. */
@@ -212,7 +212,7 @@ export class Stylist extends AggregateRoot {
 
   /**
    * Nombre para el historial: el de siempre, con «(dada de baja)» si ya no está en el
-   * equipo. Sus ventas y citas pasadas se siguen leyendo con su nombre (ADR-0027).
+   * equipo. Sus ventas y citas pasadas se siguen leyendo con su nombre (ADR-0028).
    */
   get historyName(): string {
     return withRetiredMark(this.displayName, this.props.audit.deletedAt);
@@ -443,7 +443,7 @@ export class Stylist extends AggregateRoot {
 
   /**
    * Comisión por un producto cobrado a su nombre: la especial del producto si la tiene, si
-   * no su % en productos. Nunca su % en servicios: son dos cosas distintas (ADR-0026).
+   * no su % en productos. Nunca su % en servicios: son dos cosas distintas (ADR-0027).
    */
   productCommissionFor(productCommission: Percentage | null): Percentage {
     return productCommission ?? this.props.productCommissionRate;

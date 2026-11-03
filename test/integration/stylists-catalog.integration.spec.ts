@@ -269,7 +269,7 @@ describe('Profesionales y catálogo (integración)', () => {
         bufferMinutes: 20,
         // Lo que la agenda bloquea de verdad.
         blockedMinutes: 200,
-        // Lo que paga la clienta. El salón no cobra IVA (ADR-0026).
+        // Lo que paga la clienta. El salón no cobra IVA (ADR-0027).
         price: '134.40',
         taxAmount: '0.00',
         taxRate: 0,

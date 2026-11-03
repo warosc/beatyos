@@ -1,6 +1,6 @@
 /**
  * Lo que una profesional tiene pendiente en el salón, para decidir si se le puede dar de baja
- * (ADR-0027).
+ * (ADR-0028).
  *
  * Es un puerto y no una consulta a los repositorios de citas, cola y comandas porque esos
  * módulos ya dependen de este: importarlos desde aquí cerraría un ciclo. El adaptador lee

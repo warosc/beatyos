@@ -305,7 +305,7 @@ export class StylistsController {
     summary: 'Qué impide dar de baja a una profesional',
     description:
       'Lista sus citas por atender, comandas sin cobrar y turnos en curso, que hay que ' +
-      'resolver antes de darla de baja, y dice si su acceso al sistema se desactivará (ADR-0027).',
+      'resolver antes de darla de baja, y dice si su acceso al sistema se desactivará (ADR-0028).',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: StylistRetirementResponse })
@@ -319,7 +319,7 @@ export class StylistsController {
   @ApiOperation({
     summary: 'Dar de baja a un profesional',
     description:
-      'Borrado lógico (ADR-0027). Deja de aparecer en la agenda, la caja, la cola y las metas, ' +
+      'Borrado lógico (ADR-0028). Deja de aparecer en la agenda, la caja, la cola y las metas, ' +
       'y su acceso al sistema se desactiva (salvo si es dueña). Sus ventas, citas y comisiones ' +
       'pasadas se conservan con su nombre. Las clientas en espera que la pidieron pasan a la ' +
       'fila general. No se puede con citas por atender, comandas sin cobrar o turnos en curso.',

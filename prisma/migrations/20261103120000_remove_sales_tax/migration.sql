@@ -1,4 +1,4 @@
--- ADR-0026: el salón deja de cobrar IVA.
+-- ADR-0027: el salón deja de cobrar IVA.
 --
 -- Los precios no cambian: lo que paga la clienta sigue siendo lo mismo y ahora todo es
 -- ingreso del salón. Se ponen a 0 todas las filas, también las dadas de baja, para que

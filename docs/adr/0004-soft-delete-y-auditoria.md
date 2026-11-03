@@ -1,6 +1,6 @@
 # ADR-0004: Soft delete y auditoría transversal
 
-- **Estado:** Aceptado. Ampliado por [ADR-0027](0027-baja-de-profesionales.md) para la baja de profesionales
+- **Estado:** Aceptado. Ampliado por [ADR-0028](0028-baja-de-profesionales.md) para la baja de profesionales
 - **Fecha:** 2026-09-02
 
 ## Contexto

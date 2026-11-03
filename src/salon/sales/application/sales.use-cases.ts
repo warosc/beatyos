@@ -274,7 +274,7 @@ export class RegisterSaleUseCase implements UseCase<RegisterSaleInput, RegisterS
       // produce un pasivo sin destinatario. Con profesional, un servicio usa la cascada
       // completa del dominio (ajuste por habilidad → comisión especial del servicio → su %
       // en servicios). Un producto cobrado usa la especial del producto o su % en
-      // productos, nunca el de servicios (ADR-0026). Los insumos que se gastan en cabina
+      // productos, nunca el de servicios (ADR-0027). Los insumos que se gastan en cabina
       // no pasan por aquí: no son líneas de venta y no dan comisión.
       const stylist = line.stylistId ? stylistsById.get(line.stylistId) : undefined;
       const commissionRate = stylist
@@ -311,7 +311,7 @@ export class RegisterSaleUseCase implements UseCase<RegisterSaleInput, RegisterS
    * La profesional a la que se le asigna una línea, si todavía puede cobrar a su nombre.
    *
    * Dada de baja o inactiva ya no está en el equipo, y una venta nueva a su nombre le
-   * devengaría una comisión que nadie le va a pagar (ADR-0027). De vacaciones sí: puede
+   * devengaría una comisión que nadie le va a pagar (ADR-0028). De vacaciones sí: puede
    * quedar una comanda suya por cobrar.
    */
   private async availableStylist(id: string): Promise<Stylist> {
@@ -484,7 +484,7 @@ export class GetInvoiceUseCase implements UseCase<{ invoiceId: string }, Invoice
 export interface SalesSummary {
   readonly invoices: InvoiceTotals;
   readonly byMethod: readonly PaymentMethodTotals[];
-  /** Comisiones a pagar por profesional, servicios y productos por separado (ADR-0026). */
+  /** Comisiones a pagar por profesional, servicios y productos por separado (ADR-0027). */
   readonly commissions: readonly StylistCommissionPayout[];
 }
 

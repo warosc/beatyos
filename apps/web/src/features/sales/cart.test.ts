@@ -13,7 +13,7 @@ import {
   type SaleItem,
 } from './cart';
 
-// Lo que paga la clienta: el salón no cobra IVA (ADR-0026).
+// Lo que paga la clienta: el salón no cobra IVA (ADR-0027).
 const corte: SaleItem = { kind: 'SERVICE', id: 's1', name: 'Corte', price: '30.25' };
 const champu: SaleItem = {
   kind: 'PRODUCT',

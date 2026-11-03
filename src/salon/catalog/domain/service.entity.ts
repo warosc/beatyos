@@ -49,7 +49,7 @@ const CODE_PATTERN = /^[A-Z0-9][A-Z0-9-]{1,19}$/;
 const MAX_DURATION_MINUTES = 8 * 60;
 
 /**
- * Tipo impositivo por defecto: cero, porque el salón no cobra IVA (ADR-0026).
+ * Tipo impositivo por defecto: cero, porque el salón no cobra IVA (ADR-0027).
  *
  * Es un **valor por defecto, no una constante del dominio**: cada servicio guarda el suyo
  * y los documentos ya emitidos conservan el que se les aplicó. La API ya no acepta otro

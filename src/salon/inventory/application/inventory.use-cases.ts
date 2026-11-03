@@ -56,7 +56,7 @@ export interface CreateProductInput {
   readonly barcode?: string | null;
   readonly description?: string | null;
   readonly brand?: string | null;
-  /** Comisión especial al venderlo; vacía o nula, la de cada profesional (ADR-0026). */
+  /** Comisión especial al venderlo; vacía o nula, la de cada profesional (ADR-0027). */
   readonly commissionRate?: number | null;
   readonly unit?: ProductUnitValue;
   readonly reorderPoint?: number;
@@ -156,7 +156,7 @@ export interface UpdateProductInput {
   readonly barcode?: string | null;
   readonly description?: string | null;
   readonly brand?: string | null;
-  /** Comisión especial al venderlo; vacía o nula, la de cada profesional (ADR-0026). */
+  /** Comisión especial al venderlo; vacía o nula, la de cada profesional (ADR-0027). */
   readonly commissionRate?: number | null;
   readonly unit?: ProductUnitValue;
   readonly reorderPoint?: number;

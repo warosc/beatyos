@@ -217,7 +217,7 @@ describe('topProducts', () => {
 describe('stylistPerformance', () => {
   it('separa lo facturado en servicios de lo cobrado en productos', () => {
     // Un producto a su nombre no es trabajo de servicio: va a su propia cifra, sin inflar
-    // la de servicios. Las dos se miden sobre lo que pagó la clienta (ADR-0026).
+    // la de servicios. Las dos se miden sobre lo que pagó la clienta (ADR-0027).
     const ranked = stylistPerformance(
       [
         aLine({ stylistId: 's-1', stylistName: 'Marta', lineTotal: gtq('100.00') }),
@@ -238,7 +238,7 @@ describe('stylistPerformance', () => {
     expect(ranked[0].products).toBe(2);
   });
 
-  it('nunca suma la comisión de productos con la de servicios (ADR-0026)', () => {
+  it('nunca suma la comisión de productos con la de servicios (ADR-0027)', () => {
     const ranked = stylistPerformance(
       [
         aLine({ stylistId: 's-1', stylistName: 'Marta', commissionAmount: gtq('20.00') }),

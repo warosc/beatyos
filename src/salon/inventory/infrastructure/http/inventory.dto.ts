@@ -102,7 +102,7 @@ export class CreateProductDto {
     nullable: true,
     example: 5,
     description:
-      'Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0026). El salón no cobra IVA, así que no se acepta tipo impositivo.',
+      'Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0027). El salón no cobra IVA, así que no se acepta tipo impositivo.',
   })
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })

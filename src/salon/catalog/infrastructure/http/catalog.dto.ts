@@ -300,14 +300,14 @@ export class ServiceResponse {
 
   @ApiProperty({
     example: '0.00',
-    description: 'IVA que va dentro del precio. Siempre 0 desde ADR-0026: el salón no cobra IVA',
+    description: 'IVA que va dentro del precio. Siempre 0 desde ADR-0027: el salón no cobra IVA',
   })
   taxAmount!: string;
   @ApiProperty({ example: '28.00', description: 'Igual que `price`: lo que paga la clienta' })
   priceWithTax!: string;
 
   @ApiProperty({ example: 'GTQ' }) currency!: string;
-  @ApiProperty({ example: 0, description: 'Siempre 0 desde ADR-0026' }) taxRate!: number;
+  @ApiProperty({ example: 0, description: 'Siempre 0 desde ADR-0027' }) taxRate!: number;
   @ApiProperty({ nullable: true }) commissionRate!: number | null;
   @ApiProperty() isActive!: boolean;
   @ApiProperty({ description: 'Admite reservas nuevas' }) isBookable!: boolean;

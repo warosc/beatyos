@@ -39,7 +39,7 @@ export interface SaleLineFact {
   readonly stylistName: string | null;
   readonly description: string;
   readonly quantity: number;
-  /** Base imponible de la linea. Sin IVA (ADR-0026) coincide con `lineTotal`. */
+  /** Base imponible de la linea. Sin IVA (ADR-0027) coincide con `lineTotal`. */
   readonly lineSubtotal: Money;
   /** Lo que paga la clienta, despues de descuentos: la base de la comision. */
   readonly lineTotal: Money;
@@ -252,7 +252,7 @@ export interface StylistPerformance {
 /**
  * Rendimiento por profesional.
  *
- * Servicios y productos se cuentan **por separado** y nunca se suman (ADR-0026): son dos
+ * Servicios y productos se cuentan **por separado** y nunca se suman (ADR-0027): son dos
  * comisiones distintas, con su propio porcentaje, y la dueña paga mirando cada una.
  * `revenue` y `services` son solo trabajo de servicio, que es por lo que se ordena la lista;
  * un producto cobrado a su nombre va a `productRevenue`, `products` y `productCommission`.

@@ -42,13 +42,13 @@ export interface InvoiceLine {
   /** IVA que va dentro de `lineTotal`. */
   readonly taxAmount: Money;
   /**
-   * `lineTotal − taxAmount`: la base imponible. Desde ADR-0026 el salón no cobra IVA y en
+   * `lineTotal − taxAmount`: la base imponible. Desde ADR-0027 el salón no cobra IVA y en
    * las ventas nuevas coincide con `lineTotal`; solo difiere en las antiguas.
    */
   readonly lineSubtotal: Money;
   /**
    * `unitPrice × quantity − descuento`: lo que paga la clienta por la línea. Sobre esto se
-   * calcula la comisión (ADR-0026).
+   * calcula la comisión (ADR-0027).
    */
   readonly lineTotal: Money;
   readonly commissionRate: Percentage | null;
@@ -493,7 +493,7 @@ export const buildInvoiceLine = (params: {
     lineTotal,
     commissionRate: params.commissionRate ?? null,
     // La comisión es un % de lo que paga la clienta por la línea, después del descuento
-    // (ADR-0026): si paga Q30 y la comisión es del 20 %, son Q6.00. Antes se calculaba sobre
+    // (ADR-0027): si paga Q30 y la comisión es del 20 %, son Q6.00. Antes se calculaba sobre
     // la base sin IVA; el salón dejó de cobrarlo y ya no hay nada que descontar.
     commissionAmount: params.commissionRate
       ? lineTotal.percentage(params.commissionRate.value)

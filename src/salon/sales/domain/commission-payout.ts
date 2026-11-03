@@ -10,7 +10,7 @@ export interface CommissionBucket {
   readonly commission: Money;
 }
 
-/** Lo que hay que pagarle a una profesional por un periodo, desglosado (ADR-0026). */
+/** Lo que hay que pagarle a una profesional por un periodo, desglosado (ADR-0027). */
 export interface StylistCommissionPayout {
   readonly stylistId: string;
   readonly stylistName: string;

@@ -542,7 +542,7 @@ export class PrismaSalesDirectory implements SalesDirectory {
             })
           : [],
         // Las dadas de baja también: sus ventas pasadas siguen siendo suyas y se leen con
-        // su nombre y la marca de que ya no está (ADR-0027).
+        // su nombre y la marca de que ya no está (ADR-0028).
         ids.stylistIds.length
           ? QueryScopeStore.includingDeleted(() =>
               this.prisma.client.stylist.findMany({

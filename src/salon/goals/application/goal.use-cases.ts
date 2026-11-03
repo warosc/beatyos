@@ -59,7 +59,7 @@ export class CreateGoalUseCase implements UseCase<CreateGoalInput, GoalWithProgr
     const now = this.clock.now();
 
     // Una meta es para alguien que sigue en el equipo: a una dada de baja o inactiva no le
-    // queda nada que vender (ADR-0027).
+    // queda nada que vender (ADR-0028).
     const stylist = await this.stylists.findById(input.stylistId, { includeDeleted: true });
     if (!stylist) throw new EntityNotFoundError('Profesional', input.stylistId);
     if (!stylist.isBookable()) {
@@ -180,7 +180,7 @@ async function withProgress(
     lines
       .filter((line) => line.stylistId === goal.stylistId && line.kind === kind)
       // Lo que pagaron las clientas, después de descuentos: la misma base que la comisión
-      // (ADR-0026).
+      // (ADR-0027).
       .map((line) => line.lineTotal),
     currency,
   );
