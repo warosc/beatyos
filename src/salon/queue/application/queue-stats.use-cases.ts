@@ -67,7 +67,8 @@ export class GetQueueStatsUseCase implements UseCase<GetQueueStatsInput, QueueSt
     const stylistIds = stats.byStylist.map((stylist) => stylist.stylistId);
     const [stylists, services] = await Promise.all([
       // Un salón tiene un puñado de profesionales: no justifica un `findManyByIds` propio.
-      Promise.all(stylistIds.map((id) => this.stylists.findById(id))),
+      // Las dadas de baja también, con su marca: lo que hicieron sigue siendo suyo.
+      Promise.all(stylistIds.map((id) => this.stylists.findById(id, { includeDeleted: true }))),
       this.services.findManyByIds(stats.byService.map((service) => service.serviceId)),
     ]);
 
@@ -76,7 +77,7 @@ export class GetQueueStatsUseCase implements UseCase<GetQueueStatsInput, QueueSt
       stylistNames: new Map(
         stylists
           .filter((stylist): stylist is Stylist => stylist !== null)
-          .map((stylist) => [stylist.id, stylist.displayName]),
+          .map((stylist) => [stylist.id, stylist.historyName]),
       ),
       serviceNames: new Map(services.map((service) => [service.id, service.name])),
     };

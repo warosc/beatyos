@@ -22,7 +22,7 @@ describe('Comandas de servicio (integración)', () => {
   let stylistToken: string;
   let receptionToken: string;
 
-  // El servicio del seed vale 30,25 con el IVA dentro: 25,00 de base más el 21 %.
+  // El servicio del seed vale 30,25: lo que paga la clienta, sin IVA (ADR-0026).
   const TOTAL = '30.25';
 
   beforeAll(async () => {

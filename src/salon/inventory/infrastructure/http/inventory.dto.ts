@@ -97,15 +97,18 @@ export class CreateProductDto {
   costPrice?: number;
 
   @ApiPropertyOptional({
-    example: 12,
-    description: 'IVA aplicable. Por defecto, el 12 % de Guatemala',
+    minimum: 0,
+    maximum: 100,
+    nullable: true,
+    example: 5,
+    description:
+      'Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0026). El salón no cobra IVA, así que no se acepta tipo impositivo.',
   })
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(100)
-  taxRate?: number;
+  commissionRate?: number | null;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -61,6 +61,11 @@ export class GoalQueryDto extends PaginationQueryDto {
 export class GoalResponse {
   @ApiProperty() id!: string;
   @ApiProperty({ format: 'uuid' }) stylistId!: string;
+  @ApiProperty({
+    example: 'Sara',
+    description: 'Nombre de la profesional, con «(dada de baja)» si ya no está en el equipo',
+  })
+  stylistName!: string;
   @ApiProperty({ enum: GoalMetric }) metric!: string;
   @ApiProperty() targetAmount!: string;
   @ApiProperty() progress!: string;

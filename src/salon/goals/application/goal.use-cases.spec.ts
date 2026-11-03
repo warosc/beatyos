@@ -1,6 +1,11 @@
+import { InMemoryStylistRepository } from '@test/doubles/salon.doubles';
+
 import type { AuditRecorder, Clock, IdGenerator } from '../../../shared/application/ports';
+import { BusinessRuleViolationError } from '../../../shared/domain/errors';
 import { buildPage } from '../../../shared/domain/ports/repository.port';
+import { PersonName } from '../../../shared/domain/value-objects/contact.vo';
 import { Money } from '../../../shared/domain/value-objects/money.vo';
+import { Stylist } from '../../stylists/domain/stylist.entity';
 import type { ReportingRepository } from '../../reports/domain/reporting.repository';
 import type { SaleLineFact } from '../../reports/domain/reporting';
 import { Goal } from '../domain/goal.entity';
@@ -15,6 +20,21 @@ const NOW = new Date('2037-09-15T12:00:00.000Z');
 const START = new Date('2037-09-01T00:00:00.000Z');
 const END = new Date('2037-09-30T23:59:59.000Z');
 const PAGE = { page: 1, limit: 20 } as const;
+
+/** El equipo del salón con una profesional activa. */
+const teamWith = (stylistId: string) => {
+  const team = new InMemoryStylistRepository();
+  void team.create(
+    Stylist.create({
+      id: stylistId,
+      tenantId: 'tenant-1',
+      name: PersonName.create('Ana', 'López'),
+      now: NOW,
+      actorId: 'owner-1',
+    }),
+  );
+  return team;
+};
 
 const goal = (metric: 'SERVICE_REVENUE' | 'PRODUCT_REVENUE' = 'PRODUCT_REVENUE') =>
   Goal.define({
@@ -99,7 +119,14 @@ describe('Casos de uso de metas', () => {
         line('SERVICE', 'stylist-1', '999.00'),
         line('PRODUCT', 'stylist-2', '999.00'),
       ]);
-    const useCase = new CreateGoalUseCase(goals, reporting, ids, clock, audit);
+    const useCase = new CreateGoalUseCase(
+      goals,
+      reporting,
+      ids,
+      clock,
+      audit,
+      teamWith('stylist-1'),
+    );
 
     const result = await useCase.execute({
       tenantId: 'tenant-1',
@@ -118,6 +145,27 @@ describe('Casos de uso de metas', () => {
     expect(result.goal.isAchieved).toBe(true);
     expect(goals.update).toHaveBeenCalledWith(result.goal);
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'CREATE' }));
+  });
+
+  it('no le pone metas a una profesional dada de baja (ADR-0027)', async () => {
+    const team = teamWith('stylist-1');
+    await team.softDelete('stylist-1');
+    const useCase = new CreateGoalUseCase(goals, reporting, ids, clock, audit, team);
+
+    await expect(
+      useCase.execute({
+        tenantId: 'tenant-1',
+        stylistId: 'stylist-1',
+        metric: 'PRODUCT_REVENUE',
+        targetAmount: '100.00',
+        currency: 'GTQ',
+        periodStart: START,
+        periodEnd: END,
+        rewardDescription: 'Bono',
+        actorId: 'owner-1',
+      }),
+    ).rejects.toThrow(BusinessRuleViolationError);
+    expect(goals.create).not.toHaveBeenCalled();
   });
 
   it('calcula servicios, limita el porcentaje y no vuelve a marcar una meta cumplida', async () => {

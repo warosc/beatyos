@@ -130,7 +130,7 @@ export function CartPanel({
       </div>
 
       <div className="space-y-3 border-t p-4">
-        {/* Todo con IVA dentro, como lo paga la clienta; el IVA solo se desglosa debajo. */}
+        {/* Lo que paga la clienta. El salón no cobra IVA (ADR-0026). */}
         <dl className="space-y-1 text-sm">
           {totals.discountCents > 0 && (
             <>
@@ -142,7 +142,6 @@ export function CartPanel({
             <dt>Total</dt>
             <dd className="tabular-nums">{money(totals.totalCents / 100)}</dd>
           </div>
-          <Row label="IVA incluido" cents={totals.taxCents} small />
         </dl>
         {unassigned && stylists && (
           <p className="text-xs text-warning">

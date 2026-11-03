@@ -118,7 +118,7 @@ describe('Compras (integración)', () => {
   describe('los totales se calculan con Money, no con coma flotante', () => {
     it('suma una línea fraccionaria sin desviar un céntimo', async () => {
       const supplierId = await createSupplier();
-      const productId = await createProduct({ taxRate: 12 });
+      const productId = await createProduct();
 
       const response = await createOrder({
         supplierId,
@@ -142,7 +142,7 @@ describe('Compras (integración)', () => {
 
     it('mantiene la identidad subtotal + impuestos = total', async () => {
       const supplierId = await createSupplier();
-      const productId = await createProduct({ taxRate: 12 });
+      const productId = await createProduct();
 
       const response = await createOrder({
         supplierId,
@@ -168,25 +168,33 @@ describe('Compras (integración)', () => {
   });
 
   describe('el tipo impositivo', () => {
-    it('sale del producto cuando la línea no lo declara', async () => {
+    it('es el 12 % del proveedor aunque el producto se venda sin IVA (ADR-0026)', async () => {
       const supplierId = await createSupplier();
-      const productId = await createProduct({ taxRate: 5 });
+      const productId = await createProduct();
 
       const response = await createOrder({
         supplierId,
         lines: [{ productId, quantity: 2, unitCost: 50 }],
       }).expect(201);
 
-      // Antes se escribía un 12 fijo aquí, con lo que un producto exento o con tipo
-      // reducido acababa facturado al tipo general.
-      expect(Number(response.body.data.lines[0].taxRate)).toBe(5);
-      expect(Number(response.body.data.taxTotal)).toBe(5);
-      expect(Number(response.body.data.total)).toBe(105);
+      // El salón no cobra IVA al vender, pero el proveedor sí lo cobra: la orden tiene que
+      // cuadrar con su factura.
+      expect(Number(response.body.data.lines[0].taxRate)).toBe(12);
+      expect(Number(response.body.data.taxTotal)).toBe(12);
+      expect(Number(response.body.data.total)).toBe(112);
+    });
+
+    it('un producto ya no acepta tipo impositivo de venta', async () => {
+      await request(server())
+        .post(api('/products'))
+        .set(auth())
+        .send({ sku: 'CMP-IVA', name: 'Con IVA', price: 100, taxRate: 12 })
+        .expect(400);
     });
 
     it('respeta el que la línea declara explícitamente', async () => {
       const supplierId = await createSupplier();
-      const productId = await createProduct({ taxRate: 12 });
+      const productId = await createProduct();
 
       const response = await createOrder({
         supplierId,

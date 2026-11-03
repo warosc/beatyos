@@ -7,7 +7,7 @@ vi.mock('next/headers', () => ({
     get: (name: string) => (jar.value[name] ? { value: jar.value[name] } : undefined),
   }),
 }));
-import { PATCH } from './route';
+import { DELETE, PATCH } from './route';
 
 let upstream: ReturnType<typeof vi.fn>;
 const context = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -48,5 +48,38 @@ describe('ficha de un profesional', () => {
     const response = await PATCH(request('s1', '{}'), context('s1'));
     expect(response.status).toBe(504);
     expect(await response.json()).toEqual({ message: 'Respuesta inválida.' });
+  });
+});
+
+describe('baja de una profesional', () => {
+  const remove = (id: string) =>
+    DELETE(
+      new NextRequest(`http://localhost/api/stylists/${id}`, { method: 'DELETE' }),
+      context(id),
+    );
+
+  it('exige sesión', async () => {
+    jar.value = {};
+    expect((await remove('s1')).status).toBe(401);
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it('reenvía el 204 sin cuerpo', async () => {
+    upstream.mockResolvedValue(new Response(null, { status: 204 }));
+    const response = await remove('s1');
+    expect(response.status).toBe(204);
+    expect(calledUrl().pathname).toMatch(/\/stylists\/s1$/);
+    const init = upstream.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe('DELETE');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer at');
+  });
+
+  it('devuelve el motivo cuando tiene pendientes', async () => {
+    upstream.mockResolvedValue(
+      Response.json({ code: 'STYLIST_HAS_PENDING_WORK', detail: 'Tiene citas' }, { status: 422 }),
+    );
+    const response = await remove('s1');
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ code: 'STYLIST_HAS_PENDING_WORK' });
   });
 });

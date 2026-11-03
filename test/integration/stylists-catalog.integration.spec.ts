@@ -269,9 +269,10 @@ describe('Profesionales y catálogo (integración)', () => {
         bufferMinutes: 20,
         // Lo que la agenda bloquea de verdad.
         blockedMinutes: 200,
-        // El IVA va dentro del precio (ADR-0021): 120,00 de base más 14,40.
+        // Lo que paga la clienta. El salón no cobra IVA (ADR-0026).
         price: '134.40',
-        taxAmount: '14.40',
+        taxAmount: '0.00',
+        taxRate: 0,
         priceWithTax: '134.40',
       });
     });
@@ -291,7 +292,7 @@ describe('Profesionales y catálogo (integración)', () => {
         request(app.getHttpServer())
           .post(api('/services'))
           .set(auth())
-          .send({ name: 'Uñas acrílicas', durationMinutes: 60, price: '100.00', taxRate: 12 })
+          .send({ name: 'Uñas acrílicas', durationMinutes: 60, price: '100.00' })
           .expect(201);
 
       const first = await create();

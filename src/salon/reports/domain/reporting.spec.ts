@@ -215,28 +215,30 @@ describe('topProducts', () => {
 });
 
 describe('stylistPerformance', () => {
-  it('atribuye solo los servicios, no los productos del ticket', () => {
-    // Un producto que la recepcionista adjunta al ticket no es trabajo de quien atendió, y
-    // atribuírselo inflaría su cifra con ventas que no ha hecho.
+  it('separa lo facturado en servicios de lo cobrado en productos', () => {
+    // Un producto a su nombre no es trabajo de servicio: va a su propia cifra, sin inflar
+    // la de servicios. Las dos se miden sobre lo que pagó la clienta (ADR-0026).
     const ranked = stylistPerformance(
       [
-        aLine({ stylistId: 's-1', stylistName: 'Marta', lineSubtotal: gtq('100.00') }),
+        aLine({ stylistId: 's-1', stylistName: 'Marta', lineTotal: gtq('100.00') }),
         aLine({
           kind: 'PRODUCT',
           productId: 'p-1',
           stylistId: 's-1',
-          lineSubtotal: gtq('500.00'),
+          quantity: 2,
+          lineTotal: gtq('500.00'),
         }),
       ],
       'GTQ',
     );
 
     expect(ranked[0].revenue.toDecimalString()).toBe('100.00');
+    expect(ranked[0].services).toBe(1);
+    expect(ranked[0].productRevenue.toDecimalString()).toBe('500.00');
+    expect(ranked[0].products).toBe(2);
   });
 
-  it('la comisión de un producto sí cuenta, aunque no sume a la facturación de servicios', () => {
-    // La estilista no "presta" un producto, pero si lo vende sí se gana su comisión: son dos
-    // preguntas distintas (cuánto factura en servicios vs. cuánto se le debe en total).
+  it('nunca suma la comisión de productos con la de servicios (ADR-0026)', () => {
     const ranked = stylistPerformance(
       [
         aLine({ stylistId: 's-1', stylistName: 'Marta', commissionAmount: gtq('20.00') }),
@@ -250,8 +252,8 @@ describe('stylistPerformance', () => {
       'GTQ',
     );
 
-    expect(ranked[0].commission.toDecimalString()).toBe('25.00');
-    expect(ranked[0].services).toBe(1);
+    expect(ranked[0].serviceCommission.toDecimalString()).toBe('20.00');
+    expect(ranked[0].productCommission.toDecimalString()).toBe('5.00');
   });
 
   it('acumula la comisión congelada en cada línea', () => {
@@ -263,8 +265,21 @@ describe('stylistPerformance', () => {
       'GTQ',
     );
 
-    expect(ranked[0].commission.toDecimalString()).toBe('32.50');
+    expect(ranked[0].serviceCommission.toDecimalString()).toBe('32.50');
+    expect(ranked[0].productCommission.toDecimalString()).toBe('0.00');
     expect(ranked[0].services).toBe(2);
+  });
+
+  it('ignora las líneas de descuento', () => {
+    const ranked = stylistPerformance(
+      [
+        aLine({ stylistId: 's-1', stylistName: 'Marta' }),
+        aLine({ kind: 'DISCOUNT', stylistId: 's-1', lineTotal: gtq('-10.00') }),
+      ],
+      'GTQ',
+    );
+
+    expect(ranked[0].revenue.toDecimalString()).toBe('112.00');
   });
 
   it('ignora las líneas sin profesional asignado', () => {
@@ -274,8 +289,8 @@ describe('stylistPerformance', () => {
   it('ordena por facturación', () => {
     const ranked = stylistPerformance(
       [
-        aLine({ stylistId: 's-1', stylistName: 'Ana', lineSubtotal: gtq('50.00') }),
-        aLine({ stylistId: 's-2', stylistName: 'Berta', lineSubtotal: gtq('90.00') }),
+        aLine({ stylistId: 's-1', stylistName: 'Ana', lineTotal: gtq('50.00') }),
+        aLine({ stylistId: 's-2', stylistName: 'Berta', lineTotal: gtq('90.00') }),
       ],
       'GTQ',
     );

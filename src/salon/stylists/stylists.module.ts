@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { UsersModule } from '../../core/users/users.module';
 import type { Env } from '../../shared/infrastructure/config/env.schema';
 import {
   AddTimeOffUseCase,
+  CheckStylistRetirementUseCase,
   CreateStylistUseCase,
   DeleteStylistUseCase,
   GetStylistUseCase,
@@ -17,8 +19,10 @@ import {
   UpdateStylistUseCase,
   type SalonContext,
 } from './application/stylist.use-cases';
+import { STYLIST_OFFBOARDING } from './domain/stylist-offboarding.ports';
 import { STYLIST_REPOSITORY } from './domain/stylist.repository';
 import { StylistsController } from './infrastructure/http/stylists.controller';
+import { PrismaStylistOffboarding } from './infrastructure/persistence/prisma-stylist-offboarding';
 import { PrismaStylistRepository } from './infrastructure/persistence/prisma-stylist.repository';
 
 /**
@@ -26,14 +30,19 @@ import { PrismaStylistRepository } from './infrastructure/persistence/prisma-sty
  *
  * Exporta el puerto del repositorio porque la agenda lo necesita: para saber si una cita
  * cabe hay que preguntar por el horario, y esa pregunta la responde este agregado.
+ *
+ * Importa el de usuarios porque dar de baja a una profesional apaga también su acceso
+ * (ADR-0027). La dependencia va del salón hacia el núcleo, nunca al revés.
  */
 @Module({
+  imports: [UsersModule],
   controllers: [StylistsController],
   providers: [
     CreateStylistUseCase,
     UpdateStylistUseCase,
     GetStylistUseCase,
     SearchStylistsUseCase,
+    CheckStylistRetirementUseCase,
     DeleteStylistUseCase,
     RestoreStylistUseCase,
     SetStylistScheduleUseCase,
@@ -42,6 +51,7 @@ import { PrismaStylistRepository } from './infrastructure/persistence/prisma-sty
     SetStylistSkillsUseCase,
     GetStylistWorkingHoursUseCase,
     { provide: STYLIST_REPOSITORY, useClass: PrismaStylistRepository },
+    { provide: STYLIST_OFFBOARDING, useClass: PrismaStylistOffboarding },
     {
       /**
        * Contexto del salón.

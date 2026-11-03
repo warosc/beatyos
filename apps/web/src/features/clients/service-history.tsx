@@ -1,10 +1,7 @@
 'use client';
-import { useAccess } from '@/components/session-access';
 import { usePagedList } from '@/lib/use-paged-list';
-import { loadOptions } from '@/lib/pagination';
 import { Pagination } from '@/components/ui/pagination';
 import { Card } from '@/components/ui/card';
-import { useQuery } from '@tanstack/react-query';
 import { Scissors } from 'lucide-react';
 import { useState } from 'react';
 import { money } from '@/lib/utils';
@@ -14,6 +11,8 @@ type InvoiceLine = {
   kind: 'PRODUCT' | 'SERVICE';
   description: string;
   stylistId: string | null;
+  /** Lo resuelve la API, también el de una profesional dada de baja (ADR-0027). */
+  stylistName: string | null;
   lineTotal: string;
 };
 type Invoice = {
@@ -23,22 +22,12 @@ type Invoice = {
   currency: string;
   lines: InvoiceLine[];
 };
-type Stylist = { id: string; displayName: string };
-
 export function ServiceHistory({ clientId }: { clientId: string }) {
-  const { can } = useAccess();
   const [page, setPage] = useState(1);
   const invoices = usePagedList<Invoice>(
     'client-invoices',
     `/api/sales?clientId=${encodeURIComponent(clientId)}&limit=10&page=${page}`,
   );
-  const stylists = useQuery({
-    queryKey: ['stylists'],
-    enabled: can('stylists.read'),
-    queryFn: ({ signal }) => loadOptions<Stylist>('/api/agenda?resource=stylists', signal),
-  });
-  const stylistName = (id: string | null) =>
-    id ? (stylists.data?.find((s) => s.id === id)?.displayName ?? null) : null;
 
   // Solo interesan las visitas que dejaron algún servicio: una factura de solo producto no es
   // un servicio prestado y no pertenece a esta bitácora.
@@ -74,10 +63,8 @@ export function ServiceHistory({ clientId }: { clientId: string }) {
                   <span className="flex items-center gap-2">
                     <Scissors size={15} className="shrink-0 text-muted-foreground" />
                     {line.description}
-                    {stylistName(line.stylistId) && (
-                      <small className="text-muted-foreground">
-                        · {stylistName(line.stylistId)}
-                      </small>
+                    {line.stylistName && (
+                      <small className="text-muted-foreground">· {line.stylistName}</small>
                     )}
                   </span>
                   <strong className="whitespace-nowrap">{money(line.lineTotal)}</strong>

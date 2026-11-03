@@ -9,7 +9,7 @@ type SaleBody = {
 const corte = {
   id: 'service-1',
   name: 'Corte de dama',
-  // Con el IVA dentro (ADR-0021): 25,00 de base más el 12 %.
+  // Lo que paga la clienta. El salón no cobra IVA (ADR-0026).
   price: '28.00',
   taxRate: 12,
   color: '#db2777',
@@ -174,7 +174,7 @@ test('la propietaria aplica un descuento en porcentaje sobre lo que paga la clie
   await page.getByRole('button', { name: '%', exact: true }).click();
   await page.getByRole('button', { name: 'Aplicar' }).click();
 
-  // 28,00 − 10 % = 25,20: el descuento es sobre el precio con IVA.
+  // 28,00 − 10 % = 25,20: el descuento es sobre lo que paga la clienta.
   await expect(page.getByRole('button', { name: /Cobrar Q\s*25\.20/ })).toBeVisible();
   await page.keyboard.press('F2');
   await page.getByRole('button', { name: /Confirmar/ }).click();

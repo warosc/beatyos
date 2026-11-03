@@ -19,6 +19,8 @@ type GoalStatus = 'ACTIVE' | 'ACHIEVED' | 'EXPIRED';
 type GoalItem = {
   id: string;
   stylistId: string;
+  /** Con «(dada de baja)» si ya no está en el equipo: la API lo resuelve (ADR-0027). */
+  stylistName: string;
   metric: Metric;
   targetAmount: string;
   progress: string;
@@ -44,12 +46,13 @@ export function GoalsBoard() {
   const [creating, setCreating] = useState(false);
   const [cancelError, setCancelError] = useState('');
   const goals = usePagedList<GoalItem>('goals', `/api/goals?limit=20&page=${page}`);
+  // Solo el equipo activo: a una profesional dada de baja o inactiva no se le ponen metas.
   const stylists = useQuery({
-    queryKey: ['stylists'],
+    queryKey: ['stylists', 'active'],
     enabled: can('stylists.read'),
-    queryFn: ({ signal }) => loadOptions<Stylist>('/api/agenda?resource=stylists', signal),
+    queryFn: ({ signal }) =>
+      loadOptions<Stylist>('/api/agenda?resource=stylists&status=ACTIVE&sort=name:asc', signal),
   });
-  const stylistName = (id: string) => stylists.data?.find((s) => s.id === id)?.displayName ?? 'Tú';
 
   const refresh = async () => {
     setCreating(false);
@@ -110,9 +113,7 @@ export function GoalsBoard() {
                 <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   {METRIC_LABEL[goal.metric]}
                 </p>
-                <h2 className="mt-1 font-display text-lg font-semibold">
-                  {stylistName(goal.stylistId)}
-                </h2>
+                <h2 className="mt-1 font-display text-lg font-semibold">{goal.stylistName}</h2>
               </div>
               <Trophy
                 className={goal.status === 'ACHIEVED' ? 'text-warning' : 'text-muted-foreground/30'}
@@ -253,7 +254,7 @@ function GoalForm({
           </select>
         </label>
         <label className="block text-sm font-semibold">
-          Objetivo (Q, sin IVA)
+          Objetivo (Q)
           <input
             required
             type="number"
@@ -268,7 +269,7 @@ function GoalForm({
             id="goal-target-hint"
             className="mt-1 block text-xs font-normal text-muted-foreground"
           >
-            Se mide con lo vendido sin el IVA, igual que las comisiones.
+            Se mide con lo que pagan las clientas, después de descuentos, igual que las comisiones.
           </span>
         </label>
         <div className="grid grid-cols-2 gap-3">

@@ -108,20 +108,6 @@ export class CreateServiceDto {
   @ApiPropertyOptional({
     minimum: 0,
     maximum: 100,
-    default: 12,
-    example: 12,
-    description:
-      'IVA de Guatemala. Cada servicio guarda el suyo: si el tipo cambia por ley, los documentos ya emitidos conservan el que se les aplicó.',
-  })
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(100)
-  taxRate?: number;
-
-  @ApiPropertyOptional({
-    minimum: 0,
-    maximum: 100,
     description: 'Comisión propia del servicio. Sin indicar, manda la del profesional.',
   })
   @IsOptional()
@@ -192,13 +178,6 @@ export class UpdateServiceDto {
   @IsString()
   @Matches(DECIMAL)
   price?: string;
-
-  @ApiPropertyOptional({ minimum: 0, maximum: 100 })
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(100)
-  taxRate?: number;
 
   @ApiPropertyOptional({ minimum: 0, maximum: 100 })
   @IsOptional()
@@ -319,13 +298,16 @@ export class ServiceResponse {
   })
   price!: string;
 
-  @ApiProperty({ example: '3.00', description: 'IVA que va dentro del precio' })
+  @ApiProperty({
+    example: '0.00',
+    description: 'IVA que va dentro del precio. Siempre 0 desde ADR-0026: el salón no cobra IVA',
+  })
   taxAmount!: string;
-  @ApiProperty({ example: '28.00', description: 'Igual que `price`: el IVA ya va dentro' })
+  @ApiProperty({ example: '28.00', description: 'Igual que `price`: lo que paga la clienta' })
   priceWithTax!: string;
 
   @ApiProperty({ example: 'GTQ' }) currency!: string;
-  @ApiProperty({ example: 21 }) taxRate!: number;
+  @ApiProperty({ example: 0, description: 'Siempre 0 desde ADR-0026' }) taxRate!: number;
   @ApiProperty({ nullable: true }) commissionRate!: number | null;
   @ApiProperty() isActive!: boolean;
   @ApiProperty({ description: 'Admite reservas nuevas' }) isBookable!: boolean;

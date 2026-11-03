@@ -13,14 +13,13 @@ import {
   type SaleItem,
 } from './cart';
 
-// Precios con el IVA dentro (ADR-0021): 25,00 + 21 % y 18,50 + 12 %.
-const corte: SaleItem = { kind: 'SERVICE', id: 's1', name: 'Corte', price: '30.25', taxRate: 21 };
+// Lo que paga la clienta: el salón no cobra IVA (ADR-0026).
+const corte: SaleItem = { kind: 'SERVICE', id: 's1', name: 'Corte', price: '30.25' };
 const champu: SaleItem = {
   kind: 'PRODUCT',
   id: 'p1',
   name: 'Champú',
   price: '20.72',
-  taxRate: '12.00',
   stockOnHand: '2',
   trackStock: true,
 };
@@ -29,22 +28,19 @@ const build = (...steps: [SaleItem, string | null][]): CartLine[] =>
   steps.reduce<CartLine[]>((lines, [item, stylist]) => addItem(lines, item, stylist).lines, []);
 
 describe('cuenta del punto de venta', () => {
-  it('cobra el precio tal cual y separa el IVA como la factura del servidor', () => {
-    // 20,72 lleva dentro 2,22 de IVA sobre una base de 18,50.
+  it('cobra el precio tal cual, como la factura del servidor', () => {
     expect(unitTotalCents(champu)).toBe(2072);
     const [line] = build([champu, null]);
     expect(lineAmounts(line)).toEqual({
       grossCents: 2072,
       discountCents: 0,
-      netCents: 1850,
-      taxCents: 222,
       totalCents: 2072,
     });
   });
 
-  it('cobra exactamente cualquier precio, aunque no exista una base de dos decimales', () => {
+  it('cobra exactamente cualquier precio', () => {
     const [line] = build([{ ...champu, price: '45.50' }, null]);
-    expect(lineAmounts(line)).toMatchObject({ totalCents: 4550, taxCents: 487, netCents: 4063 });
+    expect(lineAmounts(line)).toMatchObject({ totalCents: 4550 });
   });
 
   it('suma la misma línea en lugar de repetirla', () => {
@@ -92,8 +88,8 @@ describe('cuenta del punto de venta', () => {
   it('un descuento en quetzales baja exactamente eso lo que paga la clienta', () => {
     const [line] = build([corte, null]);
     const [descontada] = setDiscount([line], line.key, 605);
-    // 30,25 − 6,05 = 24,20, que lleva dentro 4,20 de IVA: el impuesto solo va sobre lo pagado.
-    expect(lineAmounts(descontada)).toMatchObject({ totalCents: 2420, taxCents: 420 });
+    // 30,25 − 6,05 = 24,20.
+    expect(lineAmounts(descontada)).toMatchObject({ totalCents: 2420 });
     expect(setDiscount([line], line.key, 99_999)[0].discountCents).toBe(3025);
     expect(discountFromPercent(2500, 10)).toBe(250);
   });
@@ -101,10 +97,9 @@ describe('cuenta del punto de venta', () => {
   it('totaliza y prepara el cuerpo de POST /sales', () => {
     const lines = setDiscount(build([corte, 'ana'], [champu, null]), 'SERVICE:s1:ana', 605);
     expect(cartTotals(lines)).toEqual({
-      // Lo que se pagaría sin descuentos, con el IVA dentro.
+      // Lo que se pagaría sin descuentos.
       subtotalCents: 3025 + 2072,
       discountCents: 605,
-      taxCents: 420 + 222,
       totalCents: 2420 + 2072,
     });
     expect(toSaleLines(lines)).toEqual([

@@ -20,6 +20,7 @@ import {
   type DateRange,
   type OccupancyResult,
   type RankedItem,
+  type SaleLineFact,
   type StylistPerformance,
   type UpcomingAppointmentFact,
 } from '../domain/reporting';
@@ -38,7 +39,9 @@ export interface ExecutiveReport {
   readonly topProducts: readonly RankedItem[];
   readonly topStylists: readonly StylistPerformance[];
   readonly dailySales: readonly { date: string; total: Money }[];
-  readonly commissionTotal: Money;
+  /** Comisión de servicios del periodo. Nunca se suma con la de productos (ADR-0026). */
+  readonly serviceCommissionTotal: Money;
+  readonly productCommissionTotal: Money;
 }
 
 export interface ExecutiveReportInput {
@@ -109,16 +112,24 @@ export class GetExecutiveReportUseCase implements UseCase<ExecutiveReportInput, 
       appointments: appointmentCounts(appointments),
       topProducts: topProducts(lines, this.currency),
       topStylists: stylists,
+      dailySales: dailySales(sales, period, this.timeZone, this.currency),
       // Las comisiones se agregan sobre **todas** las líneas, no sobre el top de
       // profesionales: si no, el pasivo del mes cambiaría según cuántos se muestren.
-      dailySales: dailySales(sales, period, this.timeZone, this.currency),
-      commissionTotal: Money.sum(
-        lines.map((line) => line.commissionAmount),
-        this.currency,
-      ),
+      serviceCommissionTotal: commissionOf(lines, 'SERVICE', this.currency),
+      productCommissionTotal: commissionOf(lines, 'PRODUCT', this.currency),
     };
   }
 }
+
+const commissionOf = (
+  lines: readonly SaleLineFact[],
+  kind: SaleLineFact['kind'],
+  currency: string,
+): Money =>
+  Money.sum(
+    lines.filter((line) => line.kind === kind).map((line) => line.commissionAmount),
+    currency,
+  );
 
 // ---------------------------------------------------------------------------
 

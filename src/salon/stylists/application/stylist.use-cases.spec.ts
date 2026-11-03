@@ -1,10 +1,17 @@
 import { BusinessRuleViolationError, EntityNotFoundError } from '@shared/domain/errors';
 import { FixedClock, SequentialIdGenerator } from '@shared/infrastructure/adapters/system.adapters';
+import { aUser, OWNER_ROLE, STYLIST_ROLE } from '@test/builders/user.builder';
 import { InMemoryAuditRecorder } from '@test/doubles/auth.doubles';
-import { InMemoryStylistRepository } from '@test/doubles/salon.doubles';
+import { InMemoryUserRepository } from '@test/doubles/in-memory-user.repository';
+import {
+  FakeStylistOffboarding,
+  InMemoryStylistRepository,
+  passthroughUnitOfWork,
+} from '@test/doubles/salon.doubles';
 
 import {
   AddTimeOffUseCase,
+  CheckStylistRetirementUseCase,
   CreateStylistUseCase,
   DeleteStylistUseCase,
   GetStylistUseCase,
@@ -23,6 +30,8 @@ describe('Casos de uso de profesionales', () => {
   const NOW = new Date('2026-09-02T10:00:00.000Z');
 
   let stylists: InMemoryStylistRepository;
+  let users: InMemoryUserRepository;
+  let offboarding: FakeStylistOffboarding;
   let audit: InMemoryAuditRecorder;
   let clock: FixedClock;
   let ids: SequentialIdGenerator;
@@ -33,6 +42,7 @@ describe('Casos de uso de profesionales', () => {
   let search: SearchStylistsUseCase;
   let remove: DeleteStylistUseCase;
   let restore: RestoreStylistUseCase;
+  let checkRetirement: CheckStylistRetirementUseCase;
   let setSchedule: SetStylistScheduleUseCase;
   let addTimeOff: AddTimeOffUseCase;
   let removeTimeOff: RemoveTimeOffUseCase;
@@ -41,6 +51,8 @@ describe('Casos de uso de profesionales', () => {
 
   beforeEach(() => {
     stylists = new InMemoryStylistRepository();
+    users = new InMemoryUserRepository();
+    offboarding = new FakeStylistOffboarding();
     audit = new InMemoryAuditRecorder();
     clock = new FixedClock(NOW);
     ids = new SequentialIdGenerator();
@@ -51,8 +63,16 @@ describe('Casos de uso de profesionales', () => {
     update = new UpdateStylistUseCase(stylists, clock, audit);
     getOne = new GetStylistUseCase(stylists);
     search = new SearchStylistsUseCase(stylists);
-    remove = new DeleteStylistUseCase(stylists, audit);
-    restore = new RestoreStylistUseCase(stylists, audit);
+    remove = new DeleteStylistUseCase(
+      stylists,
+      offboarding,
+      users,
+      passthroughUnitOfWork,
+      clock,
+      audit,
+    );
+    restore = new RestoreStylistUseCase(stylists, users, passthroughUnitOfWork, clock, audit);
+    checkRetirement = new CheckStylistRetirementUseCase(stylists, offboarding, users, clock);
     setSchedule = new SetStylistScheduleUseCase(stylists, ids, clock, audit);
     addTimeOff = new AddTimeOffUseCase(stylists, ids, clock, audit);
     removeTimeOff = new RemoveTimeOffUseCase(stylists, clock, audit);
@@ -163,6 +183,107 @@ describe('Casos de uso de profesionales', () => {
 
       expect(restored.id).toBe(stylist.id);
       expect(audit.has('RESTORE')).toBe(true);
+    });
+
+    it('no la da de baja con citas, comandas o turnos pendientes', async () => {
+      const stylist = await newStylist();
+      offboarding.withPendingWork(stylist.id, {
+        appointments: {
+          total: 2,
+          items: [
+            {
+              id: 'cita-1',
+              startsAt: new Date('2026-09-05T10:00:00.000Z'),
+              endsAt: new Date('2026-09-05T11:00:00.000Z'),
+              status: 'CONFIRMED',
+              clientName: 'Rosa Iglesias',
+              serviceNames: ['Corte'],
+            },
+          ],
+        },
+        pendingTickets: { total: 1, items: [] },
+        activeQueueTurns: [{ id: 't-1', number: 4, clientName: 'Eva', status: 'IN_SERVICE' }],
+      });
+
+      const error = await remove
+        .execute({ id: stylist.id, actorId: 'admin' })
+        .then(() => new Error('se esperaba el rechazo'))
+        .catch((caught: Error) => caught);
+
+      expect(error).toBeInstanceOf(BusinessRuleViolationError);
+      expect((error as BusinessRuleViolationError).code).toBe('STYLIST_HAS_PENDING_WORK');
+      expect(error.message).toContain(
+        '2 citas pendientes, 1 comanda sin cobrar y 1 turno en curso',
+      );
+      // Sigue en el equipo, y nada se tocó.
+      await expect(getOne.execute(stylist.id)).resolves.toBeDefined();
+      expect(offboarding.released).toEqual([]);
+    });
+
+    it('pasa a la fila general a las clientas en espera que la pidieron', async () => {
+      const stylist = await newStylist();
+      offboarding.withPendingWork(stylist.id, { waitingPreferences: 3 });
+
+      const check = await checkRetirement.execute({ id: stylist.id });
+      expect(check.blocked).toBe(false);
+      expect(check.pendingWork.waitingPreferences).toBe(3);
+
+      await remove.execute({ id: stylist.id, actorId: 'admin' });
+
+      expect(offboarding.released).toEqual([stylist.id]);
+    });
+
+    it('apaga su acceso al sistema y cierra sus sesiones', async () => {
+      const account = aUser().withRoles(STYLIST_ROLE).build();
+      users.seed(account);
+      const stylist = await newStylist({ userId: account.id });
+      const tokenVersion = account.tokenVersion;
+
+      const check = await checkRetirement.execute({ id: stylist.id });
+      expect(check.account).toEqual({ linked: true, willBeDeactivated: true });
+
+      await remove.execute({ id: stylist.id, actorId: 'admin' });
+
+      const after = await users.findById(account.id);
+      expect(after?.status).toBe('INACTIVE');
+      expect(after?.tokenVersion).toBe(tokenVersion + 1);
+    });
+
+    it('no le quita el acceso a una dueña que también atiende', async () => {
+      const owner = aUser().withRoles(OWNER_ROLE, STYLIST_ROLE).build();
+      users.seed(owner);
+      const stylist = await newStylist({ userId: owner.id });
+
+      expect((await checkRetirement.execute({ id: stylist.id })).account.willBeDeactivated).toBe(
+        false,
+      );
+      await remove.execute({ id: stylist.id, actorId: 'admin' });
+
+      expect((await users.findById(owner.id))?.status).toBe('ACTIVE');
+    });
+
+    it('al reactivarla le devuelve el acceso', async () => {
+      const account = aUser().withRoles(STYLIST_ROLE).build();
+      users.seed(account);
+      const stylist = await newStylist({ userId: account.id });
+      await remove.execute({ id: stylist.id, actorId: 'admin' });
+
+      await restore.execute({ id: stylist.id, actorId: 'admin' });
+
+      expect((await users.findById(account.id))?.status).toBe('ACTIVE');
+      await expect(getOne.execute(stylist.id)).resolves.toBeDefined();
+    });
+
+    it('una profesional sin cuenta se da de baja igual', async () => {
+      const stylist = await newStylist();
+
+      expect((await checkRetirement.execute({ id: stylist.id })).account).toEqual({
+        linked: false,
+        willBeDeactivated: false,
+      });
+      await remove.execute({ id: stylist.id, actorId: 'admin' });
+
+      await expect(getOne.execute(stylist.id)).rejects.toThrow(EntityNotFoundError);
     });
   });
 

@@ -37,12 +37,20 @@ describe('Product', () => {
       expect(aProduct().stockOnHand).toBe(0);
     });
 
-    it('aplica el IVA de Guatemala por defecto', () => {
-      expect(aProduct().taxRate.value).toBe(12);
+    it('nace sin IVA: el salón no lo cobra (ADR-0026)', () => {
+      expect(aProduct().taxRate.value).toBe(0);
     });
 
-    it('admite otro IVA cuando el producto lo lleva', () => {
-      expect(aProduct({ taxRate: Percentage.create(0) }).taxRate.value).toBe(0);
+    it('conserva un tipo indicado', () => {
+      expect(aProduct({ taxRate: Percentage.create(12) }).taxRate.value).toBe(12);
+    });
+
+    it('nace sin comisión especial: manda el % en productos de cada profesional', () => {
+      expect(aProduct().commissionRate).toBeNull();
+    });
+
+    it('admite una comisión especial', () => {
+      expect(aProduct({ commissionRate: Percentage.create(5) }).commissionRate?.value).toBe(5);
     });
 
     it('rechaza un producto que ni se vende ni se usa en cabina', () => {
@@ -188,11 +196,22 @@ describe('Product', () => {
   });
 
   describe('margen', () => {
-    it('lo calcula sobre el precio de venta sin IVA, como el coste', () => {
-      // 112 con IVA son 100 para el salón: con un coste de 60, el margen es del 40 %.
-      expect(aProduct({ price: gtq('112.00'), costPrice: gtq('60.00') }).marginPercentage()).toBe(
+    it('sin IVA, lo calcula sobre el precio de venta', () => {
+      // 100 para el salón con un coste de 60: el margen es del 40 %.
+      expect(aProduct({ price: gtq('100.00'), costPrice: gtq('60.00') }).marginPercentage()).toBe(
         40,
       );
+    });
+
+    it('con IVA dentro, lo calcula sobre el precio sin IVA, como el coste', () => {
+      // 112 con IVA son 100 para el salón: con un coste de 60, el margen es del 40 %.
+      expect(
+        aProduct({
+          price: gtq('112.00'),
+          costPrice: gtq('60.00'),
+          taxRate: Percentage.create(12),
+        }).marginPercentage(),
+      ).toBe(40);
     });
 
     it('no lo calcula en un producto gratuito', () => {

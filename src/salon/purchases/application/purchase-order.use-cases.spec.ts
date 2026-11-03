@@ -158,24 +158,11 @@ describe('Casos de uso de pedidos de compra', () => {
       expect(order.expectedAt).toEqual(new Date(expectedAt));
     });
 
-    it('usa impuesto cero si el catálogo devuelve un producto inconsistente', async () => {
+    it('aplica el 12 % del proveedor aunque el producto se venda sin IVA (ADR-0026)', async () => {
+      // El IVA del producto es el de venta, y el salón no lo cobra. El proveedor sí lo
+      // cobra, y la orden tiene que cuadrar con su factura.
       suppliers.seed(seedSupplier());
-      const unexpected = seedProduct({ id: 'product-distinto', taxRate: 12 });
-      jest.spyOn(products, 'findManyByIds').mockResolvedValueOnce([unexpected]);
-
-      const { order } = await create.execute({
-        tenantId: TENANT,
-        supplierId: 'supplier-1',
-        lines: [{ productId: 'product-1', quantity: 1, unitCost: 100 }],
-        actorId: 'actor-1',
-      });
-
-      expect(order.lines[0].taxRate.value).toBe(0);
-    });
-
-    it('toma el tipo impositivo del producto cuando la línea no lo declara', async () => {
-      suppliers.seed(seedSupplier());
-      products.seed(seedProduct({ id: 'product-1', taxRate: 5 }));
+      products.seed(seedProduct({ id: 'product-1', taxRate: 0 }));
 
       const { order } = await create.execute({
         tenantId: TENANT,
@@ -184,8 +171,8 @@ describe('Casos de uso de pedidos de compra', () => {
         actorId: 'actor-1',
       });
 
-      expect(order.lines[0].taxRate.value).toBe(5);
-      expect(order.total.toDecimalString()).toBe('105.00');
+      expect(order.lines[0].taxRate.value).toBe(12);
+      expect(order.total.toDecimalString()).toBe('112.00');
     });
 
     it('respeta el tipo que la línea declara explícitamente', async () => {

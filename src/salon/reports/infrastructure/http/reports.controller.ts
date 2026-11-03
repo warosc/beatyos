@@ -78,7 +78,8 @@ const presentReport = (report: ExecutiveReport) => ({
   cancelledAppointments: report.appointments.CANCELLED ?? 0,
   noShowAppointments: report.appointments.NO_SHOW ?? 0,
   appointmentsByStatus: report.appointments,
-  commissionTotal: report.commissionTotal.toDecimalString(),
+  serviceCommissionTotal: report.serviceCommissionTotal.toDecimalString(),
+  productCommissionTotal: report.productCommissionTotal.toDecimalString(),
   topProducts: report.topProducts.map((item) => ({
     id: item.id,
     name: item.name,
@@ -90,7 +91,10 @@ const presentReport = (report: ExecutiveReport) => ({
     name: item.name,
     revenue: item.revenue.toDecimalString(),
     services: item.services.toFixed(3),
-    commission: item.commission.toDecimalString(),
+    serviceCommission: item.serviceCommission.toDecimalString(),
+    productRevenue: item.productRevenue.toDecimalString(),
+    products: item.products.toFixed(3),
+    productCommission: item.productCommission.toDecimalString(),
   })),
   dailySales: report.dailySales.map((item) => ({
     date: item.date,

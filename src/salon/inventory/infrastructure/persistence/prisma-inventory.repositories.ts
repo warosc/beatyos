@@ -328,6 +328,7 @@ export class PrismaProductRepository
       costPrice: product.costPrice.toDecimalString(),
       currency: product.price.currency,
       taxRate: product.taxRate.value.toFixed(2),
+      commissionRate: product.commissionRate?.value.toFixed(2) ?? null,
       unit: product.unit,
       reorderPoint: product.reorderPoint.toFixed(3),
       reorderQuantity: product.reorderQuantity.toFixed(3),
@@ -357,6 +358,8 @@ export class PrismaProductRepository
       price: Money.fromDecimal(row.price.toFixed(2), currency),
       costPrice: Money.fromDecimal(row.costPrice.toFixed(2), currency),
       taxRate: Percentage.create(Number(row.taxRate)),
+      commissionRate:
+        row.commissionRate === null ? null : Percentage.create(Number(row.commissionRate)),
       unit: row.unit,
       // Las cantidades sí son `number`: no son dinero, la columna tiene tres decimales y
       // el dominio redondea a esa misma precisión en cada operación.

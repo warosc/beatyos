@@ -1,4 +1,9 @@
-import { buildPage, type Page, type PageRequest } from '@shared/domain/ports/repository.port';
+import {
+  buildPage,
+  type Page,
+  type PageRequest,
+  type QueryOptions,
+} from '@shared/domain/ports/repository.port';
 import { EntityNotFoundError } from '@shared/domain/errors';
 import type { TimeRange } from '@shared/domain/value-objects/time-range.vo';
 import { BLOCKING_STATUSES, type Appointment } from '@salon/appointments/domain/appointment.entity';
@@ -18,6 +23,10 @@ import type {
 } from '@salon/catalog/domain/catalog.repositories';
 import type { Service } from '@salon/catalog/domain/service.entity';
 import type { Stylist } from '@salon/stylists/domain/stylist.entity';
+import type {
+  StylistOffboarding,
+  StylistPendingWork,
+} from '@salon/stylists/domain/stylist-offboarding.ports';
 import type {
   StylistFilter,
   StylistRepository,
@@ -98,9 +107,10 @@ abstract class InMemoryStore<T extends { id: string }> {
 }
 
 export class InMemoryStylistRepository extends InMemoryStore<Stylist> implements StylistRepository {
-  async findById(id: string): Promise<Stylist | null> {
+  async findById(id: string, options?: QueryOptions): Promise<Stylist | null> {
     const stylist = this.items.get(id);
-    return stylist && !this.isSoftDeleted(id) ? stylist : null;
+    if (!stylist) return null;
+    return options?.includeDeleted || !this.isSoftDeleted(id) ? stylist : null;
   }
 
   async findByIdOrFail(id: string): Promise<Stylist> {
@@ -458,3 +468,38 @@ export class InMemoryAppointmentRepository
 export const passthroughUnitOfWork = {
   execute: <T>(work: () => Promise<T>): Promise<T> => work(),
 };
+
+/** Sin nada pendiente: se le puede dar de baja. */
+export const NO_PENDING_WORK: StylistPendingWork = {
+  appointments: { total: 0, items: [] },
+  pendingTickets: { total: 0, items: [] },
+  activeQueueTurns: [],
+  waitingPreferences: 0,
+};
+
+/**
+ * Lo pendiente de cada profesional, fijado por el test (ADR-0027).
+ *
+ * Liberar las preferencias pone a cero las clientas en espera que la pedían y anota a
+ * quién se le liberaron, para comprobar que la baja lo hace.
+ */
+export class FakeStylistOffboarding implements StylistOffboarding {
+  private readonly work = new Map<string, StylistPendingWork>();
+  readonly released: string[] = [];
+
+  withPendingWork(stylistId: string, work: Partial<StylistPendingWork>): this {
+    this.work.set(stylistId, { ...NO_PENDING_WORK, ...work });
+    return this;
+  }
+
+  async pendingWorkOf(stylistId: string): Promise<StylistPendingWork> {
+    return this.work.get(stylistId) ?? NO_PENDING_WORK;
+  }
+
+  async releaseQueuePreferences(stylistId: string): Promise<number> {
+    const current = this.work.get(stylistId) ?? NO_PENDING_WORK;
+    this.work.set(stylistId, { ...current, waitingPreferences: 0 });
+    this.released.push(stylistId);
+    return current.waitingPreferences;
+  }
+}

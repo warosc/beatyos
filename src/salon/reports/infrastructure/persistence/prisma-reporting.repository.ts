@@ -6,6 +6,7 @@ import { Money } from '../../../../shared/domain/value-objects/money.vo';
 import type { Env } from '../../../../shared/infrastructure/config/env.schema';
 import { withMappedErrors } from '../../../../shared/infrastructure/persistence/prisma/prisma-error.mapper';
 import { PrismaService } from '../../../../shared/infrastructure/persistence/prisma/prisma.service';
+import { withRetiredMark } from '../../../stylists/domain/stylist.entity';
 import type {
   AppointmentFact,
   DateRange,
@@ -94,7 +95,9 @@ export class PrismaReportingRepository implements ReportingRepository {
           lineTotal: true,
           commissionAmount: true,
           currency: true,
-          stylist: { select: { displayName: true, firstName: true, lastName: true } },
+          stylist: {
+            select: { displayName: true, firstName: true, lastName: true, deletedAt: true },
+          },
         },
       }),
     );
@@ -107,8 +110,13 @@ export class PrismaReportingRepository implements ReportingRepository {
         productId: row.productId,
         serviceId: row.serviceId,
         stylistId: row.stylistId,
+        // El `select` anidado trae también a las dadas de baja: sus ventas siguen siendo
+        // suyas, con la marca para que se lea que ya no está (ADR-0027).
         stylistName: row.stylist
-          ? (row.stylist.displayName ?? `${row.stylist.firstName} ${row.stylist.lastName}`.trim())
+          ? withRetiredMark(
+              row.stylist.displayName ?? `${row.stylist.firstName} ${row.stylist.lastName}`.trim(),
+              row.stylist.deletedAt,
+            )
           : null,
         description: row.description,
         quantity: Number(row.quantity),
@@ -142,9 +150,14 @@ export class PrismaReportingRepository implements ReportingRepository {
     }));
   }
 
+  /**
+   * Jornadas del equipo que atiende: la capacidad de la agenda. Una profesional dada de baja
+   * o inactiva conserva su horario guardado, pero ya no ofrece esas horas (ADR-0027).
+   */
   async findSchedules(): Promise<ScheduleFact[]> {
     const rows = await withMappedErrors(this.entityName, () =>
       this.prisma.client.stylistSchedule.findMany({
+        where: { stylist: { deletedAt: null, status: { not: 'INACTIVE' } } },
         select: { dayOfWeek: true, startMinutes: true, endMinutes: true },
       }),
     );

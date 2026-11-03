@@ -49,7 +49,7 @@ describe('Informes (integración)', () => {
     await inspect(() =>
       prisma.client.service.updateMany({
         where: { id: salonA.serviceId },
-        data: { price: '112.00', taxRate: '12.00', commissionRate: '20.00' },
+        data: { price: '112.00', commissionRate: '20.00' },
       }),
     );
   });
@@ -58,7 +58,7 @@ describe('Informes (integración)', () => {
   const server = () => app.getHttpServer();
   const inspect = <T>(work: () => Promise<T>): Promise<T> => QueryScopeStore.crossTenant(work);
 
-  /** Una venta de un servicio a 112,00: 100,00 de base más el 12 % de IVA. */
+  /** Una venta de un servicio a 112,00. El salón no cobra IVA (ADR-0026). */
   const sellService = (method = 'CARD') =>
     request(server())
       .post(api('/sales'))
@@ -124,10 +124,12 @@ describe('Informes (integración)', () => {
       const response = await executive().expect(200);
       const stylist = response.body.data.topStylists[0];
 
-      expect(stylist.revenue).toBe('100.00');
-      // La comisión es el 20 % de la base imponible, no del total con IVA: 20,00 y no 22,40.
-      expect(stylist.commission).toBe('20.00');
-      expect(response.body.data.commissionTotal).toBe('20.00');
+      expect(stylist.revenue).toBe('112.00');
+      // El 20 % de lo que pagó la clienta (ADR-0026).
+      expect(stylist.serviceCommission).toBe('22.40');
+      expect(stylist.productCommission).toBe('0.00');
+      expect(response.body.data.serviceCommissionTotal).toBe('22.40');
+      expect(response.body.data.productCommissionTotal).toBe('0.00');
     });
 
     it('mide la retención dentro del periodo', async () => {

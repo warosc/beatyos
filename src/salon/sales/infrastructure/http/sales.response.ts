@@ -5,6 +5,7 @@ import type { Invoice } from '../../domain/invoice.entity';
 import type { Payment } from '../../domain/payment.entity';
 import type { SalesNames } from '../../domain/sales.repositories';
 import type { SalesSummary } from '../../application/sales.use-cases';
+import type { CommissionBucket } from '../../domain/commission-payout';
 
 /**
  * Presentador de ventas (ADR-0014, ADR-0018).
@@ -147,6 +148,25 @@ export class PaymentMethodTotalsResponse {
   net!: string;
 }
 
+/** Servicios o productos cobrados a nombre de una profesional. */
+export class CommissionBucketResponse {
+  /** Servicios realizados o unidades de producto. */
+  count!: number;
+  /** Lo que pagaron las clientas, después de descuentos. */
+  sold!: string;
+  commission!: string;
+}
+
+/** Lo que hay que pagarle a una profesional por el periodo (ADR-0026). */
+export class StylistCommissionResponse {
+  stylistId!: string;
+  stylistName!: string;
+  @ApiProperty({ type: CommissionBucketResponse }) services!: CommissionBucketResponse;
+  @ApiProperty({ type: CommissionBucketResponse }) products!: CommissionBucketResponse;
+  /** Servicios más productos: lo que se le entrega. */
+  total!: string;
+}
+
 export class SalesSummaryResponse {
   count!: number;
   total!: string;
@@ -154,7 +174,19 @@ export class SalesSummaryResponse {
   voidCount!: number;
   currency!: string;
   @ApiProperty({ type: [PaymentMethodTotalsResponse] }) byMethod!: PaymentMethodTotalsResponse[];
+  @ApiProperty({
+    type: [StylistCommissionResponse],
+    description:
+      'Comisiones a pagar por profesional en el periodo, servicios y productos por separado. Informativo: no cambia el efectivo esperado.',
+  })
+  commissions!: StylistCommissionResponse[];
 }
+
+const bucketResponse = (bucket: CommissionBucket): CommissionBucketResponse => ({
+  count: bucket.count,
+  sold: bucket.sold.toDecimalString(),
+  commission: bucket.commission.toDecimalString(),
+});
 
 export const toSalesSummaryResponse = (
   summary: SalesSummary,
@@ -170,6 +202,13 @@ export const toSalesSummaryResponse = (
     received: row.received.toDecimalString(),
     refunded: row.refunded.toDecimalString(),
     net: row.received.subtract(row.refunded).toDecimalString(),
+  })),
+  commissions: summary.commissions.map((row) => ({
+    stylistId: row.stylistId,
+    stylistName: row.stylistName,
+    services: bucketResponse(row.services),
+    products: bucketResponse(row.products),
+    total: row.total.toDecimalString(),
   })),
 });
 

@@ -1992,7 +1992,7 @@
         ]
       },
       "delete": {
-        "description": "Borrado lógico. Sus citas y comisiones históricas siguen siendo consultables; solo deja de admitir reservas nuevas.",
+        "description": "Borrado lógico (ADR-0027). Deja de aparecer en la agenda, la caja, la cola y las metas, y su acceso al sistema se desactiva (salvo si es dueña). Sus ventas, citas y comisiones pasadas se conservan con su nombre. Las clientas en espera que la pidieron pasan a la fila general. No se puede con citas por atender, comandas sin cobrar o turnos en curso.",
         "operationId": "Stylists_remove",
         "parameters": [
           {
@@ -2014,6 +2014,9 @@
           },
           "403": {
             "description": "Requiere el permiso: stylists.delete"
+          },
+          "422": {
+            "description": "`STYLIST_HAS_PENDING_WORK`: tiene citas, comandas o turnos pendientes"
           }
         },
         "security": [
@@ -2316,8 +2319,53 @@
         ]
       }
     },
+    "/api/v1/stylists/{id}/retirement": {
+      "get": {
+        "description": "Lista sus citas por atender, comandas sin cobrar y turnos en curso, que hay que resolver antes de darla de baja, y dice si su acceso al sistema se desactivará (ADR-0027).",
+        "operationId": "Stylists_retirement",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StylistRetirementResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o caducado"
+          },
+          "403": {
+            "description": "Requiere el permiso: stylists.delete"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qué impide dar de baja a una profesional",
+        "tags": [
+          "Profesionales"
+        ]
+      }
+    },
     "/api/v1/stylists/{id}/restore": {
       "post": {
+        "description": "Vuelve a la agenda y a la caja; si su acceso estaba desactivado, se reactiva.",
         "operationId": "Stylists_restore",
         "parameters": [
           {
@@ -8778,8 +8826,16 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100,
-            "description": "Comisión general, en porcentaje. Un servicio o una habilidad pueden sobreescribirla.",
+            "description": "% en servicios: lo que gana de lo que paga la clienta por cada servicio. Un servicio o una habilidad pueden sobreescribirlo.",
             "example": 15
+          },
+          "productCommissionRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "default": 10,
+            "description": "% en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0026).",
+            "example": 10
           },
           "userId": {
             "type": "string",
@@ -8846,7 +8902,13 @@
           },
           "commissionRate": {
             "type": "number",
-            "example": 15
+            "example": 15,
+            "description": "% en servicios"
+          },
+          "productCommissionRate": {
+            "type": "number",
+            "example": 10,
+            "description": "% en productos"
           },
           "userId": {
             "type": "string",
@@ -8963,6 +9025,7 @@
           "isBookable",
           "hiredAt",
           "commissionRate",
+          "productCommissionRate",
           "userId",
           "schedule",
           "weeklyMinutes",
@@ -9058,8 +9121,16 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100,
-            "description": "Comisión general, en porcentaje. Un servicio o una habilidad pueden sobreescribirla.",
+            "description": "% en servicios: lo que gana de lo que paga la clienta por cada servicio. Un servicio o una habilidad pueden sobreescribirlo.",
             "example": 15
+          },
+          "productCommissionRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "default": 10,
+            "description": "% en productos: lo que gana de cada producto cobrado a su nombre. La comisión especial del producto manda sobre esta (ADR-0026).",
+            "example": 10
           },
           "userId": {
             "type": "string",
@@ -9186,6 +9257,166 @@
           "skills"
         ]
       },
+      "RetirementAppointmentResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endsAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "example": "CONFIRMED"
+          },
+          "clientName": {
+            "type": "string",
+            "example": "Rosa Iglesias"
+          },
+          "serviceNames": {
+            "example": [
+              "Corte de señora"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "startsAt",
+          "endsAt",
+          "status",
+          "clientName",
+          "serviceNames"
+        ]
+      },
+      "RetirementTicketResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "clientName": {
+            "type": "string",
+            "example": "Rosa Iglesias"
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "clientName"
+        ]
+      },
+      "RetirementQueueTurnResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "number",
+            "example": 12
+          },
+          "clientName": {
+            "type": "string",
+            "example": "Rosa"
+          },
+          "status": {
+            "type": "string",
+            "example": "IN_SERVICE"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "clientName",
+          "status"
+        ]
+      },
+      "StylistRetirementResponse": {
+        "type": "object",
+        "properties": {
+          "stylistId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string",
+            "example": "Sara"
+          },
+          "blocked": {
+            "type": "boolean",
+            "description": "Si hay algo pendiente que impide darla de baja ahora."
+          },
+          "appointmentsTotal": {
+            "type": "number",
+            "description": "Citas por atender o en curso, sin contar las listadas"
+          },
+          "appointments": {
+            "description": "Las primeras 50",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetirementAppointmentResponse"
+            }
+          },
+          "pendingTicketsTotal": {
+            "type": "number"
+          },
+          "pendingTickets": {
+            "description": "Las primeras 50",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetirementTicketResponse"
+            }
+          },
+          "activeQueueTurns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetirementQueueTurnResponse"
+            }
+          },
+          "waitingPreferences": {
+            "type": "number",
+            "description": "Clientas en espera que la pidieron. No bloquean: pasan a la fila general."
+          },
+          "hasAccount": {
+            "type": "boolean",
+            "description": "Tiene cuenta de acceso al sistema"
+          },
+          "accountWillBeDeactivated": {
+            "type": "boolean",
+            "description": "Su acceso se desactivará con la baja"
+          }
+        },
+        "required": [
+          "stylistId",
+          "displayName",
+          "blocked",
+          "appointmentsTotal",
+          "appointments",
+          "pendingTicketsTotal",
+          "pendingTickets",
+          "activeQueueTurns",
+          "waitingPreferences",
+          "hasAccount",
+          "accountWillBeDeactivated"
+        ]
+      },
       "CreateServiceDto": {
         "type": "object",
         "properties": {
@@ -9230,14 +9461,6 @@
             "type": "string",
             "nullable": true,
             "maxLength": 1000
-          },
-          "taxRate": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 100,
-            "default": 12,
-            "example": 12,
-            "description": "IVA de Guatemala. Cada servicio guarda el suyo: si el tipo cambia por ley, los documentos ya emitidos conservan el que se les aplicó."
           },
           "commissionRate": {
             "type": "number",
@@ -9312,13 +9535,13 @@
           },
           "taxAmount": {
             "type": "string",
-            "example": "3.00",
-            "description": "IVA que va dentro del precio"
+            "example": "0.00",
+            "description": "IVA que va dentro del precio. Siempre 0 desde ADR-0026: el salón no cobra IVA"
           },
           "priceWithTax": {
             "type": "string",
             "example": "28.00",
-            "description": "Igual que `price`: el IVA ya va dentro"
+            "description": "Igual que `price`: lo que paga la clienta"
           },
           "currency": {
             "type": "string",
@@ -9326,7 +9549,8 @@
           },
           "taxRate": {
             "type": "number",
-            "example": 21
+            "example": 0,
+            "description": "Siempre 0 desde ADR-0026"
           },
           "commissionRate": {
             "type": "number",
@@ -9438,11 +9662,6 @@
             "type": "string",
             "example": "30.00",
             "description": "Con el IVA incluido, como cadena decimal. No cambia las citas ya agendadas."
-          },
-          "taxRate": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 100
           },
           "commissionRate": {
             "type": "number",
@@ -10514,7 +10733,13 @@
             "type": "string"
           },
           "taxRate": {
-            "type": "string"
+            "type": "string",
+            "description": "Siempre `0.00` desde ADR-0026: el salón no cobra IVA."
+          },
+          "commissionRate": {
+            "type": "number",
+            "nullable": true,
+            "description": "Comisión especial al venderlo. `null`: la de cada profesional en productos."
           },
           "unit": {
             "type": "string"
@@ -10571,6 +10796,7 @@
           "price",
           "currency",
           "taxRate",
+          "commissionRate",
           "unit",
           "stockOnHand",
           "reorderPoint",
@@ -10655,12 +10881,13 @@
             "minimum": 0,
             "example": 65
           },
-          "taxRate": {
+          "commissionRate": {
             "type": "number",
+            "nullable": true,
             "minimum": 0,
             "maximum": 100,
-            "example": 12,
-            "description": "IVA aplicable. Por defecto, el 12 % de Guatemala"
+            "example": 5,
+            "description": "Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0026). El salón no cobra IVA, así que no se acepta tipo impositivo."
           },
           "reorderPoint": {
             "type": "number",
@@ -10744,12 +10971,13 @@
             "minimum": 0,
             "example": 65
           },
-          "taxRate": {
+          "commissionRate": {
             "type": "number",
+            "nullable": true,
             "minimum": 0,
             "maximum": 100,
-            "example": 12,
-            "description": "IVA aplicable. Por defecto, el 12 % de Guatemala"
+            "example": 5,
+            "description": "Comisión especial al venderlo. Vacía o nula: cada profesional gana su % en productos (ADR-0026). El salón no cobra IVA, así que no se acepta tipo impositivo."
           },
           "reorderPoint": {
             "type": "number",
@@ -11883,6 +12111,55 @@
           "net"
         ]
       },
+      "CommissionBucketResponse": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "number",
+            "description": "Servicios realizados o unidades de producto."
+          },
+          "sold": {
+            "type": "string",
+            "description": "Lo que pagaron las clientas, después de descuentos."
+          },
+          "commission": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "sold",
+          "commission"
+        ]
+      },
+      "StylistCommissionResponse": {
+        "type": "object",
+        "properties": {
+          "services": {
+            "$ref": "#/components/schemas/CommissionBucketResponse"
+          },
+          "products": {
+            "$ref": "#/components/schemas/CommissionBucketResponse"
+          },
+          "stylistId": {
+            "type": "string"
+          },
+          "stylistName": {
+            "type": "string"
+          },
+          "total": {
+            "type": "string",
+            "description": "Servicios más productos: lo que se le entrega."
+          }
+        },
+        "required": [
+          "services",
+          "products",
+          "stylistId",
+          "stylistName",
+          "total"
+        ]
+      },
       "SalesSummaryResponse": {
         "type": "object",
         "properties": {
@@ -11890,6 +12167,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PaymentMethodTotalsResponse"
+            }
+          },
+          "commissions": {
+            "description": "Comisiones a pagar por profesional en el periodo, servicios y productos por separado. Informativo: no cambia el efectivo esperado.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StylistCommissionResponse"
             }
           },
           "count": {
@@ -11910,6 +12194,7 @@
         },
         "required": [
           "byMethod",
+          "commissions",
           "count",
           "total",
           "discountTotal",
@@ -13022,6 +13307,11 @@
             "type": "string",
             "format": "uuid"
           },
+          "stylistName": {
+            "type": "string",
+            "example": "Sara",
+            "description": "Nombre de la profesional, con «(dada de baja)» si ya no está en el equipo"
+          },
           "metric": {
             "type": "string",
             "enum": [
@@ -13074,6 +13364,7 @@
         "required": [
           "id",
           "stylistId",
+          "stylistName",
           "metric",
           "targetAmount",
           "progress",

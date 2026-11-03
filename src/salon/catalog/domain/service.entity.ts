@@ -49,16 +49,16 @@ const CODE_PATTERN = /^[A-Z0-9][A-Z0-9-]{1,19}$/;
 const MAX_DURATION_MINUTES = 8 * 60;
 
 /**
- * Tipo impositivo por defecto: el IVA de Guatemala.
+ * Tipo impositivo por defecto: cero, porque el salón no cobra IVA (ADR-0026).
  *
- * Es un **valor por defecto, no una constante del dominio**: cada servicio guarda el suyo,
- * porque el tipo puede cambiar por ley y los documentos ya emitidos deben conservar el que
- * se les aplicó. Cambiar esto solo afecta a lo que se cree a partir de ahora.
+ * Es un **valor por defecto, no una constante del dominio**: cada servicio guarda el suyo
+ * y los documentos ya emitidos conservan el que se les aplicó. La API ya no acepta otro
+ * tipo, así que en la práctica todo servicio nace y se queda en cero.
  *
- * Estuvo en 21 —el tipo español— por venir el diseño inicial de ese mercado. Cada servicio
- * que se creaba sin indicar tipo nacía con un impuesto que no le corresponde.
+ * Fue 21 (el tipo español del diseño inicial) y después 12, el IVA de Guatemala, hasta que
+ * el salón dejó de cobrarlo.
  */
-const DEFAULT_TAX_RATE = 12;
+const DEFAULT_TAX_RATE = 0;
 
 /** Palabras que no distinguen un servicio de otro y solo alargarían su código. */
 const CODE_STOP_WORDS: ReadonlySet<string> = new Set([

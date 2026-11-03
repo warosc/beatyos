@@ -36,6 +36,7 @@ import { includeDeletedFor } from '../../../../shared/infrastructure/http/includ
 import { PageMetaResponse } from '../../../../shared/infrastructure/http/dto/pagination.dto';
 import {
   AddTimeOffUseCase,
+  CheckStylistRetirementUseCase,
   CreateStylistUseCase,
   DeleteStylistUseCase,
   GetStylistUseCase,
@@ -59,6 +60,7 @@ import {
   SetSkillsDto,
   StylistQueryDto,
   StylistResponse,
+  StylistRetirementResponse,
   UpdateStylistDto,
   WorkingHoursQueryDto,
   WorkingHoursResponse,
@@ -82,6 +84,7 @@ export class StylistsController {
     private readonly searchStylists: SearchStylistsUseCase,
     private readonly deleteStylist: DeleteStylistUseCase,
     private readonly restoreStylist: RestoreStylistUseCase,
+    private readonly checkRetirement: CheckStylistRetirementUseCase,
     private readonly setSchedule: SetStylistScheduleUseCase,
     private readonly addTimeOff: AddTimeOffUseCase,
     private readonly removeTimeOff: RemoveTimeOffUseCase,
@@ -296,17 +299,36 @@ export class StylistsController {
     return StylistResponse.from(stylist);
   }
 
+  @Get(':id/retirement')
+  @RequirePermissions(PERMISSIONS.stylists.delete)
+  @ApiOperation({
+    summary: 'Qué impide dar de baja a una profesional',
+    description:
+      'Lista sus citas por atender, comandas sin cobrar y turnos en curso, que hay que ' +
+      'resolver antes de darla de baja, y dice si su acceso al sistema se desactivará (ADR-0027).',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: StylistRetirementResponse })
+  async retirement(@Param('id', ParseUUIDPipe) id: string): Promise<StylistRetirementResponse> {
+    return StylistRetirementResponse.from(await this.checkRetirement.execute({ id }));
+  }
+
   @Delete(':id')
   @RequirePermissions(PERMISSIONS.stylists.delete)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Dar de baja a un profesional',
     description:
-      'Borrado lógico. Sus citas y comisiones históricas siguen siendo consultables; solo ' +
-      'deja de admitir reservas nuevas.',
+      'Borrado lógico (ADR-0027). Deja de aparecer en la agenda, la caja, la cola y las metas, ' +
+      'y su acceso al sistema se desactiva (salvo si es dueña). Sus ventas, citas y comisiones ' +
+      'pasadas se conservan con su nombre. Las clientas en espera que la pidieron pasan a la ' +
+      'fila general. No se puede con citas por atender, comandas sin cobrar o turnos en curso.',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiNoContentResponse()
+  @ApiUnprocessableEntityResponse({
+    description: '`STYLIST_HAS_PENDING_WORK`: tiene citas, comandas o turnos pendientes',
+  })
   async remove(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AccessTokenClaims,
@@ -316,7 +338,10 @@ export class StylistsController {
 
   @Post(':id/restore')
   @RequirePermissions(PERMISSIONS.stylists.restore)
-  @ApiOperation({ summary: 'Recuperar a un profesional dado de baja' })
+  @ApiOperation({
+    summary: 'Recuperar a un profesional dado de baja',
+    description: 'Vuelve a la agenda y a la caja; si su acceso estaba desactivado, se reactiva.',
+  })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: StylistResponse })
   async restore(

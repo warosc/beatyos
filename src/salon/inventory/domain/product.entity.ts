@@ -34,6 +34,11 @@ export interface ProductProps {
   /** Coste medio ponderado. Con lotes deja de usarse para valorar salidas (ADR-0012). */
   readonly costPrice: Money;
   readonly taxRate: Percentage;
+  /**
+   * Comisión especial al venderlo (ADR-0026). Nula: la profesional gana su % en productos.
+   * Solo cuenta cuando el producto se cobra en una venta con profesional asignada.
+   */
+  readonly commissionRate: Percentage | null;
   readonly unit: ProductUnitValue;
   readonly stockOnHand: number;
   readonly reorderPoint: number;
@@ -49,8 +54,8 @@ export interface ProductProps {
 const QUANTITY_EPSILON = 0.0005;
 const SKU_PATTERN = /^[A-Z0-9][A-Z0-9._-]{0,49}$/;
 
-/** IVA general de Guatemala. Un producto puede llevar otro, pero este es el habitual. */
-const DEFAULT_TAX_RATE = 12;
+/** El salón no cobra IVA (ADR-0026): todo producto nace con tipo cero. */
+const DEFAULT_TAX_RATE = 0;
 
 export class Product extends Entity {
   private constructor(
@@ -72,6 +77,7 @@ export class Product extends Entity {
     brand?: string | null;
     costPrice?: Money;
     taxRate?: Percentage;
+    commissionRate?: Percentage | null;
     unit?: ProductUnitValue;
     reorderPoint?: number;
     reorderQuantity?: number;
@@ -135,6 +141,7 @@ export class Product extends Entity {
       price: params.price,
       costPrice,
       taxRate: params.taxRate ?? Percentage.create(DEFAULT_TAX_RATE),
+      commissionRate: params.commissionRate ?? null,
       unit: params.unit ?? 'UNIT',
       // Nace a cero siempre: las existencias solo se mueven por el ledger. Aceptar un stock
       // inicial aquí crearía unidades sin un movimiento que las explique, y el kardex
@@ -193,6 +200,9 @@ export class Product extends Entity {
   }
   get taxRate(): Percentage {
     return this.props.taxRate;
+  }
+  get commissionRate(): Percentage | null {
+    return this.props.commissionRate;
   }
   get unit(): ProductUnitValue {
     return this.props.unit;
@@ -256,7 +266,10 @@ export class Product extends Entity {
     return this.props.costPrice.multiply(this.props.stockOnHand);
   }
 
-  /** Precio de venta sin el IVA que lleva dentro: lo que de verdad ingresa el salón. */
+  /**
+   * Precio de venta sin el IVA que lleva dentro: lo que de verdad ingresa el salón. Desde
+   * ADR-0026 el tipo es cero y coincide con el precio.
+   */
   get netPrice(): Money {
     return this.props.price.subtract(this.props.price.includedTax(this.props.taxRate.value));
   }
@@ -384,6 +397,8 @@ export class Product extends Entity {
       categoryId?: string | null;
       price?: Money;
       taxRate?: Percentage;
+      /** `null` quita la comisión especial; `undefined` la deja como estaba. */
+      commissionRate?: Percentage | null;
       unit?: ProductUnitValue;
       reorderPoint?: number;
       reorderQuantity?: number;
@@ -450,6 +465,8 @@ export class Product extends Entity {
       categoryId: changes.categoryId === undefined ? this.props.categoryId : changes.categoryId,
       price: changes.price ?? this.props.price,
       taxRate: changes.taxRate ?? this.props.taxRate,
+      commissionRate:
+        changes.commissionRate !== undefined ? changes.commissionRate : this.props.commissionRate,
       unit: changes.unit ?? this.props.unit,
       reorderPoint:
         changes.reorderPoint === undefined

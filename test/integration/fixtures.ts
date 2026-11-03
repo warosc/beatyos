@@ -201,9 +201,8 @@ export async function seedTenant(
         name: 'Corte de señora',
         durationMinutes: 45,
         bufferMinutes: 10,
-        // Con el IVA dentro (ADR-0021): 25,00 de base más el 21 %.
+        // Lo que paga la clienta. El salón no cobra IVA (ADR-0026): el tipo queda en cero.
         price: '30.25',
-        taxRate: '21.00',
       },
     });
 
@@ -213,7 +212,6 @@ export async function seedTenant(
         tenantId,
         sku: 'TIN-001',
         name: 'Tinte castaño',
-        // 18,50 de base más el 12 %.
         price: '20.72',
         costPrice: '7.20',
         stockOnHand: '20.000',

@@ -29,7 +29,10 @@ export class ProductResponse {
   stockValue?: string;
   marginPercentage?: number | null;
   currency!: string;
+  /** Siempre `0.00` desde ADR-0026: el salón no cobra IVA. */
   taxRate!: string;
+  /** Comisión especial al venderlo. `null`: la de cada profesional en productos. */
+  commissionRate!: number | null;
   unit!: string;
   stockOnHand!: string;
   reorderPoint!: string;
@@ -63,6 +66,7 @@ export const toProductResponse = (product: Product, includeCosts: boolean): Prod
     : {}),
   currency: product.price.currency,
   taxRate: product.taxRate.value.toFixed(2),
+  commissionRate: product.commissionRate?.value ?? null,
   unit: product.unit,
   stockOnHand: product.stockOnHand.toFixed(3),
   reorderPoint: product.reorderPoint.toFixed(3),

@@ -56,7 +56,8 @@ export interface CreateProductInput {
   readonly barcode?: string | null;
   readonly description?: string | null;
   readonly brand?: string | null;
-  readonly taxRate?: number;
+  /** Comisión especial al venderlo; vacía o nula, la de cada profesional (ADR-0026). */
+  readonly commissionRate?: number | null;
   readonly unit?: ProductUnitValue;
   readonly reorderPoint?: number;
   readonly reorderQuantity?: number;
@@ -116,7 +117,10 @@ export class CreateProductUseCase implements UseCase<CreateProductInput, Product
       barcode: input.barcode ?? null,
       description: input.description ?? null,
       brand: input.brand ?? null,
-      taxRate: input.taxRate === undefined ? undefined : Percentage.create(input.taxRate),
+      commissionRate:
+        input.commissionRate === null || input.commissionRate === undefined
+          ? null
+          : Percentage.create(input.commissionRate),
       unit: input.unit,
       reorderPoint: input.reorderPoint,
       reorderQuantity: input.reorderQuantity,
@@ -152,7 +156,8 @@ export interface UpdateProductInput {
   readonly barcode?: string | null;
   readonly description?: string | null;
   readonly brand?: string | null;
-  readonly taxRate?: number;
+  /** Comisión especial al venderlo; vacía o nula, la de cada profesional (ADR-0026). */
+  readonly commissionRate?: number | null;
   readonly unit?: ProductUnitValue;
   readonly reorderPoint?: number;
   readonly reorderQuantity?: number;
@@ -198,7 +203,12 @@ export class UpdateProductUseCase implements UseCase<UpdateProductInput, Product
         barcode: input.barcode,
         categoryId: input.categoryId,
         price: input.price === undefined ? undefined : Money.fromDecimal(input.price, currency),
-        taxRate: input.taxRate === undefined ? undefined : Percentage.create(input.taxRate),
+        commissionRate:
+          input.commissionRate === undefined
+            ? undefined
+            : input.commissionRate === null
+              ? null
+              : Percentage.create(input.commissionRate),
         unit: input.unit,
         reorderPoint: input.reorderPoint,
         reorderQuantity: input.reorderQuantity,

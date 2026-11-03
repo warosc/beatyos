@@ -39,6 +39,21 @@ export interface InvoiceTotals {
   readonly voidCount: number;
 }
 
+/**
+ * Lo cobrado con profesional asignada en un periodo, por profesional y tipo de línea. Es la
+ * materia prima de las comisiones a pagar al cerrar la caja (ADR-0026).
+ */
+export interface StylistSalesTotals {
+  readonly stylistId: string;
+  readonly kind: 'SERVICE' | 'PRODUCT';
+  /** Servicios realizados o unidades de producto. */
+  readonly quantity: number;
+  /** Lo que pagaron las clientas por esas líneas, después de descuentos. */
+  readonly sold: Money;
+  /** Comisión congelada en las líneas al facturar. */
+  readonly commission: Money;
+}
+
 export type InvoiceSortField = 'issuedAt' | 'number' | 'total' | 'createdAt';
 
 export interface InvoiceRepository extends SearchableRepository<
@@ -65,6 +80,12 @@ export interface InvoiceRepository extends SearchableRepository<
 
   /** Totales de las facturas emitidas en el periodo. */
   summarize(range: DateRange): Promise<InvoiceTotals>;
+
+  /**
+   * Lo vendido a nombre de cada profesional en las facturas emitidas del periodo, con las
+   * mismas facturas que `summarize` (todas menos anuladas y borradores).
+   */
+  salesByStylist(range: DateRange): Promise<StylistSalesTotals[]>;
 
   search(
     filter: InvoiceFilter,
