@@ -1,11 +1,17 @@
 'use client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Volume2 } from 'lucide-react';
+import { Settings2, Volume2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { readSignals } from '@/features/agenda/live';
 import { problem } from '@/features/service-tickets/types';
 import { cn } from '@/lib/utils';
 import { announcement, approximateWait, callKey, type QueueDisplay } from './types';
+import { pickVoice, rankVoices, voiceLabel } from './voice';
+
+/** La voz elegida en esta pantalla. Es del aparato, no del salón: cada TV tiene las suyas. */
+const VOICE_KEY = 'beautyos-tv-voice';
+
+const SAMPLE = 'Turno 12. Ana, por favor pase con Sara.';
 
 /** Cuánto se destaca una llamada nueva antes de quedar como las demás. */
 const HIGHLIGHT_MS = 12_000;
@@ -16,7 +22,10 @@ const HIGHLIGHT_MS = 12_000;
  * Se abre con el enlace que crea la encargada y se queda encendida todo el día. Enseña a
  * quién se acaba de llamar —número, nombre corto y con quién— y los números que esperan.
  * Con cada llamada nueva, o cuando la vuelven a llamar, suena una campanita y una voz lo
- * dice: «Turno 7. Ana G., pase con Sara».
+ * dice: «Turno 7. Ana, por favor pase con Sara».
+ *
+ * La voz es la del navegador del aparato, gratis (ADR-0026): se elige sola la más natural y
+ * femenina que tenga, y desde «Voz» se puede escoger y probar otra.
  *
  * Los navegadores no dejan sonar nada hasta que alguien toca la pantalla, por eso arranca
  * con un botón para activar el sonido. El mismo toque la pone a pantalla completa y le pide
@@ -28,6 +37,14 @@ export function QueueDisplayScreen({ token }: { token: string }) {
   const [soundOn, setSoundOn] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [fresh, setFresh] = useState<string | null>(null);
+  const [voicePanel, setVoicePanel] = useState(false);
+  const voices = useSpanishVoices();
+  const [chosenVoice, setChosenVoice] = useState<string | null>(() => readChoice());
+  const voice = pickVoice(voices, chosenVoice);
+  const voiceRef = useRef(voice);
+  useEffect(() => {
+    voiceRef.current = voice;
+  }, [voice]);
   const audio = useRef<AudioContext | null>(null);
   /** Llamadas ya anunciadas. La primera carga las da todas por anunciadas. */
   const announced = useRef<Set<string> | null>(null);
@@ -71,7 +88,7 @@ export function QueueDisplayScreen({ token }: { token: string }) {
     const pending = [...calls].reverse().filter((call) => !seen.has(callKey(call)));
     for (const call of pending) {
       seen.add(callKey(call));
-      if (soundOn) announce(audio.current, announcement(call));
+      if (soundOn) announce(audio.current, announcement(call), voiceRef.current);
     }
     if (pending.length) {
       const latest = pending.at(-1)!;
@@ -191,18 +208,188 @@ export function QueueDisplayScreen({ token }: { token: string }) {
         </section>
       </div>
 
-      {!soundOn && (
+      <div className="fixed bottom-8 left-8 flex items-end gap-3">
+        {!soundOn && (
+          <button
+            type="button"
+            onClick={() => void activate()}
+            className="inline-flex items-center gap-3 rounded-2xl bg-primary px-8 py-5 text-2xl font-semibold text-primary-foreground shadow-lg"
+          >
+            <Volume2 size={28} />
+            Activar sonido
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => void activate()}
-          className="fixed bottom-8 left-8 inline-flex items-center gap-3 rounded-2xl bg-primary px-8 py-5 text-2xl font-semibold text-primary-foreground shadow-lg"
+          onClick={() => setVoicePanel(true)}
+          aria-label="Elegir la voz de los llamados"
+          className={cn(
+            'inline-flex items-center gap-2 rounded-2xl border bg-card px-5 py-4 text-lg font-semibold shadow-sm',
+            // Encendida la pantalla, el botón casi no se ve: la sala mira los turnos, no a él.
+            soundOn && 'opacity-30 hover:opacity-100 focus-visible:opacity-100',
+          )}
         >
-          <Volume2 size={28} />
-          Activar sonido
+          <Settings2 size={22} />
+          Voz
         </button>
+      </div>
+
+      {voicePanel && (
+        <VoicePanel
+          voices={voices}
+          current={voice}
+          automatic={chosenVoice === null}
+          onChoose={(name) => {
+            setChosenVoice(name);
+            saveChoice(name);
+          }}
+          onTry={(candidate) => announce(audio.current, SAMPLE, candidate)}
+          onClose={() => setVoicePanel(false)}
+        />
       )}
     </main>
   );
+}
+
+/**
+ * Elegir la voz de esta TV. Primero, la recomendada; cada una se puede probar. Si el aparato
+ * no trae ninguna buena, lo dice y explica cómo conseguir una mejor sin pagar.
+ */
+function VoicePanel({
+  voices,
+  current,
+  automatic,
+  onChoose,
+  onTry,
+  onClose,
+}: {
+  voices: readonly SpeechSynthesisVoice[];
+  current: SpeechSynthesisVoice | null;
+  automatic: boolean;
+  onChoose: (name: string | null) => void;
+  onTry: (voice: SpeechSynthesisVoice | null) => void;
+  onClose: () => void;
+}) {
+  const ranked = rankVoices(voices);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Voz de los llamados"
+      className="fixed inset-0 z-20 flex items-end justify-start bg-black/40 p-8"
+    >
+      <div className="flex max-h-[80dvh] w-full max-w-2xl flex-col rounded-3xl bg-card shadow-xl">
+        <header className="flex items-start gap-4 border-b p-6">
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display text-3xl font-semibold">Voz de los llamados</h2>
+            <p className="mt-1 text-lg text-muted-foreground">
+              Son las voces de este aparato, gratis. Prueba y quédate con la que suene mejor.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="grid size-14 shrink-0 place-items-center rounded-2xl hover:bg-muted"
+          >
+            <X size={28} />
+          </button>
+        </header>
+
+        <ul className="min-h-0 flex-1 divide-y overflow-y-auto">
+          <li className="flex items-center gap-4 p-5">
+            <label className="flex min-w-0 flex-1 items-center gap-4 text-xl">
+              <input
+                type="radio"
+                name="voice"
+                checked={automatic}
+                onChange={() => onChoose(null)}
+                className="size-6"
+              />
+              <span>
+                Automática
+                {ranked[0] && (
+                  <span className="block text-base text-muted-foreground">
+                    Ahora: {voiceLabel(ranked[0])}
+                  </span>
+                )}
+              </span>
+            </label>
+          </li>
+          {ranked.map((voice, index) => (
+            <li key={`${voice.name}-${voice.lang}`} className="flex items-center gap-4 p-5">
+              <label className="flex min-w-0 flex-1 items-center gap-4 text-xl">
+                <input
+                  type="radio"
+                  name="voice"
+                  checked={!automatic && current?.name === voice.name}
+                  onChange={() => onChoose(voice.name)}
+                  className="size-6"
+                />
+                <span className="truncate">
+                  {voiceLabel(voice)}
+                  {index === 0 && (
+                    <span className="ml-2 rounded-full bg-success/15 px-3 py-0.5 text-sm font-semibold text-success">
+                      Recomendada
+                    </span>
+                  )}
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => onTry(voice)}
+                className="shrink-0 rounded-xl border px-4 py-2 text-lg font-semibold hover:bg-muted"
+              >
+                Probar
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <p className="border-t p-6 text-base text-muted-foreground">
+          {ranked.length === 0
+            ? 'Este aparato no tiene voces en español: solo sonará la campanita. '
+            : ''}
+          La voz más natural gratis es «Marta (Natural)» de Guatemala: abre esta pantalla con
+          Microsoft Edge en una computadora con Windows.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Las voces del aparato. El navegador las carga tarde —en Chrome, la lista llega vacía la
+ * primera vez— y avisa con `voiceschanged`.
+ */
+function useSpanishVoices(): SpeechSynthesisVoice[] {
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  useEffect(() => {
+    if (typeof speechSynthesis === 'undefined') return;
+    const load = () => setVoices(rankVoices(speechSynthesis.getVoices()));
+    load();
+    speechSynthesis.addEventListener('voiceschanged', load);
+    return () => speechSynthesis.removeEventListener('voiceschanged', load);
+  }, []);
+  return voices;
+}
+
+/** La elección se guarda en el aparato. Sin almacenamiento, vale la automática. */
+function readChoice(): string | null {
+  try {
+    return localStorage.getItem(VOICE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveChoice(name: string | null) {
+  try {
+    if (name) localStorage.setItem(VOICE_KEY, name);
+    else localStorage.removeItem(VOICE_KEY);
+  } catch {
+    /* Sin almacenamiento la pantalla sigue con la automática. */
+  }
 }
 
 /**
@@ -282,15 +469,19 @@ function chime(context: AudioContext) {
   }
 }
 
-/** Campanita y, tras ella, la voz. Sin voces en español instaladas, solo la campanita. */
-function announce(context: AudioContext | null, text: string) {
+/**
+ * Campanita y, tras ella, la voz. Un ritmo algo más pausado que el de lectura y un tono un
+ * punto más alto se entienden mejor en una sala con secadores. Sin voces en español
+ * instaladas, solo la campanita.
+ */
+function announce(context: AudioContext | null, text: string, voice: SpeechSynthesisVoice | null) {
   if (context) chime(context);
-  if (typeof speechSynthesis === 'undefined') return;
+  if (typeof speechSynthesis === 'undefined' || !voice) return;
   const utterance = new SpeechSynthesisUtterance(text);
-  const voice = speechSynthesis.getVoices().find((candidate) => candidate.lang.startsWith('es'));
-  if (voice) utterance.voice = voice;
-  utterance.lang = voice?.lang ?? 'es-GT';
-  utterance.rate = 0.9;
+  utterance.voice = voice;
+  utterance.lang = voice.lang;
+  utterance.rate = 0.92;
+  utterance.pitch = 1.05;
   setTimeout(() => speechSynthesis.speak(utterance), 900);
 }
 

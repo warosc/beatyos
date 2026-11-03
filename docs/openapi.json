@@ -14387,6 +14387,11 @@
             "type": "string",
             "example": "Ana G."
           },
+          "spokenName": {
+            "type": "string",
+            "example": "Ana",
+            "description": "Primer nombre: como se la llama en voz alta"
+          },
           "stylistName": {
             "type": "string"
           },
@@ -14402,6 +14407,7 @@
           "id",
           "number",
           "publicName",
+          "spokenName",
           "stylistName",
           "callCount",
           "calledAt"

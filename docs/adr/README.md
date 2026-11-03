@@ -30,8 +30,7 @@ Un ADR nunca se edita una vez aceptado: se **supersede** con uno nuevo.
 | [0023](0023-agenda-por-equipo-cambios-aprobados-y-recordatorios.md) | Agenda por equipo, cambios aprobados por la encargada y recordatorios | Aceptado |
 | [0024](0024-fila-de-espera-y-pantalla-de-turnos.md) | Fila de espera de clientas sin cita y pantalla de turnos | Aceptado |
 | [0025](0025-indicadores-de-la-fila-de-espera.md) | Indicadores de la fila de espera para decidir | Aceptado |
-| [0026](0026-sin-iva-comision-sobre-lo-cobrado-y-comision-de-productos.md) | Sin IVA en el cobro, comisión sobre lo que paga la clienta y comisión de productos | Aceptado |
-| [0027](0027-baja-de-profesionales.md) | Baja de profesionales | Aceptado |
+
 
 ## Formato
 

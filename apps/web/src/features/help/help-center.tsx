@@ -57,7 +57,7 @@ const guides = [
   {
     image: '/help/equipo.svg',
     title: 'Pon la pantalla de turnos en la TV',
-    text: 'En Turnos → Pantalla de la TV crea el enlace y ábrelo en el navegador de la TV. Pulsa «Activar sonido»: cada llamada suena y se anuncia en voz alta con el número, el nombre corto y la profesional. Guarda el enlace; si lo pierdes, crea otro y el anterior deja de funcionar.',
+    text: 'En Turnos → Pantalla de la TV crea el enlace y ábrelo en el navegador de la TV. Pulsa «Activar sonido»: cada llamada suena y se anuncia en voz alta con el número, el nombre y la profesional. En «Voz» eliges y pruebas la voz; la más natural, gratis, es «Marta (Natural)» abriendo la pantalla con Microsoft Edge en una computadora. Guarda el enlace; si lo pierdes, crea otro y el anterior deja de funcionar.',
     href: '/turnos',
     permissions: ['queue.manage-display'],
   },

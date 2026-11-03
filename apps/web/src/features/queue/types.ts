@@ -46,6 +46,8 @@ export interface QueueDisplay {
     id: string;
     number: number;
     publicName: string;
+    /** Primer nombre: como se la llama en voz alta. */
+    spokenName: string;
     stylistName: string;
     callCount: number;
     calledAt: string;
@@ -125,9 +127,12 @@ export function waitedLabel(since: string, now: Date): string {
  */
 export const callKey = (call: QueueDisplay['called'][number]) => `${call.id}:${call.callCount}`;
 
-/** Lo que dice la voz de la pantalla. Los números se leen mejor en cifras que deletreados. */
+/**
+ * Lo que dice la voz de la pantalla. Por el primer nombre, como lo diría una persona: «Ana
+ * G.» se leería «Ana ge punto». Los números van en cifras: la voz los lee mejor así.
+ */
 export const announcement = (call: QueueDisplay['called'][number]) =>
-  `Turno ${call.number}. ${call.publicName}, pase con ${call.stylistName}.`;
+  `Turno ${call.number}. ${call.spokenName}, por favor pase con ${call.stylistName}.`;
 
 /** Con menos llamadas, una media es la anécdota de una clienta: no se promete nada. */
 export const MIN_WAIT_SAMPLES = 3;

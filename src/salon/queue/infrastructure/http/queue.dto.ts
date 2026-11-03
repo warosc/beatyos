@@ -203,6 +203,8 @@ export class QueueDisplayCallResponse {
   @ApiProperty() id!: string;
   @ApiProperty() number!: number;
   @ApiProperty({ example: 'Ana G.' }) publicName!: string;
+  @ApiProperty({ example: 'Ana', description: 'Primer nombre: como se la llama en voz alta' })
+  spokenName!: string;
   @ApiProperty() stylistName!: string;
   @ApiProperty({ description: 'Sube con cada llamada: la pantalla anuncia de nuevo' })
   callCount!: number;
@@ -228,6 +230,7 @@ export class QueueDisplayResponse {
         id: call.id,
         number: call.number,
         publicName: call.publicName,
+        spokenName: call.spokenName,
         stylistName: call.stylistName,
         callCount: call.callCount,
         calledAt: call.calledAt.toISOString(),

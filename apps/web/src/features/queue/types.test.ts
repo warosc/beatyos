@@ -5,6 +5,7 @@ const call = {
   id: 't7',
   number: 7,
   publicName: 'Ana G.',
+  spokenName: 'Ana',
   stylistName: 'Sara',
   callCount: 1,
   calledAt: '2026-10-12T15:00:00.000Z',
@@ -25,7 +26,7 @@ describe('fila de espera', () => {
     expect(callKey(call)).toBe(callKey({ ...call }));
   });
 
-  it('la voz dice número, nombre corto y profesional', () => {
-    expect(announcement(call)).toBe('Turno 7. Ana G., pase con Sara.');
+  it('la voz dice el número, la llama por su nombre y dice con quién pasa', () => {
+    expect(announcement(call)).toBe('Turno 7. Ana, por favor pase con Sara.');
   });
 });
